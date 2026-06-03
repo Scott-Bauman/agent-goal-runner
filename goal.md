@@ -155,7 +155,7 @@ Before implementation, Codex must:
 - [ ] Create the minimal project scaffold.
   - [x] Add `package.json` with development, typecheck, lint, test, and production build scripts.
   - [x] Add TypeScript configuration for backend and frontend.
-  - [ ] Add the minimal Fastify server entrypoint.
+  - [x] Add the minimal Fastify server entrypoint.
   - [ ] Add the minimal Vite + React entrypoint.
   - [ ] Add Tailwind configuration and the frontend stylesheet entry.
   - [ ] Add only the UI primitives needed by the first screen.

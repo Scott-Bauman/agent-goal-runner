@@ -97,6 +97,7 @@ When creating or repairing a `goal.md`, gather or infer:
 - desired end state,
 - target runtime,
 - current stack,
+- repository ignore-file state,
 - in-scope work,
 - out-of-scope work,
 - durable file or control-file constraints,
@@ -433,6 +434,7 @@ Default version:
 Before implementation, Codex must:
 
 - Inspect the relevant project structure.
+- Ensure the repository has a `.gitignore`; if it is missing, create one before implementation.
 - Identify existing conventions, dependencies, tests, scripts, and verification commands.
 - Confirm whether this checklist is stale, incomplete, or too broad.
 - Split oversized checklist items before implementation.
@@ -706,6 +708,7 @@ Report what structural changes were made.
 Before returning a generated or refined `goal.md`, verify that:
 
 - `goal.md` has a clear product or implementation goal.
+- The target repository has a `.gitignore`, or the generated `goal.md` requires creating one before implementation.
 - Scope boundaries are explicit.
 - Future Codex run discipline exists.
 - File hygiene rules exist.
