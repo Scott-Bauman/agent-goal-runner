@@ -134,7 +134,7 @@ Rules for future runs:
 ### Phase 1: Project Foundation
 
 - [ ] Create the minimal project scaffold.
-  - [ ] Add `package.json` with scripts for development, typecheck, lint if configured, tests if configured, and production build.
+  - [x] Add `package.json` with scripts for development, typecheck, lint if configured, tests if configured, and production build.
   - [ ] Add TypeScript configuration for backend and frontend.
   - [ ] Add Vite + React + TypeScript frontend structure.
   - [ ] Add Fastify + TypeScript backend structure.
