@@ -12,9 +12,12 @@ The MVP should let the user select a local repository, view or create its `goal.
 
 - `goal.md` is the only supported durable goal/control file.
 - The app must not support `refactor.md`, `migration.md`, alternate plan files, arbitrary markdown files, or a file tree.
+- This repository's `goal.md` controls implementation work on `codex-goal-runner`.
+- A selected target repository's `<selected-repo>/goal.md` is runtime user data that the app reads, renders, watches, and makes available to Codex by running Codex in that repository.
 - The app may create a default `goal.md` in the selected target repository only when the user explicitly requests creation.
 - The app should read and render only `<selected-repo>/goal.md`.
-- The app should not edit a selected repository's `goal.md` except when creating the default file.
+- The app process itself should not directly edit a selected repository's `goal.md` except when creating the default file.
+- Codex runs launched in a selected repository may edit that repository's `goal.md` according to that repository's own instructions and the user's run prompt.
 
 ## Scope
 
@@ -22,7 +25,7 @@ The MVP should let the user select a local repository, view or create its `goal.
 
 - Local Node.js backend using Fastify and TypeScript.
 - Vite, React, and TypeScript frontend.
-- Tailwind CSS and focused shadcn/ui-style components for a compact operations-panel UI.
+- Tailwind CSS and focused shadcn/ui components for a compact operations-panel UI.
 - `marked` plus DOMPurify for sanitized markdown rendering.
 - Server-Sent Events for backend-to-frontend status and log streaming.
 - `chokidar` for watching the selected repository's `goal.md`.
@@ -69,7 +72,7 @@ The app should feel like a small professional operations panel: focused, quiet, 
 - Main left panel: rendered sanitized `goal.md`.
 - Right side panel: repository selection, repeat prompt, run count, optional verification command, auto-commit toggle, start button, and stop button.
 - Bottom panel: live logs and latest run summary.
-- Use shadcn/ui-style controls where useful, but do not add unused component scaffolding.
+- Use shadcn/ui controls where useful, but do not add unused component scaffolding.
 
 ## Safety Rules
 
