@@ -135,7 +135,7 @@ Rules for future runs:
 
 - [ ] Create the minimal project scaffold.
   - [x] Add `package.json` with scripts for development, typecheck, lint if configured, tests if configured, and production build.
-  - [ ] Add TypeScript configuration for backend and frontend.
+  - [x] Add TypeScript configuration for backend and frontend.
   - [ ] Add Vite + React + TypeScript frontend structure.
   - [ ] Add Fastify + TypeScript backend structure.
   - [ ] Add Tailwind CSS.
