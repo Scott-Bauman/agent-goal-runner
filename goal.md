@@ -157,7 +157,7 @@ Before implementation, Codex must:
   - [x] Add TypeScript configuration for backend and frontend.
   - [x] Add the minimal Fastify server entrypoint.
   - [x] Add the minimal Vite + React entrypoint.
-  - [ ] Add Tailwind configuration and the frontend stylesheet entry.
+  - [x] Add Tailwind configuration and the frontend stylesheet entry.
   - [ ] Add only the UI primitives needed by the first screen.
   - [ ] Add a short README with local development and verification commands.
 
