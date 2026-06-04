@@ -438,6 +438,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   let goalWatcher: FSWatcher | null = null;
   let watchedGoalPath: string | null = null;
   let activeRunProcess: ChildProcessWithoutNullStreams | null = null;
+  let activeRunProcessKind: "codex" | "verification" | null = null;
 
   function broadcastSseEvent<EventName extends keyof SseEventMap>(
     event: EventName,
@@ -504,6 +505,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     }
 
     const activeProcessId = activeRunProcess.pid ?? null;
+    const activeProcessLabel =
+      activeRunProcessKind === "verification" ? "verification process" : "Codex process";
     runtimeState.stream.runLoop = {
       ...runtimeState.stream.runLoop,
       status: "stopping",
@@ -511,7 +514,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       activeProcessId,
       latestSummary: {
         status: "stopping",
-        message: "Stop requested; terminating the active Codex process.",
+        message: `Stop requested; terminating the active ${activeProcessLabel}.`,
       },
     };
     publishRunStatus();
@@ -575,6 +578,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   server.addHook("onClose", async () => {
     activeRunProcess?.kill();
     activeRunProcess = null;
+    activeRunProcessKind = null;
     await stopGoalWatcher();
   });
 
@@ -794,6 +798,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       );
     }
 
+    const verificationCommandToRun = verificationCommandParse.parsed;
+
     function startCodexRun(runNumber: number): void {
       const childProcess = spawnProcess("codex", ["exec", prompt], {
         cwd: repositoryPath,
@@ -813,6 +819,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           }
 
           activeRunProcess = null;
+          activeRunProcessKind = null;
 
           if (runtimeState.stream.runLoop.stopRequested) {
             runtimeState.stream.runLoop = {
@@ -830,6 +837,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           }
 
           if (code === 0) {
+            if (verificationCommandToRun) {
+              const verificationSucceeded = await runVerificationCommand(runNumber);
+
+              if (!verificationSucceeded) {
+                return;
+              }
+            }
+
             let refreshedGoalMarkdown: string;
 
             try {
@@ -890,6 +905,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         })();
       });
       activeRunProcess = childProcess;
+      activeRunProcessKind = "codex";
 
       runtimeState.stream.runLoop = {
         status: "running",
@@ -910,6 +926,75 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       });
       broadcastSseEvent("progress", runtimeState.stream.runLoop.progress);
       broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+    }
+
+    function runVerificationCommand(runNumber: number): Promise<boolean> {
+      if (!verificationCommandToRun) {
+        return Promise.resolve(true);
+      }
+
+      return new Promise((resolve) => {
+        const verificationProcess = spawnProcess(
+          verificationCommandToRun.executable,
+          verificationCommandToRun.args,
+          {
+            cwd: repositoryPath,
+            windowsHide: true,
+          },
+        );
+
+        activeRunProcess = verificationProcess;
+        activeRunProcessKind = "verification";
+        runtimeState.stream.runLoop = {
+          ...runtimeState.stream.runLoop,
+          activeProcessId: verificationProcess.pid ?? null,
+          latestSummary: {
+            status: "running",
+            message: `Started verification after Codex run ${runNumber} of ${runCount}.`,
+          },
+        };
+        publishRunStatus();
+
+        verificationProcess.stdout.resume();
+        verificationProcess.stderr.resume();
+        verificationProcess.on("close", (code) => {
+          if (activeRunProcess !== verificationProcess) {
+            resolve(false);
+            return;
+          }
+
+          activeRunProcess = null;
+          activeRunProcessKind = null;
+
+          if (runtimeState.stream.runLoop.stopRequested) {
+            runtimeState.stream.runLoop = {
+              ...runtimeState.stream.runLoop,
+              status: "stopped",
+              stopRequested: false,
+              activeProcessId: null,
+              latestSummary: {
+                status: "stopped",
+                message: `Stopped after verification for Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`,
+              },
+            };
+            publishRunStatus();
+            resolve(false);
+            return;
+          }
+
+          if (code === 0) {
+            resolve(true);
+            return;
+          }
+
+          failRun(
+            code === null
+              ? `Verification after Codex run ${runNumber} exited without an exit code.`
+              : `Verification after Codex run ${runNumber} exited with code ${code}.`,
+          );
+          resolve(false);
+        });
+      });
     }
 
     startCodexRun(1);
