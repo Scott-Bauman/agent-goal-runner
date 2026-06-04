@@ -1,6 +1,11 @@
 import cors from "@fastify/cors";
 import { watch, type FSWatcher } from "chokidar";
 import Fastify, { type FastifyInstance } from "fastify";
+import {
+  spawn,
+  type ChildProcessWithoutNullStreams,
+  type SpawnOptionsWithoutStdio,
+} from "node:child_process";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -78,6 +83,14 @@ type SseEventMap = {
 type SseClient = {
   id: number;
   write: (chunk: string) => boolean;
+};
+type ProcessSpawner = (
+  command: string,
+  args: string[],
+  options: SpawnOptionsWithoutStdio,
+) => ChildProcessWithoutNullStreams;
+type BuildServerOptions = {
+  spawnProcess?: ProcessSpawner;
 };
 
 const repositorySelectionSchema = z
@@ -242,7 +255,8 @@ function getGoalFilePath(repositoryPath: string): string {
   return goalFilePath;
 }
 
-export async function buildServer(): Promise<FastifyInstance> {
+export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
+  const spawnProcess = options.spawnProcess ?? spawn;
   const server = Fastify({
     logger: true,
   });
@@ -257,6 +271,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   let nextSseClientId = 1;
   let goalWatcher: FSWatcher | null = null;
   let watchedGoalPath: string | null = null;
+  let activeRunProcess: ChildProcessWithoutNullStreams | null = null;
 
   function broadcastSseEvent<EventName extends keyof SseEventMap>(
     event: EventName,
@@ -323,6 +338,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   server.addHook("onClose", async () => {
+    activeRunProcess?.kill();
+    activeRunProcess = null;
     await stopGoalWatcher();
   });
 
@@ -527,17 +544,27 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
     }
 
+    const repositoryPath = runtimeState.selectedRepositoryPath;
+    const childProcess = spawnProcess("codex", ["exec", parsedBody.data.prompt], {
+      cwd: repositoryPath,
+      windowsHide: true,
+    });
+
+    childProcess.stdout.resume();
+    childProcess.stderr.resume();
+    activeRunProcess = childProcess;
+
     runtimeState.stream.runLoop = {
       status: "running",
       stopRequested: false,
-      activeProcessId: null,
+      activeProcessId: childProcess.pid ?? null,
       progress: {
-        currentRun: 0,
+        currentRun: 1,
         totalRuns: parsedBody.data.runCount,
       },
       latestSummary: {
         status: "running",
-        message: "Run start validated.",
+        message: `Started Codex run 1 of ${parsedBody.data.runCount}.`,
       },
     };
     broadcastSseEvent("status", {
@@ -549,7 +576,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
     return reply.code(202).send({
       status: runtimeState.stream.runLoop.status,
-      repositoryPath: runtimeState.selectedRepositoryPath,
+      repositoryPath,
       prompt: parsedBody.data.prompt,
       runCount: parsedBody.data.runCount,
     });

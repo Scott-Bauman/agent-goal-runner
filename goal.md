@@ -188,7 +188,7 @@ Before implementation, Codex must:
 
 - [x] Add run-loop state for idle, running, stopping, complete, blocked, failed, and stopped.
 - [x] Add start validation for selected repo, prompt, run count, and no active run.
-- [ ] Spawn a fresh `codex exec <prompt>` process for each run in the selected repository.
+- [x] Spawn a fresh `codex exec <prompt>` process for each run in the selected repository.
 - [ ] Stream Codex stdout and stderr to connected clients.
 - [ ] Stop immediately on non-zero Codex exit.
 - [ ] Re-read `goal.md` after each successful Codex run.

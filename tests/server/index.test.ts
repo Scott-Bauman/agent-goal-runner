@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { TextDecoder } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,8 +45,19 @@ vi.mock("chokidar", () => ({
 let server: FastifyInstance | undefined;
 const tempPaths: string[] = [];
 
+function createMockRunProcess(pid = 321): ChildProcessWithoutNullStreams {
+  return {
+    pid,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: vi.fn(),
+  } as unknown as ChildProcessWithoutNullStreams;
+}
+
 async function getServer(): Promise<FastifyInstance> {
-  server = await buildServer();
+  server = await buildServer({
+    spawnProcess: vi.fn(() => createMockRunProcess()),
+  });
   return server;
 }
 
@@ -1042,6 +1055,42 @@ describe("run start endpoint", () => {
       prompt: "Use goal.md as the source of truth.",
       runCount: 2,
     });
+  });
+
+  it("spawns codex exec in the selected repository for the first run", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = vi.fn(() => createMockRunProcess());
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "  Use goal.md as the source of truth.  ",
+        runCount: 2,
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(spawnProcess).toHaveBeenCalledWith(
+      "codex",
+      ["exec", "Use goal.md as the source of truth."],
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
   });
 
   it("rejects a second run start request while a run is active", async () => {
