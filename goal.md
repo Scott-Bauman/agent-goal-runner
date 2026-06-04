@@ -25,7 +25,7 @@ The MVP should let the user select a local repository, view or create its `goal.
 
 - Local Node.js backend using Fastify and TypeScript.
 - Vite, React, and TypeScript frontend.
-- Tailwind CSS and focused shadcn/ui components for a compact operations-panel UI.
+- Tailwind CSS and focused shadcn/ui components generated into this repository for a compact operations-panel UI.
 - `marked` plus DOMPurify for sanitized markdown rendering.
 - Server-Sent Events for backend-to-frontend status and log streaming.
 - `chokidar` for watching the selected repository's `goal.md`.
@@ -72,7 +72,7 @@ The app should feel like a small professional operations panel: focused, quiet, 
 - Main left panel: rendered sanitized `goal.md`.
 - Right side panel: repository selection, repeat prompt, run count, optional verification command, auto-commit toggle, start button, and stop button.
 - Bottom panel: live logs and latest run summary.
-- Use shadcn/ui controls where useful, but do not add unused component scaffolding.
+- Use actual generated/imported shadcn/ui controls where useful, but do not add unused component scaffolding.
 
 ## Safety Rules
 
@@ -217,6 +217,7 @@ Before implementation, Codex must:
 
 ### Phase 6: Frontend Shell and Layout
 
+- [ ] Initialize shadcn/ui if missing, including `components.json`, and add only the shadcn/ui components needed for the selected UI work.
 - [ ] Add top bar with app name, selected repository path, and status badge.
 - [ ] Add main left panel for rendered `goal.md`.
 - [ ] Add compact right-side controls panel.
