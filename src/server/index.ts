@@ -649,6 +649,21 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
           activeRunProcess = null;
 
+          if (runtimeState.stream.runLoop.stopRequested) {
+            runtimeState.stream.runLoop = {
+              ...runtimeState.stream.runLoop,
+              status: "stopped",
+              stopRequested: false,
+              activeProcessId: null,
+              latestSummary: {
+                status: "stopped",
+                message: `Stopped after Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`,
+              },
+            };
+            publishRunStatus();
+            return;
+          }
+
           if (code === 0) {
             let refreshedGoalMarkdown: string;
 
@@ -664,20 +679,6 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
             }
 
             const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
-
-            if (runtimeState.stream.runLoop.stopRequested) {
-              runtimeState.stream.runLoop = {
-                ...runtimeState.stream.runLoop,
-                status: "stopping",
-                activeProcessId: null,
-                latestSummary: {
-                  status: "stopping",
-                  message: `Stop requested after Codex run ${runNumber} of ${runCount}; no additional Codex runs will start.`,
-                },
-              };
-              publishRunStatus();
-              return;
-            }
 
             if (goalStopMarker) {
               const markerStatus =

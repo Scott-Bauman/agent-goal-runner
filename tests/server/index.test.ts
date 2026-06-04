@@ -1584,7 +1584,7 @@ describe("run start endpoint", () => {
     });
   });
 
-  it("does not start another Codex run after stop is requested", async () => {
+  it("does not start another Codex run while stop is requested and reports stopped after close", async () => {
     const repositoryPath = await createRepositoryPath();
     const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
@@ -1634,6 +1634,15 @@ describe("run start endpoint", () => {
     });
     await readUntilSsePayloads(reader, "summary");
 
+    const activeRestartResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
     firstRunProcess.emit("close", 0, null);
     const summaryPayloads = await readUntilSsePayloads(reader, "summary");
 
@@ -1647,15 +1656,17 @@ describe("run start endpoint", () => {
     });
     await reader.cancel();
 
-    expect(spawnProcess).toHaveBeenCalledTimes(1);
-    expect(restartResponse.statusCode).toBe(409);
-    expect(restartResponse.json()).toEqual({
+    expect(activeRestartResponse.statusCode).toBe(409);
+    expect(activeRestartResponse.json()).toEqual({
       error: "A run is already active.",
     });
+    expect(restartResponse.statusCode).toBe(202);
+    expect(spawnProcess).toHaveBeenCalledTimes(2);
     expect(summaryPayloads).toEqual([
       {
-        status: "stopping",
-        message: "Stop requested after Codex run 1 of 2; no additional Codex runs will start.",
+        status: "stopped",
+        message:
+          "Stopped after Codex run 1 of 2 because stop was requested; no additional Codex runs will start.",
       },
     ]);
   });
@@ -1778,7 +1789,9 @@ describe("run start endpoint", () => {
       url: "/api/run/stop",
     });
     const summaryPayloads = await readUntilSsePayloads(reader, "summary");
-    await reader.cancel();
+
+    runProcess.emit("close", null, "SIGTERM");
+    const stoppedSummaryPayloads = await readUntilSsePayloads(reader, "summary");
 
     expect(stopResponse.statusCode).toBe(202);
     expect(stopResponse.json()).toEqual({
@@ -1791,6 +1804,13 @@ describe("run start endpoint", () => {
       {
         status: "stopping",
         message: "Stop requested; terminating the active Codex process.",
+      },
+    ]);
+    expect(stoppedSummaryPayloads).toEqual([
+      {
+        status: "stopped",
+        message:
+          "Stopped after Codex run 1 of 2 because stop was requested; no additional Codex runs will start.",
       },
     ]);
 
@@ -1806,9 +1826,17 @@ describe("run start endpoint", () => {
 
     expect(parseSsePayloads(snapshotChunk, "status")).toEqual([
       {
-        status: "stopping",
+        status: "stopped",
         selectedRepositoryPath: path.normalize(repositoryPath),
       },
     ]);
+    expect(parseSsePayloads(snapshotChunk, "summary")).toEqual([
+      {
+        status: "stopped",
+        message:
+          "Stopped after Codex run 1 of 2 because stop was requested; no additional Codex runs will start.",
+      },
+    ]);
+    await reader.cancel();
   });
 });
