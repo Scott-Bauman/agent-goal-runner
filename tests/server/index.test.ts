@@ -41,6 +41,20 @@ afterEach(async () => {
 });
 
 describe("repository selection endpoint", () => {
+  it("returns no selected repository before selection", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/selection",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      repositoryPath: null,
+    });
+  });
+
   it("accepts an existing git repository directory", async () => {
     const repositoryPath = await createRepositoryPath();
     const app = await getServer();
@@ -56,6 +70,85 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       repositoryPath: path.normalize(repositoryPath),
+    });
+  });
+
+  it("stores the selected repository in server memory", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/selection",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      repositoryPath: path.normalize(repositoryPath),
+    });
+  });
+
+  it("does not replace the selected repository after invalid selection", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const invalidResponse = await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: path.join(os.tmpdir(), "codex-goal-runner-missing-repo"),
+      },
+    });
+
+    expect(invalidResponse.statusCode).toBe(400);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/selection",
+    });
+
+    expect(response.json()).toEqual({
+      repositoryPath: path.normalize(repositoryPath),
+    });
+  });
+
+  it("does not persist selected repository across server instances", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const firstApp = await getServer();
+
+    await firstApp.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await firstApp.close();
+
+    const secondApp = await getServer();
+    const response = await secondApp.inject({
+      method: "GET",
+      url: "/api/repository/selection",
+    });
+
+    expect(response.json()).toEqual({
+      repositoryPath: null,
     });
   });
 

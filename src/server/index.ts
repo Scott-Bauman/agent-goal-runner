@@ -73,6 +73,11 @@ export async function buildServer(): Promise<FastifyInstance> {
   const server = Fastify({
     logger: true,
   });
+  const runtimeState: {
+    selectedRepositoryPath: string | null;
+  } = {
+    selectedRepositoryPath: null,
+  };
 
   await server.register(cors, {
     origin: true,
@@ -85,6 +90,10 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   server.get("/health", async () => ({
     status: "ok",
+  }));
+
+  server.get("/api/repository/selection", async () => ({
+    repositoryPath: runtimeState.selectedRepositoryPath,
   }));
 
   server.post("/api/repository/select", async (request, reply) => {
@@ -114,8 +123,10 @@ export async function buildServer(): Promise<FastifyInstance> {
       });
     }
 
+    runtimeState.selectedRepositoryPath = parsedBody.data.path;
+
     return {
-      repositoryPath: parsedBody.data.path,
+      repositoryPath: runtimeState.selectedRepositoryPath,
     };
   });
 
