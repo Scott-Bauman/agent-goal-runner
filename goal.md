@@ -208,7 +208,7 @@ Before implementation, Codex must:
 - [x] Accept an empty verification value or a single command with arguments.
 - [x] Validate or parse verification before spawning it.
 - [x] Run verification only after a successful Codex run in the selected repository.
-- [ ] Stream verification output and stop on verification failure.
+- [x] Stream verification output and stop on verification failure.
 - [ ] Add explicit auto-commit toggle.
 - [ ] Commit only after Codex and optional verification succeed.
 - [ ] Run git status before commit and skip commit when there are no changes.

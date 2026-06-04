@@ -1493,6 +1493,146 @@ describe("run start endpoint", () => {
     ]);
   });
 
+  it("streams verification stdout and stderr to connected SSE clients", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    const runProcess = createMockRunProcess(321);
+    const verificationProcess = createMockRunProcess(654);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(verificationProcess);
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: "npm test",
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    await readUntilSsePayloads(reader, "summary");
+
+    verificationProcess.stdout.write("verification stdout\n");
+    const stdoutChunk = await readSseChunk(reader);
+
+    verificationProcess.stderr.write("verification stderr\n");
+    const stderrChunk = await readSseChunk(reader);
+    await reader.cancel();
+
+    expect(parseSsePayloads(stdoutChunk, "logs")).toEqual([
+      {
+        entries: [
+          {
+            id: 1,
+            stream: "stdout",
+            message: "verification stdout\n",
+          },
+        ],
+      },
+    ]);
+    expect(parseSsePayloads(stderrChunk, "logs")).toEqual([
+      {
+        entries: [
+          {
+            id: 2,
+            stream: "stderr",
+            message: "verification stderr\n",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("stops the run loop when verification fails", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    const runProcess = createMockRunProcess(321);
+    const verificationProcess = createMockRunProcess(654);
+    const nextRunProcess = createMockRunProcess(987);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(verificationProcess)
+      .mockReturnValueOnce(nextRunProcess);
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+        verificationCommand: "npm test",
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    await readUntilSsePayloads(reader, "summary");
+
+    verificationProcess.emit("close", 1, null);
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(spawnProcess).toHaveBeenCalledTimes(2);
+    expect(summaryPayloads).toEqual([
+      {
+        status: "failed",
+        message: "Verification after Codex run 1 exited with code 1.",
+      },
+    ]);
+  });
+
   it("does not run verification after a failed Codex run", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();

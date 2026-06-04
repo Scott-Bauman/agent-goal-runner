@@ -955,8 +955,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         };
         publishRunStatus();
 
-        verificationProcess.stdout.resume();
-        verificationProcess.stderr.resume();
+        verificationProcess.stdout.on("data", (chunk: Buffer | string) => {
+          appendProcessLog("stdout", chunk);
+        });
+        verificationProcess.stderr.on("data", (chunk: Buffer | string) => {
+          appendProcessLog("stderr", chunk);
+        });
         verificationProcess.on("close", (code) => {
           if (activeRunProcess !== verificationProcess) {
             resolve(false);
