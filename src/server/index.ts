@@ -45,6 +45,21 @@ function formatZodIssues(error: z.ZodError): Array<{ path: string; message: stri
   }));
 }
 
+function validationError(
+  error: string,
+  issues: Array<{ path: string; message: string }>,
+): {
+  error: string;
+  code: "VALIDATION_ERROR";
+  issues: Array<{ path: string; message: string }>;
+} {
+  return {
+    error,
+    code: "VALIDATION_ERROR",
+    issues,
+  };
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await stat(targetPath);
@@ -150,10 +165,11 @@ export async function buildServer(): Promise<FastifyInstance> {
     const parsedQuery = emptyGoalRequestSchema.safeParse(request.query);
 
     if (!parsedQuery.success) {
-      return reply.code(400).send({
-        error: "Invalid goal request.",
-        issues: formatZodIssues(parsedQuery.error),
-      });
+      return reply
+        .code(400)
+        .send(
+          validationError("Invalid goal request.", formatZodIssues(parsedQuery.error)),
+        );
     }
 
     if (!runtimeState.selectedRepositoryPath) {
@@ -193,13 +209,12 @@ export async function buildServer(): Promise<FastifyInstance> {
     const parsedBody = emptyGoalRequestSchema.safeParse(request.body ?? {});
 
     if (!parsedQuery.success || !parsedBody.success) {
-      return reply.code(400).send({
-        error: "Invalid goal creation request.",
-        issues: [
+      return reply.code(400).send(
+        validationError("Invalid goal creation request.", [
           ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
           ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
-        ],
-      });
+        ]),
+      );
     }
 
     if (!runtimeState.selectedRepositoryPath) {
@@ -241,24 +256,27 @@ export async function buildServer(): Promise<FastifyInstance> {
     const parsedBody = repositorySelectionSchema.safeParse(request.body);
 
     if (!parsedBody.success) {
-      return reply.code(400).send({
-        error: "Invalid repository selection request.",
-        issues: formatZodIssues(parsedBody.error),
-      });
+      return reply
+        .code(400)
+        .send(
+          validationError(
+            "Invalid repository selection request.",
+            formatZodIssues(parsedBody.error),
+          ),
+        );
     }
 
     const repositoryPathIssue = await validateRepositoryPath(parsedBody.data.path);
 
     if (repositoryPathIssue) {
-      return reply.code(400).send({
-        error: "Invalid repository selection request.",
-        issues: [
+      return reply.code(400).send(
+        validationError("Invalid repository selection request.", [
           {
             path: "path",
             message: repositoryPathIssue,
           },
-        ],
-      });
+        ]),
+      );
     }
 
     runtimeState.selectedRepositoryPath = parsedBody.data.path;

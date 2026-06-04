@@ -175,12 +175,29 @@ describe("repository selection endpoint", () => {
   });
 
   it.each([
-    ["missing path", {}],
-    ["empty path", { path: "   " }],
-    ["relative path", { path: "relative/repo" }],
-    ["URL path", { path: "https://example.com/repo.git" }],
-    ["extra fields", { path: path.resolve("example-repo"), name: "repo" }],
-  ])("rejects an invalid payload: %s", async (_name, payload) => {
+    ["missing path", {}, "path", "Required"],
+    ["empty path", { path: "   " }, "path", "Path is required."],
+    [
+      "relative path",
+      { path: "relative/repo" },
+      "path",
+      "Path must be an absolute local filesystem path.",
+    ],
+    [
+      "URL path",
+      { path: "https://example.com/repo.git" },
+      "path",
+      "Path must be an absolute local filesystem path.",
+    ],
+    [
+      "extra fields",
+      { path: path.resolve("example-repo"), name: "repo" },
+      "request",
+      "Unrecognized key(s) in object: 'name'",
+    ],
+  ])(
+    "rejects an invalid payload with frontend-ready issues: %s",
+    async (_name, payload, issuePath, issueMessage) => {
     const app = await getServer();
 
     const response = await app.inject({
@@ -192,8 +209,18 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid repository selection request.",
+      code: "VALIDATION_ERROR",
     });
-  });
+    expect(response.json().issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: issuePath,
+          message: issueMessage,
+        },
+      ]),
+    );
+    },
+  );
 
   it("rejects a missing absolute path", async () => {
     const app = await getServer();
@@ -209,6 +236,7 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid repository selection request.",
+      code: "VALIDATION_ERROR",
       issues: [
         {
           path: "path",
@@ -235,6 +263,7 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid repository selection request.",
+      code: "VALIDATION_ERROR",
       issues: [
         {
           path: "path",
@@ -259,6 +288,7 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid repository selection request.",
+      code: "VALIDATION_ERROR",
       issues: [
         {
           path: "path",
@@ -358,8 +388,15 @@ describe("goal read endpoint", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
+    expect(response.json()).toEqual({
       error: "Invalid goal request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'path'",
+        },
+      ],
     });
   });
 
@@ -383,8 +420,15 @@ describe("goal read endpoint", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
+    expect(response.json()).toEqual({
       error: "Invalid goal request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'name'",
+        },
+      ],
     });
   });
 });
@@ -458,12 +502,26 @@ describe("goal creation endpoint", () => {
     });
 
     expect(pathResponse.statusCode).toBe(400);
-    expect(pathResponse.json()).toMatchObject({
+    expect(pathResponse.json()).toEqual({
       error: "Invalid goal creation request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'path'",
+        },
+      ],
     });
     expect(nameResponse.statusCode).toBe(400);
-    expect(nameResponse.json()).toMatchObject({
+    expect(nameResponse.json()).toEqual({
       error: "Invalid goal creation request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'name'",
+        },
+      ],
     });
     await expect(readFile(path.join(repositoryPath, "goal.md"), "utf8")).rejects.toMatchObject({
       code: "ENOENT",
