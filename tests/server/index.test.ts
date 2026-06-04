@@ -310,6 +310,33 @@ describe("goal read endpoint", () => {
     });
   });
 
+  it("returns a clear missing-goal state when goal.md does not exist", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: "goal.md does not exist in the selected repository.",
+      code: "GOAL_MISSING",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
+      exists: false,
+    });
+  });
+
   it("ignores caller-provided path query parameters", async () => {
     const repositoryPath = await createRepositoryPath();
     const otherPath = await createRepositoryPath();

@@ -38,6 +38,15 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === code
+  );
+}
+
 async function validateRepositoryPath(repositoryPath: string): Promise<string | undefined> {
   let pathStats;
 
@@ -120,7 +129,23 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
 
     const goalFilePath = getGoalFilePath(runtimeState.selectedRepositoryPath);
-    const markdown = await readFile(goalFilePath, "utf8");
+    let markdown: string;
+
+    try {
+      markdown = await readFile(goalFilePath, "utf8");
+    } catch (error) {
+      if (isNodeErrorCode(error, "ENOENT")) {
+        return reply.code(404).send({
+          error: "goal.md does not exist in the selected repository.",
+          code: "GOAL_MISSING",
+          repositoryPath: runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
+          exists: false,
+        });
+      }
+
+      throw error;
+    }
 
     return {
       repositoryPath: runtimeState.selectedRepositoryPath,
