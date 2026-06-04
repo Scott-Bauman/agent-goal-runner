@@ -159,7 +159,7 @@ Before implementation, Codex must:
   - [x] Add the minimal Vite + React entrypoint.
   - [x] Add Tailwind configuration and the frontend stylesheet entry.
   - [x] Add only the UI primitives needed by the first screen.
-  - [ ] Add a short README with local development and verification commands.
+  - [x] Add a short README with local development and verification commands.
 
 ### Phase 2: Backend Repository and Goal File API
 
