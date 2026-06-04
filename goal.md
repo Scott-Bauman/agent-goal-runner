@@ -217,7 +217,7 @@ Before implementation, Codex must:
 
 ### Phase 6: Frontend Shell and Layout
 
-- [ ] Initialize shadcn/ui if missing, including `components.json`, and add only the shadcn/ui components needed for the selected UI work.
+- [x] Initialize shadcn/ui if missing, including `components.json`, and add only the shadcn/ui components needed for the selected UI work.
 - [ ] Add top bar with app name, selected repository path, and status badge.
 - [ ] Add main left panel for rendered `goal.md`.
 - [ ] Add compact right-side controls panel.

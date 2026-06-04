@@ -1,6 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "useDefineForClassFields": true,
     "strict": true,
     "noUnusedLocals": true,
