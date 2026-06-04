@@ -195,7 +195,7 @@ Before implementation, Codex must:
 - [x] Spawn a fresh `codex exec <prompt>` process for each run in the selected repository.
 - [x] Stream Codex stdout and stderr to connected clients.
 - [x] Stop immediately on non-zero Codex exit.
-- [ ] Re-read `goal.md` after each successful Codex run.
+- [x] Re-read `goal.md` after each successful Codex run.
 - [ ] Stop when refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`.
 - [ ] Continue only when no stop condition is present and runs remain.
 - [ ] Add stop endpoint that terminates the active child process when possible.

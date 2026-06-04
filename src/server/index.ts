@@ -307,6 +307,32 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     });
   }
 
+  async function readGoalMarkdownForRun(repositoryPath: string): Promise<string> {
+    return readFile(getGoalFilePath(repositoryPath), "utf8");
+  }
+
+  function publishRunStatus(): void {
+    broadcastSseEvent("status", {
+      status: runtimeState.stream.runLoop.status,
+      selectedRepositoryPath: runtimeState.selectedRepositoryPath,
+    });
+    broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+  }
+
+  function failRun(message: string): void {
+    runtimeState.stream.runLoop = {
+      ...runtimeState.stream.runLoop,
+      status: "failed",
+      stopRequested: false,
+      activeProcessId: null,
+      latestSummary: {
+        status: "failed",
+        message,
+      },
+    };
+    publishRunStatus();
+  }
+
   async function stopGoalWatcher(): Promise<void> {
     await goalWatcher?.close();
     goalWatcher = null;
@@ -580,34 +606,47 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       appendProcessLog("stderr", chunk);
     });
     childProcess.on("close", (code) => {
-      if (activeRunProcess !== childProcess) {
-        return;
-      }
+      void (async () => {
+        if (activeRunProcess !== childProcess) {
+          return;
+        }
 
-      activeRunProcess = null;
+        activeRunProcess = null;
 
-      if (code === 0) {
-        return;
-      }
+        if (code === 0) {
+          let refreshedGoalMarkdown: string;
 
-      runtimeState.stream.runLoop = {
-        ...runtimeState.stream.runLoop,
-        status: "failed",
-        stopRequested: false,
-        activeProcessId: null,
-        latestSummary: {
-          status: "failed",
-          message:
-            code === null
-              ? "Codex run 1 exited without an exit code."
-              : `Codex run 1 exited with code ${code}.`,
-        },
-      };
-      broadcastSseEvent("status", {
-        status: runtimeState.stream.runLoop.status,
-        selectedRepositoryPath: runtimeState.selectedRepositoryPath,
-      });
-      broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+          try {
+            refreshedGoalMarkdown = await readGoalMarkdownForRun(repositoryPath);
+          } catch (error) {
+            failRun(
+              isNodeErrorCode(error, "ENOENT")
+                ? "goal.md became unavailable after Codex run 1."
+                : "Failed to refresh goal.md after Codex run 1.",
+            );
+            return;
+          }
+
+          runtimeState.stream.runLoop = {
+            ...runtimeState.stream.runLoop,
+            status: "complete",
+            stopRequested: false,
+            activeProcessId: null,
+            latestSummary: {
+              status: "complete",
+              message: `Completed Codex run 1 of ${parsedBody.data.runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`,
+            },
+          };
+          publishRunStatus();
+          return;
+        }
+
+        failRun(
+          code === null
+            ? "Codex run 1 exited without an exit code."
+            : `Codex run 1 exited with code ${code}.`,
+        );
+      })();
     });
     activeRunProcess = childProcess;
 

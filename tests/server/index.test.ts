@@ -115,6 +115,25 @@ async function readSseChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Pr
   return new TextDecoder().decode(result.value);
 }
 
+async function readUntilSsePayloads(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  eventName: string,
+): Promise<unknown[]> {
+  let text = "";
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    text += await readSseChunk(reader);
+
+    const payloads = parseSsePayloads(text, eventName);
+
+    if (payloads.length > 0) {
+      return payloads;
+    }
+  }
+
+  throw new Error(`SSE stream did not send an event named ${eventName}.`);
+}
+
 function emitLatestGoalWatcherEvent(eventName: string, changedPath: string): void {
   const latestWatcher = chokidarMocks.watcherInstances.at(-1);
 
@@ -1223,6 +1242,106 @@ describe("run start endpoint", () => {
     });
 
     expect(restartResponse.statusCode).toBe(202);
+  });
+
+  it("re-reads goal.md after a successful Codex run", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(summaryPayloads).toEqual([
+      {
+        status: "complete",
+        message: `Completed Codex run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      },
+    ]);
+  });
+
+  it("fails the run when goal.md cannot be re-read after a successful Codex run", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(summaryPayloads).toEqual([
+      {
+        status: "failed",
+        message: "goal.md became unavailable after Codex run 1.",
+      },
+    ]);
   });
 
   it("rejects a second run start request while a run is active", async () => {
