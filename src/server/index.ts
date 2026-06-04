@@ -34,6 +34,7 @@ export const RUNNER_STATUSES = [
   "stopped",
 ] as const;
 type RunnerStatus = (typeof RUNNER_STATUSES)[number];
+const ACTIVE_RUN_STATUSES = new Set<RunnerStatus>(["running", "stopping"]);
 type LogEntry = {
   id: number;
   stream: "system" | "stdout" | "stderr";
@@ -89,6 +90,18 @@ const repositorySelectionSchema = z
         message: "Path must be an absolute local filesystem path.",
       })
       .transform((value) => path.normalize(value)),
+  })
+  .strict();
+const runStartSchema = z
+  .object({
+    prompt: z.string().trim().min(1, "Prompt is required."),
+    runCount: z
+      .number({
+        invalid_type_error: "Run count must be a number.",
+        required_error: "Run count is required.",
+      })
+      .int("Run count must be a whole number.")
+      .min(1, "Run count must be at least 1."),
   })
   .strict();
 const emptyGoalRequestSchema = z.object({}).strict();
@@ -489,6 +502,57 @@ export async function buildServer(): Promise<FastifyInstance> {
     return {
       repositoryPath: runtimeState.selectedRepositoryPath,
     };
+  });
+
+  server.post("/api/run/start", async (request, reply) => {
+    const parsedBody = runStartSchema.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(
+          validationError("Invalid run start request.", formatZodIssues(parsedBody.error)),
+        );
+    }
+
+    if (!runtimeState.selectedRepositoryPath) {
+      return reply.code(409).send({
+        error: "No repository selected.",
+      });
+    }
+
+    if (ACTIVE_RUN_STATUSES.has(runtimeState.stream.runLoop.status)) {
+      return reply.code(409).send({
+        error: "A run is already active.",
+      });
+    }
+
+    runtimeState.stream.runLoop = {
+      status: "running",
+      stopRequested: false,
+      activeProcessId: null,
+      progress: {
+        currentRun: 0,
+        totalRuns: parsedBody.data.runCount,
+      },
+      latestSummary: {
+        status: "running",
+        message: "Run start validated.",
+      },
+    };
+    broadcastSseEvent("status", {
+      status: runtimeState.stream.runLoop.status,
+      selectedRepositoryPath: runtimeState.selectedRepositoryPath,
+    });
+    broadcastSseEvent("progress", runtimeState.stream.runLoop.progress);
+    broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+
+    return reply.code(202).send({
+      status: runtimeState.stream.runLoop.status,
+      repositoryPath: runtimeState.selectedRepositoryPath,
+      prompt: parsedBody.data.prompt,
+      runCount: parsedBody.data.runCount,
+    });
   });
 
   return server;

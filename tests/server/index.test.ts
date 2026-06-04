@@ -927,3 +927,156 @@ describe("goal creation endpoint", () => {
     expect(await readFile(goalPath, "utf8")).toBe("# Existing Goal\n");
   });
 });
+
+describe("run start endpoint", () => {
+  it("requires a selected repository", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No repository selected.",
+    });
+  });
+
+  it.each([
+    ["missing prompt", { runCount: 1 }, "prompt", "Required"],
+    ["empty prompt", { prompt: "   ", runCount: 1 }, "prompt", "Prompt is required."],
+    [
+      "missing run count",
+      { prompt: "Use goal.md as the source of truth." },
+      "runCount",
+      "Run count is required.",
+    ],
+    [
+      "fractional run count",
+      { prompt: "Use goal.md as the source of truth.", runCount: 1.5 },
+      "runCount",
+      "Run count must be a whole number.",
+    ],
+    [
+      "zero run count",
+      { prompt: "Use goal.md as the source of truth.", runCount: 0 },
+      "runCount",
+      "Run count must be at least 1.",
+    ],
+    [
+      "extra fields",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        planFile: "refactor.md",
+      },
+      "request",
+      "Unrecognized key(s) in object: 'planFile'",
+    ],
+  ])(
+    "rejects an invalid payload with frontend-ready issues: %s",
+    async (_name, payload, issuePath, issueMessage) => {
+      const repositoryPath = await createRepositoryPath();
+      const app = await getServer();
+
+      await app.inject({
+        method: "POST",
+        url: "/api/repository/select",
+        payload: {
+          path: repositoryPath,
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/run/start",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: "Invalid run start request.",
+        code: "VALIDATION_ERROR",
+      });
+      expect(response.json().issues).toEqual(
+        expect.arrayContaining([
+          {
+            path: issuePath,
+            message: issueMessage,
+          },
+        ]),
+      );
+    },
+  );
+
+  it("accepts a valid run start request and marks the run active", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "  Use goal.md as the source of truth.  ",
+        runCount: 2,
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      status: "running",
+      repositoryPath: path.normalize(repositoryPath),
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 2,
+    });
+  });
+
+  it("rejects a second run start request while a run is active", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "A run is already active.",
+    });
+  });
+});
