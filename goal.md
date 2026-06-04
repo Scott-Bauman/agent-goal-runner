@@ -213,7 +213,7 @@ Before implementation, Codex must:
 - [x] Commit only after Codex and optional verification succeed.
 - [x] Run git status before commit and skip commit when there are no changes.
 - [x] Use a clear generated commit message, stream git output, and stop on commit failure.
-- [ ] Update README.md with the completed Phase 5 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 5 behavior, commands, and usage.
 
 ### Phase 6: Frontend Shell and Layout
 
