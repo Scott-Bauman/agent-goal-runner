@@ -23,6 +23,41 @@ Describe the desired end state for this repository.
 
 - [ ] Replace this default goal with project-specific implementation steps.
 `;
+type RunnerStatus = "idle";
+type LogEntry = {
+  id: number;
+  stream: "system" | "stdout" | "stderr";
+  message: string;
+};
+type RunProgress = {
+  currentRun: number;
+  totalRuns: number | null;
+};
+type LatestSummary = {
+  status: RunnerStatus;
+  message: string;
+} | null;
+type RuntimeStreamState = {
+  status: RunnerStatus;
+  logs: LogEntry[];
+  progress: RunProgress;
+  latestSummary: LatestSummary;
+};
+type SseEventMap = {
+  status: {
+    status: RunnerStatus;
+    selectedRepositoryPath: string | null;
+  };
+  logs: {
+    entries: LogEntry[];
+  };
+  progress: RunProgress;
+  summary: LatestSummary;
+};
+type SseClient = {
+  id: number;
+  write: (chunk: string) => boolean;
+};
 
 const repositorySelectionSchema = z
   .object({
@@ -37,6 +72,42 @@ const repositorySelectionSchema = z
   })
   .strict();
 const emptyGoalRequestSchema = z.object({}).strict();
+
+function createInitialStreamState(): RuntimeStreamState {
+  return {
+    status: "idle",
+    logs: [],
+    progress: {
+      currentRun: 0,
+      totalRuns: null,
+    },
+    latestSummary: null,
+  };
+}
+
+function formatSseEvent<EventName extends keyof SseEventMap>(
+  event: EventName,
+  data: SseEventMap[EventName],
+): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function createSseSnapshot(
+  streamState: RuntimeStreamState,
+  selectedRepositoryPath: string | null,
+): string {
+  return [
+    formatSseEvent("status", {
+      status: streamState.status,
+      selectedRepositoryPath,
+    }),
+    formatSseEvent("logs", {
+      entries: streamState.logs,
+    }),
+    formatSseEvent("progress", streamState.progress),
+    formatSseEvent("summary", streamState.latestSummary),
+  ].join("");
+}
 
 function formatZodIssues(error: z.ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
@@ -140,9 +211,24 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
   const runtimeState: {
     selectedRepositoryPath: string | null;
+    stream: RuntimeStreamState;
   } = {
     selectedRepositoryPath: null,
+    stream: createInitialStreamState(),
   };
+  const sseClients = new Map<number, SseClient>();
+  let nextSseClientId = 1;
+
+  function broadcastSseEvent<EventName extends keyof SseEventMap>(
+    event: EventName,
+    data: SseEventMap[EventName],
+  ): void {
+    const chunk = formatSseEvent(event, data);
+
+    for (const client of sseClients.values()) {
+      client.write(chunk);
+    }
+  }
 
   await server.register(cors, {
     origin: true,
@@ -160,6 +246,41 @@ export async function buildServer(): Promise<FastifyInstance> {
   server.get("/api/repository/selection", async () => ({
     repositoryPath: runtimeState.selectedRepositoryPath,
   }));
+
+  server.get("/api/events", async (request, reply) => {
+    const parsedQuery = emptyGoalRequestSchema.safeParse(request.query);
+
+    if (!parsedQuery.success) {
+      return reply
+        .code(400)
+        .send(
+          validationError("Invalid events request.", formatZodIssues(parsedQuery.error)),
+        );
+    }
+
+    reply.hijack();
+    request.raw.socket.setTimeout(0);
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    const client: SseClient = {
+      id: nextSseClientId,
+      write: (chunk) => reply.raw.write(chunk),
+    };
+    nextSseClientId += 1;
+    sseClients.set(client.id, client);
+    client.write(createSseSnapshot(runtimeState.stream, runtimeState.selectedRepositoryPath));
+
+    request.raw.on("close", () => {
+      sseClients.delete(client.id);
+    });
+
+    return undefined;
+  });
 
   server.get("/api/goal", async (request, reply) => {
     const parsedQuery = emptyGoalRequestSchema.safeParse(request.query);
@@ -280,6 +401,10 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
 
     runtimeState.selectedRepositoryPath = parsedBody.data.path;
+    broadcastSseEvent("status", {
+      status: runtimeState.stream.status,
+      selectedRepositoryPath: runtimeState.selectedRepositoryPath,
+    });
 
     return {
       repositoryPath: runtimeState.selectedRepositoryPath,

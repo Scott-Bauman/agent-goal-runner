@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { TextDecoder } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { buildServer } from "../../src/server/index";
@@ -24,6 +26,47 @@ async function createRepositoryPath(): Promise<string> {
   const repositoryPath = await createTempPath();
   await mkdir(path.join(repositoryPath, ".git"));
   return repositoryPath;
+}
+
+async function listenOnRandomPort(app: FastifyInstance): Promise<string> {
+  await app.listen({
+    host: "127.0.0.1",
+    port: 0,
+  });
+
+  const address = app.server.address();
+
+  if (!address || typeof address === "string") {
+    throw new Error("Fastify did not expose a TCP address.");
+  }
+
+  return `http://127.0.0.1:${(address as AddressInfo).port}`;
+}
+
+function parseSsePayloads(text: string, eventName: string): unknown[] {
+  return text
+    .trim()
+    .split("\n\n")
+    .filter((block) => block.startsWith(`event: ${eventName}\n`))
+    .map((block) => {
+      const dataLine = block.split("\n").find((line) => line.startsWith("data: "));
+
+      if (!dataLine) {
+        throw new Error(`Missing data line for SSE event ${eventName}.`);
+      }
+
+      return JSON.parse(dataLine.slice("data: ".length)) as unknown;
+    });
+}
+
+async function readSseChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<string> {
+  const result = await reader.read();
+
+  if (result.done) {
+    throw new Error("SSE stream ended before sending an event.");
+  }
+
+  return new TextDecoder().decode(result.value);
 }
 
 afterEach(async () => {
@@ -296,6 +339,100 @@ describe("repository selection endpoint", () => {
         },
       ],
     });
+  });
+});
+
+describe("events endpoint", () => {
+  it("streams the initial status, logs, progress, and summary snapshot", async () => {
+    const app = await getServer();
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(reader).toBeDefined();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    const chunk = await readSseChunk(reader);
+    await reader.cancel();
+
+    expect(parseSsePayloads(chunk, "status")).toEqual([
+      {
+        status: "idle",
+        selectedRepositoryPath: null,
+      },
+    ]);
+    expect(parseSsePayloads(chunk, "logs")).toEqual([
+      {
+        entries: [],
+      },
+    ]);
+    expect(parseSsePayloads(chunk, "progress")).toEqual([
+      {
+        currentRun: 0,
+        totalRuns: null,
+      },
+    ]);
+    expect(parseSsePayloads(chunk, "summary")).toEqual([null]);
+  });
+
+  it("rejects caller-provided events query parameters", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/events?name=refactor.md",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Invalid events request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'name'",
+        },
+      ],
+    });
+  });
+
+  it("broadcasts status updates when the selected repository changes", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const updateChunk = await readSseChunk(reader);
+    await reader.cancel();
+
+    expect(parseSsePayloads(updateChunk, "status")).toEqual([
+      {
+        status: "idle",
+        selectedRepositoryPath: path.normalize(repositoryPath),
+      },
+    ]);
   });
 });
 
