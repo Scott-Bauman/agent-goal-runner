@@ -443,7 +443,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   let goalWatcher: FSWatcher | null = null;
   let watchedGoalPath: string | null = null;
   let activeRunProcess: ChildProcessWithoutNullStreams | null = null;
-  let activeRunProcessKind: "codex" | "verification" | null = null;
+  let activeRunProcessKind: "codex" | "verification" | "git" | null = null;
 
   function broadcastSseEvent<EventName extends keyof SseEventMap>(
     event: EventName,
@@ -511,7 +511,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
     const activeProcessId = activeRunProcess.pid ?? null;
     const activeProcessLabel =
-      activeRunProcessKind === "verification" ? "verification process" : "Codex process";
+      activeRunProcessKind === "verification"
+        ? "verification process"
+        : activeRunProcessKind === "git"
+          ? "git process"
+          : "Codex process";
     runtimeState.stream.runLoop = {
       ...runtimeState.stream.runLoop,
       status: "stopping",
@@ -850,6 +854,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
               }
             }
 
+            if (autoCommit) {
+              const commitSucceeded = await runAutoCommit(runNumber);
+
+              if (!commitSucceeded) {
+                return;
+              }
+            }
+
             let refreshedGoalMarkdown: string;
 
             try {
@@ -931,6 +943,98 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       });
       broadcastSseEvent("progress", runtimeState.stream.runLoop.progress);
       broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+    }
+
+    async function runAutoCommit(runNumber: number): Promise<boolean> {
+      const addSucceeded = await runGitCommand(
+        ["add", "-A"],
+        `Started auto-commit staging after Codex run ${runNumber} of ${runCount}.`,
+        (code) =>
+          code === null
+            ? `Auto-commit staging after Codex run ${runNumber} exited without an exit code.`
+            : `Auto-commit staging after Codex run ${runNumber} exited with code ${code}.`,
+        runNumber,
+      );
+
+      if (!addSucceeded) {
+        return false;
+      }
+
+      return runGitCommand(
+        ["commit", "-m", `codex-goal-runner: Codex run ${runNumber}`],
+        `Started auto-commit after Codex run ${runNumber} of ${runCount}.`,
+        (code) =>
+          code === null
+            ? `Auto-commit after Codex run ${runNumber} exited without an exit code.`
+            : `Auto-commit after Codex run ${runNumber} exited with code ${code}.`,
+        runNumber,
+      );
+    }
+
+    function runGitCommand(
+      args: string[],
+      startMessage: string,
+      failureMessage: (code: number | null) => string,
+      runNumber: number,
+    ): Promise<boolean> {
+      return new Promise((resolve) => {
+        const gitProcess = spawnProcess("git", args, {
+          cwd: repositoryPath,
+          windowsHide: true,
+        });
+
+        activeRunProcess = gitProcess;
+        activeRunProcessKind = "git";
+        runtimeState.stream.runLoop = {
+          ...runtimeState.stream.runLoop,
+          activeProcessId: gitProcess.pid ?? null,
+          latestSummary: {
+            status: "running",
+            message: startMessage,
+          },
+        };
+        publishRunStatus();
+
+        gitProcess.stdout.on("data", (chunk: Buffer | string) => {
+          appendProcessLog("stdout", chunk);
+        });
+        gitProcess.stderr.on("data", (chunk: Buffer | string) => {
+          appendProcessLog("stderr", chunk);
+        });
+        gitProcess.on("close", (code) => {
+          if (activeRunProcess !== gitProcess) {
+            resolve(false);
+            return;
+          }
+
+          activeRunProcess = null;
+          activeRunProcessKind = null;
+
+          if (runtimeState.stream.runLoop.stopRequested) {
+            runtimeState.stream.runLoop = {
+              ...runtimeState.stream.runLoop,
+              status: "stopped",
+              stopRequested: false,
+              activeProcessId: null,
+              latestSummary: {
+                status: "stopped",
+                message: `Stopped during auto-commit after Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`,
+              },
+            };
+            publishRunStatus();
+            resolve(false);
+            return;
+          }
+
+          if (code === 0) {
+            resolve(true);
+            return;
+          }
+
+          failRun(failureMessage(code));
+          resolve(false);
+        });
+      });
     }
 
     function runVerificationCommand(runNumber: number): Promise<boolean> {
