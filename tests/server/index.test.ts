@@ -1012,6 +1012,16 @@ describe("run start endpoint", () => {
       "Verification command must be a string.",
     ],
     [
+      "non-boolean auto-commit toggle",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: "yes",
+      },
+      "autoCommit",
+      "Auto-commit toggle must be a boolean.",
+    ],
+    [
       "verification command with shell operator",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -1149,6 +1159,40 @@ describe("run start endpoint", () => {
       prompt: "Use goal.md as the source of truth.",
       runCount: 2,
       verificationCommand: "",
+      autoCommit: false,
+    });
+  });
+
+  it("accepts an explicit auto-commit toggle", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      status: "running",
+      repositoryPath: path.normalize(repositoryPath),
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommand: "",
+      autoCommit: true,
     });
   });
 
@@ -1193,6 +1237,7 @@ describe("run start endpoint", () => {
       prompt: "Use goal.md as the source of truth.",
       runCount: 1,
       verificationCommand: expected,
+      autoCommit: false,
     });
   });
 

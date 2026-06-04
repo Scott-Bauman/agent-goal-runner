@@ -135,6 +135,11 @@ const repositorySelectionSchema = z
 const runStartSchema = z
   .object({
     prompt: z.string().trim().min(1, "Prompt is required."),
+    autoCommit: z
+      .boolean({
+        invalid_type_error: "Auto-commit toggle must be a boolean.",
+      })
+      .default(false),
     verificationCommand: z
       .string({
         invalid_type_error: "Verification command must be a string.",
@@ -784,7 +789,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     }
 
     const repositoryPath = runtimeState.selectedRepositoryPath;
-    const { prompt, runCount, verificationCommand } = parsedBody.data;
+    const { prompt, runCount, verificationCommand, autoCommit } = parsedBody.data;
     const verificationCommandParse = parseVerificationCommand(verificationCommand);
 
     if (!verificationCommandParse.success) {
@@ -1009,6 +1014,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       prompt,
       runCount,
       verificationCommand,
+      autoCommit,
     });
   });
 
