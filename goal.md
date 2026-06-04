@@ -173,7 +173,7 @@ Before implementation, Codex must:
 - [x] Add explicit user-requested default `goal.md` creation.
 - [x] Refuse arbitrary markdown paths and alternate plan names.
 - [x] Return useful validation errors to the frontend.
-- [ ] Update README.md with the completed Phase 2 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 2 behavior, commands, and usage.
 
 ### Phase 3: Backend Streaming and File Watching
 

@@ -2,14 +2,22 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently in Phase 1 scaffold form. It has a Fastify backend, a Vite React frontend, Tailwind styling, and focused UI primitives for the first screen. Runtime repository selection, goal rendering, run-loop control, verification, and auto-commit features are tracked in `goal.md`.
+The MVP is currently through the Phase 2 backend API. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, and local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`. Runtime goal rendering, streaming, run-loop control, verification, and auto-commit features are tracked in `goal.md`.
 
-## Current Phase 1 Behavior
+## Current Behavior
 
 - Backend server starts on `127.0.0.1:4317` by default.
 - Backend exposes `GET /` with the app name and status, plus `GET /health` for a simple health check.
 - Frontend starts with Vite and renders the initial operations-panel shell.
 - The initial shell shows the app name, idle status badge, and repository selection button.
+- Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
+- The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.
+- The selected repository is kept only in server memory and can be read with `GET /api/repository/selection`.
+- The backend reads only the selected repository's `goal.md` through `GET /api/goal`.
+- Missing goals return a clear `GOAL_MISSING` response so the frontend can offer creation.
+- A default `goal.md` can be created only by explicit request with `POST /api/goal`, and existing goals are not overwritten.
+- Goal API requests reject caller-provided alternate markdown paths or plan names.
+- Validation failures return frontend-ready issue details with `VALIDATION_ERROR`.
 - Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
 
 ## Requirements
