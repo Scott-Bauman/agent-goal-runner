@@ -307,7 +307,11 @@ Default rules:
 - Validate user-provided paths and request bodies before using them.
 - Avoid shell-concatenated command strings where argument arrays are practical.
 - Do not add telemetry unless explicitly approved.
-- Do not add new dependencies unless explicitly approved.
+- Third-party packages, component libraries, and established outside libraries are allowed when they are directly needed for the selected work and are the pragmatic implementation choice.
+- Do not hand-roll replacements for appropriate outside libraries solely to avoid dependency installation.
+- Before running any install or download command, request command approval through the sandbox escalation flow and state what will be installed.
+- Do not use persistent prefix approval for dependency install commands unless the user explicitly asks for it.
+- Do not add unused dependencies or component scaffolding.
 - Do not broaden scope beyond the selected checkbox or sub-checkbox.
 ```
 
@@ -413,7 +417,7 @@ For visible UI changes:
 
 - Preserve existing props, callbacks, state transitions, keyboard behavior, persistence behavior, and runtime behavior.
 - Preserve existing visual hierarchy unless the user approved a visual/design change.
-- Use approved component libraries only when already installed or explicitly approved.
+- Use established component libraries when they are directly needed for the selected work; request command approval before installing missing components or packages.
 - Add or update targeted tests when rendering structure, accessibility behavior, or interaction behavior changes.
 - Verify visually in the target runtime when practical.
 ```

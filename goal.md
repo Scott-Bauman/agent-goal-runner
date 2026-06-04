@@ -86,7 +86,11 @@ The app should feel like a small professional operations panel: focused, quiet, 
 - Do not run more than the requested number of Codex passes.
 - Do not continue after any stop condition.
 - Keep logs local. Do not add telemetry, analytics, or remote log upload.
-- Do not add new dependencies unless they are directly needed for the selected checkbox.
+- Third-party packages, shadcn/ui components, and established libraries are allowed when they are directly needed for the selected checkbox and are the pragmatic implementation choice.
+- Do not hand-roll replacements for appropriate outside libraries or shadcn/ui components solely to avoid dependency installation.
+- Before running any install or download command, request command approval through the sandbox escalation flow and state what will be installed.
+- Do not use persistent prefix approval for dependency install commands unless the user explicitly asks for it.
+- Do not add unused dependencies or component scaffolding.
 
 ## Future Codex Run Discipline
 
@@ -217,13 +221,13 @@ Before implementation, Codex must:
 
 ### Phase 6: Frontend Shell and Layout
 
-- [x] Add shadcn/ui configuration for this repository, including `components.json`, Tailwind semantic tokens, and shadcn aliases.
+- [ ] Add shadcn/ui configuration for this repository, including `components.json`, Tailwind semantic tokens, and shadcn aliases.
 - [ ] Generate the first focused shadcn/ui components needed by the current shell, plus required local helper files, without migrating the UI in the same pass.
 - [ ] Import generated shadcn/ui components into the current UI for the first focused shell control replacement.
 - [ ] Refactor the existing top bar status badge to generated shadcn/ui components without changing repository loading behavior.
 - [ ] Refactor the existing `goal.md` document panel shell to generated shadcn/ui components without changing placeholder states.
-- [x] Add top bar with app name, selected repository path, and status badge.
-- [x] Add main left panel for rendered `goal.md`.
+- [ ] Add top bar with app name, selected repository path, and status badge.
+- [ ] Add main left panel for rendered `goal.md`.
 - [ ] Add compact right-side controls panel using generated shadcn/ui primitives where appropriate.
 - [ ] Add bottom logs and latest summary panel using generated shadcn/ui primitives where appropriate.
 - [ ] Re-check the completed frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new workflow behavior.
