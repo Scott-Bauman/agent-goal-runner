@@ -4,9 +4,24 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { TextDecoder } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildServer } from "../../src/server/index";
+
+const chokidarMocks = vi.hoisted(() => {
+  const close = vi.fn(() => Promise.resolve());
+
+  return {
+    close,
+    watch: vi.fn(() => ({
+      close,
+    })),
+  };
+});
+
+vi.mock("chokidar", () => ({
+  watch: chokidarMocks.watch,
+}));
 
 let server: FastifyInstance | undefined;
 const tempPaths: string[] = [];
@@ -69,6 +84,11 @@ async function readSseChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Pr
   return new TextDecoder().decode(result.value);
 }
 
+beforeEach(() => {
+  chokidarMocks.close.mockClear();
+  chokidarMocks.watch.mockClear();
+});
+
 afterEach(async () => {
   await server?.close();
   server = undefined;
@@ -114,6 +134,12 @@ describe("repository selection endpoint", () => {
     expect(response.json()).toEqual({
       repositoryPath: path.normalize(repositoryPath),
     });
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      path.join(path.normalize(repositoryPath), "goal.md"),
+      {
+        ignoreInitial: true,
+      },
+    );
   });
 
   it("stores the selected repository in server memory", async () => {
@@ -169,6 +195,24 @@ describe("repository selection endpoint", () => {
     expect(response.json()).toEqual({
       repositoryPath: path.normalize(repositoryPath),
     });
+    expect(chokidarMocks.watch).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the goal watcher when the server closes", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await app.close();
+    server = undefined;
+
+    expect(chokidarMocks.close).toHaveBeenCalledTimes(1);
   });
 
   it("does not persist selected repository across server instances", async () => {

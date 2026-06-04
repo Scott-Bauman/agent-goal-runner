@@ -178,7 +178,7 @@ Before implementation, Codex must:
 ### Phase 3: Backend Streaming and File Watching
 
 - [x] Add Server-Sent Events for status, logs, run progress, and latest summary.
-- [ ] Start a `chokidar` watcher when a repository is selected.
+- [x] Start a `chokidar` watcher when a repository is selected.
 - [ ] Stop or replace the watcher when the selected repository changes.
 - [ ] Notify connected clients when `goal.md` changes.
 - [ ] Avoid watching unrelated files.

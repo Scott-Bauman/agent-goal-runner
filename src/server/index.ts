@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import { watch, type FSWatcher } from "chokidar";
 import Fastify, { type FastifyInstance } from "fastify";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -218,6 +219,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   };
   const sseClients = new Map<number, SseClient>();
   let nextSseClientId = 1;
+  let goalWatcher: FSWatcher | null = null;
 
   function broadcastSseEvent<EventName extends keyof SseEventMap>(
     event: EventName,
@@ -230,8 +232,23 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
   }
 
+  function startGoalWatcher(repositoryPath: string): void {
+    if (goalWatcher) {
+      return;
+    }
+
+    goalWatcher = watch(getGoalFilePath(repositoryPath), {
+      ignoreInitial: true,
+    });
+  }
+
   await server.register(cors, {
     origin: true,
+  });
+
+  server.addHook("onClose", async () => {
+    await goalWatcher?.close();
+    goalWatcher = null;
   });
 
   server.get("/", async () => ({
@@ -401,6 +418,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
 
     runtimeState.selectedRepositoryPath = parsedBody.data.path;
+    startGoalWatcher(runtimeState.selectedRepositoryPath);
     broadcastSseEvent("status", {
       status: runtimeState.stream.status,
       selectedRepositoryPath: runtimeState.selectedRepositoryPath,
