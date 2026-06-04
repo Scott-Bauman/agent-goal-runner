@@ -181,7 +181,7 @@ Before implementation, Codex must:
 - [x] Start a `chokidar` watcher when a repository is selected.
 - [x] Stop or replace the watcher when the selected repository changes.
 - [x] Notify connected clients when `goal.md` changes.
-- [ ] Avoid watching unrelated files.
+- [x] Avoid watching unrelated files.
 - [ ] Update README.md with the completed Phase 3 behavior, commands, and usage.
 
 ### Phase 4: Codex Run Loop

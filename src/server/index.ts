@@ -255,27 +255,34 @@ export async function buildServer(): Promise<FastifyInstance> {
 
     goalWatcher = watch(goalFilePath, {
       ignoreInitial: true,
+      ignored: (watchedPath, stats) =>
+        Boolean(stats?.isFile() && path.resolve(watchedPath) !== goalFilePath),
     });
-    goalWatcher.on("add", () => {
+
+    const broadcastGoalChanged = (exists: boolean): void => {
       broadcastSseEvent("goalChanged", {
         repositoryPath,
         goalPath: goalFilePath,
-        exists: true,
+        exists,
       });
+    };
+
+    const handleGoalWatcherEvent = (changedPath: string, exists: boolean): void => {
+      if (path.resolve(changedPath) !== goalFilePath) {
+        return;
+      }
+
+      broadcastGoalChanged(exists);
+    };
+
+    goalWatcher.on("add", (changedPath) => {
+      handleGoalWatcherEvent(changedPath, true);
     });
-    goalWatcher.on("change", () => {
-      broadcastSseEvent("goalChanged", {
-        repositoryPath,
-        goalPath: goalFilePath,
-        exists: true,
-      });
+    goalWatcher.on("change", (changedPath) => {
+      handleGoalWatcherEvent(changedPath, true);
     });
-    goalWatcher.on("unlink", () => {
-      broadcastSseEvent("goalChanged", {
-        repositoryPath,
-        goalPath: goalFilePath,
-        exists: false,
-      });
+    goalWatcher.on("unlink", (changedPath) => {
+      handleGoalWatcherEvent(changedPath, false);
     });
     watchedGoalPath = goalFilePath;
   }

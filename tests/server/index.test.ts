@@ -11,17 +11,17 @@ import { buildServer } from "../../src/server/index";
 const chokidarMocks = vi.hoisted(() => {
   const close = vi.fn(() => Promise.resolve());
   const watcherInstances: Array<{
-    handlers: Map<string, Array<() => void>>;
+    handlers: Map<string, Array<(changedPath: string) => void>>;
   }> = [];
 
   return {
     close,
     watcherInstances,
     watch: vi.fn(() => {
-      const handlers = new Map<string, Array<() => void>>();
+      const handlers = new Map<string, Array<(changedPath: string) => void>>();
       const watcher = {
         close,
-        on: vi.fn((eventName: string, handler: () => void) => {
+        on: vi.fn((eventName: string, handler: (changedPath: string) => void) => {
           handlers.set(eventName, [...(handlers.get(eventName) ?? []), handler]);
           return watcher;
         }),
@@ -101,7 +101,7 @@ async function readSseChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Pr
   return new TextDecoder().decode(result.value);
 }
 
-function emitLatestGoalWatcherEvent(eventName: string): void {
+function emitLatestGoalWatcherEvent(eventName: string, changedPath: string): void {
   const latestWatcher = chokidarMocks.watcherInstances.at(-1);
 
   if (!latestWatcher) {
@@ -109,8 +109,24 @@ function emitLatestGoalWatcherEvent(eventName: string): void {
   }
 
   for (const handler of latestWatcher.handlers.get(eventName) ?? []) {
-    handler();
+    handler(changedPath);
   }
+}
+
+function getLatestWatchOptions(): {
+  ignored: (watchedPath: string, stats?: { isFile: () => boolean }) => boolean;
+  ignoreInitial: boolean;
+} {
+  const latestWatchCall = chokidarMocks.watch.mock.calls.at(-1);
+
+  if (!latestWatchCall) {
+    throw new Error("No goal watcher has been created.");
+  }
+
+  return latestWatchCall[1] as {
+    ignored: (watchedPath: string, stats?: { isFile: () => boolean }) => boolean;
+    ignoreInitial: boolean;
+  };
 }
 
 beforeEach(() => {
@@ -166,9 +182,22 @@ describe("repository selection endpoint", () => {
     });
     expect(chokidarMocks.watch).toHaveBeenCalledWith(
       path.join(path.normalize(repositoryPath), "goal.md"),
-      {
+      expect.objectContaining({
         ignoreInitial: true,
-      },
+        ignored: expect.any(Function),
+      }),
+    );
+    const watchOptions = getLatestWatchOptions();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+
+    expect(watchOptions.ignored(goalPath, { isFile: () => true })).toBe(false);
+    expect(
+      watchOptions.ignored(path.join(path.normalize(repositoryPath), "README.md"), {
+        isFile: () => true,
+      }),
+    ).toBe(true);
+    expect(watchOptions.ignored(path.normalize(repositoryPath), { isFile: () => false })).toBe(
+      false,
     );
   });
 
@@ -254,9 +283,10 @@ describe("repository selection endpoint", () => {
     expect(chokidarMocks.watch).toHaveBeenCalledTimes(2);
     expect(chokidarMocks.watch).toHaveBeenLastCalledWith(
       path.join(path.normalize(secondRepositoryPath), "goal.md"),
-      {
+      expect.objectContaining({
         ignoreInitial: true,
-      },
+        ignored: expect.any(Function),
+      }),
     );
   });
 
@@ -570,7 +600,10 @@ describe("events endpoint", () => {
       });
       await readSseChunk(reader);
 
-      emitLatestGoalWatcherEvent(watcherEvent);
+      emitLatestGoalWatcherEvent(
+        watcherEvent,
+        path.join(path.normalize(repositoryPath), "goal.md"),
+      );
 
       const updateChunk = await readSseChunk(reader);
       await reader.cancel();
@@ -584,6 +617,43 @@ describe("events endpoint", () => {
       ]);
     },
   );
+
+  it("does not broadcast goalChanged updates for unrelated watched paths", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    emitLatestGoalWatcherEvent(
+      "change",
+      path.join(path.normalize(repositoryPath), "README.md"),
+    );
+
+    const timeout = new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), 25);
+    });
+    const unexpectedChunk = await Promise.race([reader.read(), timeout]);
+    await reader.cancel();
+
+    expect(unexpectedChunk).toBe("timeout");
+  });
 });
 
 describe("goal read endpoint", () => {
