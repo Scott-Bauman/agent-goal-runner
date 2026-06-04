@@ -199,7 +199,7 @@ Before implementation, Codex must:
 - [x] Stop when refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`.
 - [x] Continue only when no stop condition is present and runs remain.
 - [x] Add stop endpoint that terminates the active child process when possible.
-- [ ] Prevent new runs from starting after stop is requested.
+- [x] Prevent new runs from starting after stop is requested.
 - [ ] Report stopped status clearly.
 - [ ] Update README.md with the completed Phase 4 behavior, commands, and usage.
 

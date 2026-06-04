@@ -665,6 +665,20 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
             const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
 
+            if (runtimeState.stream.runLoop.stopRequested) {
+              runtimeState.stream.runLoop = {
+                ...runtimeState.stream.runLoop,
+                status: "stopping",
+                activeProcessId: null,
+                latestSummary: {
+                  status: "stopping",
+                  message: `Stop requested after Codex run ${runNumber} of ${runCount}; no additional Codex runs will start.`,
+                },
+              };
+              publishRunStatus();
+              return;
+            }
+
             if (goalStopMarker) {
               const markerStatus =
                 goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";

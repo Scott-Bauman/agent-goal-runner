@@ -1584,6 +1584,82 @@ describe("run start endpoint", () => {
     });
   });
 
+  it("does not start another Codex run after stop is requested", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const firstRunProcess = createMockRunProcess(321);
+    const secondRunProcess = createMockRunProcess(654);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(firstRunProcess)
+      .mockReturnValueOnce(secondRunProcess);
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const sseResponse = await globalThis.fetch(`${origin}/api/events`);
+    const reader = sseResponse.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/stop",
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    firstRunProcess.emit("close", 0, null);
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+
+    const restartResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await reader.cancel();
+
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
+    expect(restartResponse.statusCode).toBe(409);
+    expect(restartResponse.json()).toEqual({
+      error: "A run is already active.",
+    });
+    expect(summaryPayloads).toEqual([
+      {
+        status: "stopping",
+        message: "Stop requested after Codex run 1 of 2; no additional Codex runs will start.",
+      },
+    ]);
+  });
+
   it("rejects a stop request when no run is active", async () => {
     const app = await getServer();
 
