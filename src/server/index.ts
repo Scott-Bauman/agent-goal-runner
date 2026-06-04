@@ -960,6 +960,25 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         return false;
       }
 
+      const statusOutput = await runGitStatusBeforeCommit(runNumber);
+
+      if (statusOutput === null) {
+        return false;
+      }
+
+      if (statusOutput.trim().length === 0) {
+        runtimeState.stream.runLoop = {
+          ...runtimeState.stream.runLoop,
+          activeProcessId: null,
+          latestSummary: {
+            status: "running",
+            message: `Skipped auto-commit after Codex run ${runNumber} of ${runCount} because git status reported no changes.`,
+          },
+        };
+        publishRunStatus();
+        return true;
+      }
+
       return runGitCommand(
         ["commit", "-m", `codex-goal-runner: Codex run ${runNumber}`],
         `Started auto-commit after Codex run ${runNumber} of ${runCount}.`,
@@ -969,6 +988,73 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
             : `Auto-commit after Codex run ${runNumber} exited with code ${code}.`,
         runNumber,
       );
+    }
+
+    function runGitStatusBeforeCommit(runNumber: number): Promise<string | null> {
+      return new Promise((resolve) => {
+        let stdout = "";
+        const gitProcess = spawnProcess("git", ["status", "--porcelain"], {
+          cwd: repositoryPath,
+          windowsHide: true,
+        });
+
+        activeRunProcess = gitProcess;
+        activeRunProcessKind = "git";
+        runtimeState.stream.runLoop = {
+          ...runtimeState.stream.runLoop,
+          activeProcessId: gitProcess.pid ?? null,
+          latestSummary: {
+            status: "running",
+            message: `Started auto-commit status check after Codex run ${runNumber} of ${runCount}.`,
+          },
+        };
+        publishRunStatus();
+
+        gitProcess.stdout.on("data", (chunk: Buffer | string) => {
+          stdout += chunk.toString();
+          appendProcessLog("stdout", chunk);
+        });
+        gitProcess.stderr.on("data", (chunk: Buffer | string) => {
+          appendProcessLog("stderr", chunk);
+        });
+        gitProcess.on("close", (code) => {
+          if (activeRunProcess !== gitProcess) {
+            resolve(null);
+            return;
+          }
+
+          activeRunProcess = null;
+          activeRunProcessKind = null;
+
+          if (runtimeState.stream.runLoop.stopRequested) {
+            runtimeState.stream.runLoop = {
+              ...runtimeState.stream.runLoop,
+              status: "stopped",
+              stopRequested: false,
+              activeProcessId: null,
+              latestSummary: {
+                status: "stopped",
+                message: `Stopped during auto-commit status check after Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`,
+              },
+            };
+            publishRunStatus();
+            resolve(null);
+            return;
+          }
+
+          if (code === 0) {
+            resolve(stdout);
+            return;
+          }
+
+          failRun(
+            code === null
+              ? `Auto-commit status check after Codex run ${runNumber} exited without an exit code.`
+              : `Auto-commit status check after Codex run ${runNumber} exited with code ${code}.`,
+          );
+          resolve(null);
+        });
+      });
     }
 
     function runGitCommand(

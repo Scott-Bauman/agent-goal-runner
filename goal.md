@@ -211,7 +211,7 @@ Before implementation, Codex must:
 - [x] Stream verification output and stop on verification failure.
 - [x] Add explicit auto-commit toggle.
 - [x] Commit only after Codex and optional verification succeed.
-- [ ] Run git status before commit and skip commit when there are no changes.
+- [x] Run git status before commit and skip commit when there are no changes.
 - [ ] Use a clear generated commit message, stream git output, and stop on commit failure.
 - [ ] Update README.md with the completed Phase 5 behavior, commands, and usage.
 

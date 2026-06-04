@@ -1545,12 +1545,14 @@ describe("run start endpoint", () => {
     const runProcess = createMockRunProcess(321);
     const verificationProcess = createMockRunProcess(654);
     const gitAddProcess = createMockRunProcess(987);
+    const gitStatusProcess = createMockRunProcess(765);
     const gitCommitProcess = createMockRunProcess(432);
     const spawnProcess = vi
       .fn()
       .mockReturnValueOnce(runProcess)
       .mockReturnValueOnce(verificationProcess)
       .mockReturnValueOnce(gitAddProcess)
+      .mockReturnValueOnce(gitStatusProcess)
       .mockReturnValueOnce(gitCommitProcess);
     const app = await buildServer({
       spawnProcess,
@@ -1609,11 +1611,32 @@ describe("run start endpoint", () => {
     ]);
 
     gitAddProcess.emit("close", 0, null);
-    const gitCommitSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+    const gitStatusSummaryPayloads = await readUntilSsePayloads(reader, "summary");
 
     expect(spawnProcess).toHaveBeenCalledTimes(4);
     expect(spawnProcess).toHaveBeenNthCalledWith(
       4,
+      "git",
+      ["status", "--porcelain"],
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+    expect(gitStatusSummaryPayloads).toEqual([
+      {
+        status: "running",
+        message: "Started auto-commit status check after Codex run 1 of 1.",
+      },
+    ]);
+
+    gitStatusProcess.stdout.write(" M goal.md\n");
+    gitStatusProcess.emit("close", 0, null);
+    const gitCommitSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+
+    expect(spawnProcess).toHaveBeenCalledTimes(5);
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      5,
       "git",
       ["commit", "-m", "codex-goal-runner: Codex run 1"],
       {
@@ -1632,6 +1655,109 @@ describe("run start endpoint", () => {
     const completeSummaryPayloads = await readUntilSsePayloads(reader, "summary");
     await reader.cancel();
 
+    expect(completeSummaryPayloads).toEqual([
+      {
+        status: "complete",
+        message: `Completed Codex run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      },
+    ]);
+  });
+
+  it("skips auto-commit when git status reports no changes", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess(321);
+    const gitAddProcess = createMockRunProcess(987);
+    const gitStatusProcess = createMockRunProcess(765);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(gitAddProcess)
+      .mockReturnValueOnce(gitStatusProcess);
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    const gitAddSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+
+    expect(spawnProcess).toHaveBeenCalledTimes(2);
+    expect(spawnProcess).toHaveBeenNthCalledWith(2, "git", ["add", "-A"], {
+      cwd: path.normalize(repositoryPath),
+      windowsHide: true,
+    });
+    expect(gitAddSummaryPayloads).toEqual([
+      {
+        status: "running",
+        message: "Started auto-commit staging after Codex run 1 of 1.",
+      },
+    ]);
+
+    gitAddProcess.emit("close", 0, null);
+    const gitStatusSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+
+    expect(spawnProcess).toHaveBeenCalledTimes(3);
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      3,
+      "git",
+      ["status", "--porcelain"],
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+    expect(gitStatusSummaryPayloads).toEqual([
+      {
+        status: "running",
+        message: "Started auto-commit status check after Codex run 1 of 1.",
+      },
+    ]);
+
+    gitStatusProcess.emit("close", 0, null);
+    const skipSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+    const completeSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(spawnProcess).toHaveBeenCalledTimes(3);
+    expect(skipSummaryPayloads).toEqual([
+      {
+        status: "running",
+        message:
+          "Skipped auto-commit after Codex run 1 of 1 because git status reported no changes.",
+      },
+    ]);
     expect(completeSummaryPayloads).toEqual([
       {
         status: "complete",
