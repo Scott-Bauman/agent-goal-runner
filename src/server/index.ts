@@ -269,6 +269,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   };
   const sseClients = new Map<number, SseClient>();
   let nextSseClientId = 1;
+  let nextLogId = 1;
   let goalWatcher: FSWatcher | null = null;
   let watchedGoalPath: string | null = null;
   let activeRunProcess: ChildProcessWithoutNullStreams | null = null;
@@ -282,6 +283,28 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     for (const client of sseClients.values()) {
       client.write(chunk);
     }
+  }
+
+  function appendProcessLog(
+    stream: Extract<LogEntry["stream"], "stdout" | "stderr">,
+    chunk: Buffer | string,
+  ): void {
+    const message = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+
+    if (message.length === 0) {
+      return;
+    }
+
+    const entry: LogEntry = {
+      id: nextLogId,
+      stream,
+      message,
+    };
+    nextLogId += 1;
+    runtimeState.stream.logs.push(entry);
+    broadcastSseEvent("logs", {
+      entries: [entry],
+    });
   }
 
   async function stopGoalWatcher(): Promise<void> {
@@ -550,8 +573,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       windowsHide: true,
     });
 
-    childProcess.stdout.resume();
-    childProcess.stderr.resume();
+    childProcess.stdout.on("data", (chunk: Buffer | string) => {
+      appendProcessLog("stdout", chunk);
+    });
+    childProcess.stderr.on("data", (chunk: Buffer | string) => {
+      appendProcessLog("stderr", chunk);
+    });
     activeRunProcess = childProcess;
 
     runtimeState.stream.runLoop = {

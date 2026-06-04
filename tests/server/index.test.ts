@@ -1093,6 +1093,74 @@ describe("run start endpoint", () => {
     );
   });
 
+  it("streams Codex stdout and stderr to connected SSE clients", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readSseChunk(reader);
+
+    runProcess.stdout.write("stdout line\n");
+    const stdoutChunk = await readSseChunk(reader);
+
+    runProcess.stderr.write("stderr line\n");
+    const stderrChunk = await readSseChunk(reader);
+    await reader.cancel();
+
+    expect(parseSsePayloads(stdoutChunk, "logs")).toEqual([
+      {
+        entries: [
+          {
+            id: 1,
+            stream: "stdout",
+            message: "stdout line\n",
+          },
+        ],
+      },
+    ]);
+    expect(parseSsePayloads(stderrChunk, "logs")).toEqual([
+      {
+        entries: [
+          {
+            id: 2,
+            stream: "stderr",
+            message: "stderr line\n",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("rejects a second run start request while a run is active", async () => {
     const repositoryPath = await createRepositoryPath();
     const app = await getServer();
