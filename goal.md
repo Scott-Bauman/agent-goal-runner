@@ -100,6 +100,7 @@ Rules for future runs:
 - Do not complete multiple checklist items in one run unless one item is only a tiny parent for already-completed substeps.
 - Future implementation runs may create, edit, or delete project files as needed to complete the selected checkbox or sub-checkbox.
 - When editing this file after implementation, update only the relevant checkbox state and any short durable blocker or decision that future runs need. This restriction applies only to edits made inside `goal.md`.
+- At the end of every phase, update `README.md` to reflect the completed behavior, commands, and usage before considering the phase complete.
 - Do not mark a checkbox complete unless the required files or behavior were implemented and verified.
 - Do not scaffold ahead of the selected checkbox.
 - Do not broaden scope beyond the selected checkbox or sub-checkbox.
@@ -160,6 +161,7 @@ Before implementation, Codex must:
   - [x] Add Tailwind configuration and the frontend stylesheet entry.
   - [x] Add only the UI primitives needed by the first screen.
   - [x] Add a short README with local development and verification commands.
+- [ ] Update README.md with the completed Phase 1 behavior, commands, and usage.
 
 ### Phase 2: Backend Repository and Goal File API
 
@@ -171,6 +173,7 @@ Before implementation, Codex must:
 - [ ] Add explicit user-requested default `goal.md` creation.
 - [ ] Refuse arbitrary markdown paths and alternate plan names.
 - [ ] Return useful validation errors to the frontend.
+- [ ] Update README.md with the completed Phase 2 behavior, commands, and usage.
 
 ### Phase 3: Backend Streaming and File Watching
 
@@ -179,6 +182,7 @@ Before implementation, Codex must:
 - [ ] Stop or replace the watcher when the selected repository changes.
 - [ ] Notify connected clients when `goal.md` changes.
 - [ ] Avoid watching unrelated files.
+- [ ] Update README.md with the completed Phase 3 behavior, commands, and usage.
 
 ### Phase 4: Codex Run Loop
 
@@ -193,6 +197,7 @@ Before implementation, Codex must:
 - [ ] Add stop endpoint that terminates the active child process when possible.
 - [ ] Prevent new runs from starting after stop is requested.
 - [ ] Report stopped status clearly.
+- [ ] Update README.md with the completed Phase 4 behavior, commands, and usage.
 
 ### Phase 5: Optional Verification and Auto-Commit
 
@@ -204,6 +209,7 @@ Before implementation, Codex must:
 - [ ] Commit only after Codex and optional verification succeed.
 - [ ] Run git status before commit and skip commit when there are no changes.
 - [ ] Use a clear generated commit message, stream git output, and stop on commit failure.
+- [ ] Update README.md with the completed Phase 5 behavior, commands, and usage.
 
 ### Phase 6: Frontend Shell and Layout
 
@@ -214,6 +220,7 @@ Before implementation, Codex must:
 - [ ] Keep the UI responsive without changing the primary workflow.
 - [ ] Add repository path entry, selected-path display, and validation errors.
 - [ ] Show a create-default-`goal.md` action when missing.
+- [ ] Update README.md with the completed Phase 6 behavior, commands, and usage.
 
 ### Phase 7: Markdown Rendering
 
@@ -222,6 +229,7 @@ Before implementation, Codex must:
 - [ ] Sanitize rendered HTML with DOMPurify.
 - [ ] Style markdown output for readability.
 - [ ] Refresh rendering when the backend reports a file change or completed run.
+- [ ] Update README.md with the completed Phase 7 behavior, commands, and usage.
 
 ### Phase 8: Run Controls and Live Status
 
@@ -232,6 +240,7 @@ Before implementation, Codex must:
 - [ ] Add start and stop buttons with correct disabled states.
 - [ ] Connect to the SSE stream.
 - [ ] Show status, run progress, logs, and latest run summary.
+- [ ] Update README.md with the completed Phase 8 behavior, commands, and usage.
 
 ### Phase 9: Verification and Polish
 
@@ -242,6 +251,7 @@ Before implementation, Codex must:
 - [ ] Manually verify repository selection, goal creation, and goal rendering.
 - [ ] Manually verify a one-run Codex loop with a harmless prompt.
 - [ ] Manually verify stop conditions: max run count, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
+- [ ] Update README.md with the completed Phase 9 behavior, commands, usage, and final verification status.
 
 ## Verification Guidance
 

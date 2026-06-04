@@ -354,6 +354,7 @@ Rules for future runs:
 - Completing an item means implementing the required project files or behavior, verifying the change, and then updating the relevant checkbox state in this `goal.md`.
 - When editing `goal.md`, update only the checkbox state for the completed item and avoid rewriting unrelated sections.
 - Do not interpret "update only that checkbox" as "only edit `goal.md`"; that restriction applies only to edits made inside `goal.md`.
+- At the end of every phase, update `README.md` to reflect the completed behavior, commands, and usage before marking the phase complete.
 - Do not mark a checkbox complete unless the required files or behavior were actually created or changed and verified.
 - Do not scaffold ahead of the current checkbox.
 - Do not broaden scope beyond the selected checkbox or sub-checkbox.
@@ -454,6 +455,7 @@ Rules:
 
 - Phases should be ordered by dependency and risk.
 - Each phase should contain small checkboxes.
+- Each phase should end with a small `README.md` update checkbox covering the phase's completed behavior, commands, and usage.
 - Parent checkboxes remain unchecked until children are complete.
 - Do not make a giant checkbox for an entire subsystem.
 - Do not scaffold future phases early unless the current checkbox requires it.
@@ -471,6 +473,7 @@ Template:
   - [ ] Add frontend structure.
   - [ ] Add backend structure.
   - [ ] Add README with local commands.
+  - [ ] Update README.md with the completed Phase 1 behavior, commands, and usage.
 
 ### Phase 2: Core Feature
 
@@ -478,6 +481,7 @@ Template:
   - [ ] Add [small task].
   - [ ] Add [small task].
   - [ ] Verify [behavior].
+  - [ ] Update README.md with the completed Phase 2 behavior, commands, and usage.
 ```
 
 ---
