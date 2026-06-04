@@ -89,9 +89,36 @@ type ProcessSpawner = (
   args: string[],
   options: SpawnOptionsWithoutStdio,
 ) => ChildProcessWithoutNullStreams;
+type ParsedVerificationCommand = {
+  executable: string;
+  args: string[];
+};
+type VerificationCommandParseResult =
+  | {
+      success: true;
+      parsed: ParsedVerificationCommand | null;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 type BuildServerOptions = {
   spawnProcess?: ProcessSpawner;
 };
+
+const SHELL_OPERATOR_CHARACTERS = new Set(["|", "&", ";", "<", ">", "`"]);
+const SHELL_EXECUTABLES = new Set([
+  "bash",
+  "bash.exe",
+  "cmd",
+  "cmd.exe",
+  "powershell",
+  "powershell.exe",
+  "pwsh",
+  "pwsh.exe",
+  "sh",
+  "sh.exe",
+]);
 
 const repositorySelectionSchema = z
   .object({
@@ -113,7 +140,17 @@ const runStartSchema = z
         invalid_type_error: "Verification command must be a string.",
       })
       .trim()
-      .default(""),
+      .default("")
+      .superRefine((value, context) => {
+        const parsedCommand = parseVerificationCommand(value);
+
+        if (!parsedCommand.success) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: parsedCommand.error,
+          });
+        }
+      }),
     runCount: z
       .number({
         invalid_type_error: "Run count must be a number.",
@@ -184,6 +221,116 @@ function validationError(
     error,
     code: "VALIDATION_ERROR",
     issues,
+  };
+}
+
+function parseVerificationCommand(command: string): VerificationCommandParseResult {
+  const trimmedCommand = command.trim();
+
+  if (!trimmedCommand) {
+    return {
+      success: true,
+      parsed: null,
+    };
+  }
+
+  const tokens: string[] = [];
+  let currentToken = "";
+  let tokenStarted = false;
+  let quote: "\"" | "'" | null = null;
+  let escaped = false;
+
+  function appendCurrentToken(): void {
+    if (tokenStarted) {
+      tokens.push(currentToken);
+      currentToken = "";
+      tokenStarted = false;
+    }
+  }
+
+  for (const character of trimmedCommand) {
+    if (escaped) {
+      tokenStarted = true;
+      currentToken += character;
+      escaped = false;
+      continue;
+    }
+
+    if (quote) {
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (character === quote) {
+        quote = null;
+        continue;
+      }
+
+      currentToken += character;
+      continue;
+    }
+
+    if (character === "\"" || character === "'") {
+      tokenStarted = true;
+      quote = character;
+      continue;
+    }
+
+    if (/\s/u.test(character)) {
+      appendCurrentToken();
+      continue;
+    }
+
+    if (SHELL_OPERATOR_CHARACTERS.has(character)) {
+      return {
+        success: false,
+        error:
+          "Verification command must use a single executable plus arguments; shell operators are not supported.",
+      };
+    }
+
+    tokenStarted = true;
+    currentToken += character;
+  }
+
+  if (escaped) {
+    tokenStarted = true;
+    currentToken += "\\";
+  }
+
+  if (quote) {
+    return {
+      success: false,
+      error: "Verification command contains an unterminated quoted argument.",
+    };
+  }
+
+  appendCurrentToken();
+
+  if (tokens.length === 0) {
+    return {
+      success: false,
+      error: "Verification command must include an executable.",
+    };
+  }
+
+  const [executable, ...args] = tokens;
+  const executableName = path.basename(executable).toLowerCase();
+
+  if (SHELL_EXECUTABLES.has(executableName)) {
+    return {
+      success: false,
+      error: "Verification command must be a direct executable, not a shell.",
+    };
+  }
+
+  return {
+    success: true,
+    parsed: {
+      executable,
+      args,
+    },
   };
 }
 
@@ -634,6 +781,18 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
     const repositoryPath = runtimeState.selectedRepositoryPath;
     const { prompt, runCount, verificationCommand } = parsedBody.data;
+    const verificationCommandParse = parseVerificationCommand(verificationCommand);
+
+    if (!verificationCommandParse.success) {
+      return reply.code(400).send(
+        validationError("Invalid run start request.", [
+          {
+            path: "verificationCommand",
+            message: verificationCommandParse.error,
+          },
+        ]),
+      );
+    }
 
     function startCodexRun(runNumber: number): void {
       const childProcess = spawnProcess("codex", ["exec", prompt], {

@@ -1012,6 +1012,36 @@ describe("run start endpoint", () => {
       "Verification command must be a string.",
     ],
     [
+      "verification command with shell operator",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: "npm test && npm run build",
+      },
+      "verificationCommand",
+      "Verification command must use a single executable plus arguments; shell operators are not supported.",
+    ],
+    [
+      "verification command with unterminated quote",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: 'npm test -- --testNamePattern "run loop',
+      },
+      "verificationCommand",
+      "Verification command contains an unterminated quoted argument.",
+    ],
+    [
+      "verification command through a shell",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: "powershell -Command npm test",
+      },
+      "verificationCommand",
+      "Verification command must be a direct executable, not a shell.",
+    ],
+    [
       "extra fields",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -1057,6 +1087,40 @@ describe("run start endpoint", () => {
     },
   );
 
+  it("rejects an invalid verification command before spawning a run", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = vi.fn(() => createMockRunProcess());
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: "npm test | tee test.log",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid run start request.",
+      code: "VALIDATION_ERROR",
+    });
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
   it("accepts a valid run start request and marks the run active", async () => {
     const repositoryPath = await createRepositoryPath();
     const app = await getServer();
@@ -1094,6 +1158,11 @@ describe("run start endpoint", () => {
       "single verification command with arguments",
       "  npm test -- --runInBand  ",
       "npm test -- --runInBand",
+    ],
+    [
+      "quoted verification argument",
+      '  npm test -- --testNamePattern "run loop"  ',
+      'npm test -- --testNamePattern "run loop"',
     ],
   ])("accepts an optional %s", async (_name, verificationCommand, expected) => {
     const repositoryPath = await createRepositoryPath();
