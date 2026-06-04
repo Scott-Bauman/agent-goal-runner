@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -46,12 +47,12 @@ let server: FastifyInstance | undefined;
 const tempPaths: string[] = [];
 
 function createMockRunProcess(pid = 321): ChildProcessWithoutNullStreams {
-  return {
+  return Object.assign(new EventEmitter(), {
     pid,
     stdout: new PassThrough(),
     stderr: new PassThrough(),
     kill: vi.fn(),
-  } as unknown as ChildProcessWithoutNullStreams;
+  }) as unknown as ChildProcessWithoutNullStreams;
 }
 
 async function getServer(): Promise<FastifyInstance> {
@@ -1159,6 +1160,69 @@ describe("run start endpoint", () => {
         ],
       },
     ]);
+  });
+
+  it("stops immediately and reports failure when Codex exits with a non-zero code", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+      },
+    });
+
+    runProcess.emit("close", 7, null);
+
+    const origin = await listenOnRandomPort(app);
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    const snapshotChunk = await readSseChunk(reader);
+    await reader.cancel();
+
+    expect(parseSsePayloads(snapshotChunk, "status")).toEqual([
+      {
+        status: "failed",
+        selectedRepositoryPath: path.normalize(repositoryPath),
+      },
+    ]);
+    expect(parseSsePayloads(snapshotChunk, "summary")).toEqual([
+      {
+        status: "failed",
+        message: "Codex run 1 exited with code 7.",
+      },
+    ]);
+
+    const restartResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    expect(restartResponse.statusCode).toBe(202);
   });
 
   it("rejects a second run start request while a run is active", async () => {

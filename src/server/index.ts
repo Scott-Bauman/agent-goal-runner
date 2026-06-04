@@ -579,6 +579,36 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     childProcess.stderr.on("data", (chunk: Buffer | string) => {
       appendProcessLog("stderr", chunk);
     });
+    childProcess.on("close", (code) => {
+      if (activeRunProcess !== childProcess) {
+        return;
+      }
+
+      activeRunProcess = null;
+
+      if (code === 0) {
+        return;
+      }
+
+      runtimeState.stream.runLoop = {
+        ...runtimeState.stream.runLoop,
+        status: "failed",
+        stopRequested: false,
+        activeProcessId: null,
+        latestSummary: {
+          status: "failed",
+          message:
+            code === null
+              ? "Codex run 1 exited without an exit code."
+              : `Codex run 1 exited with code ${code}.`,
+        },
+      };
+      broadcastSseEvent("status", {
+        status: runtimeState.stream.runLoop.status,
+        selectedRepositoryPath: runtimeState.selectedRepositoryPath,
+      });
+      broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+    });
     activeRunProcess = childProcess;
 
     runtimeState.stream.runLoop = {
