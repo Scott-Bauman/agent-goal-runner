@@ -222,11 +222,11 @@ Before implementation, Codex must:
 - [ ] Import generated shadcn/ui components into the current UI for the first focused shell control replacement.
 - [ ] Refactor the existing top bar status badge to generated shadcn/ui components without changing repository loading behavior.
 - [ ] Refactor the existing `goal.md` document panel shell to generated shadcn/ui components without changing placeholder states.
-- [ ] Re-check the current frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new panels.
 - [x] Add top bar with app name, selected repository path, and status badge.
 - [x] Add main left panel for rendered `goal.md`.
-- [ ] Add compact right-side controls panel.
-- [ ] Add bottom logs and latest summary panel.
+- [ ] Add compact right-side controls panel using generated shadcn/ui primitives where appropriate.
+- [ ] Add bottom logs and latest summary panel using generated shadcn/ui primitives where appropriate.
+- [ ] Re-check the completed frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new workflow behavior.
 - [ ] Keep the UI responsive without changing the primary workflow.
 - [ ] Add repository path entry, selected-path display, and validation errors.
 - [ ] Show a create-default-`goal.md` action when missing.
