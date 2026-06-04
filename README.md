@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently through Phase 4 backend run-loop control. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, and a controlled Codex run loop. Runtime goal rendering, optional verification, and auto-commit features are tracked in `goal.md`.
+The MVP is currently through Phase 5 backend run-loop control. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, and optional auto-commit. Runtime goal rendering and the full frontend control surface are tracked in `goal.md`.
 
 ## Current Behavior
 
@@ -30,6 +30,9 @@ The MVP is currently through Phase 4 backend run-loop control. It has a Fastify 
 - After each successful Codex pass, the backend re-reads the selected repository's `goal.md`.
 - The run loop stops when Codex exits non-zero, the requested run count is reached, refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`, `goal.md` becomes unavailable, or the user requests stop.
 - User stop is available through `POST /api/run/stop`; it marks the run as stopping, terminates the active Codex process when possible, and prevents additional passes from starting.
+- Optional verification is accepted as an empty value or a single executable with arguments; shell operators and shell wrappers are rejected.
+- Verification runs only after a successful Codex pass, streams stdout and stderr over SSE, and stops the run loop on failure.
+- Auto-commit is opt-in per run. When enabled, the backend runs `git add -A`, checks `git status --porcelain`, skips commits when there are no changes, creates a generated commit message when changes exist, streams git output over SSE, and stops the run loop on git failure.
 - Run progress and latest summary updates are broadcast over SSE.
 - Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
 
@@ -74,7 +77,7 @@ After selecting a repository with `POST /api/repository/select`, start a control
 ```sh
 curl -X POST http://127.0.0.1:4317/api/run/start \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1}"
+  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1,\"verificationCommand\":\"npm test\",\"autoCommit\":false}"
 ```
 
 Request a stop for the active run with:
