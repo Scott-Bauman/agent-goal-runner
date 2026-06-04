@@ -166,7 +166,7 @@ Before implementation, Codex must:
 ### Phase 2: Backend Repository and Goal File API
 
 - [x] Add repository selection endpoint with `zod` validation for a local path.
-- [ ] Validate selected paths as existing directories and git repositories.
+- [x] Validate selected paths as existing directories and git repositories.
 - [ ] Store the selected repository only in local in-memory runtime state.
 - [ ] Add `goal.md` read endpoint restricted to `<selected-repo>/goal.md`.
 - [ ] Return a clear missing-goal state when `goal.md` does not exist.

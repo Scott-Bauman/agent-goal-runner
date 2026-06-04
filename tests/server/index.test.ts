@@ -1,24 +1,70 @@
 import type { FastifyInstance } from "fastify";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { buildServer } from "../../src/server/index";
 
 let server: FastifyInstance | undefined;
+const tempPaths: string[] = [];
 
 async function getServer(): Promise<FastifyInstance> {
   server = await buildServer();
   return server;
 }
 
+async function createTempPath(): Promise<string> {
+  const tempPath = await mkdtemp(path.join(os.tmpdir(), "codex-goal-runner-"));
+  tempPaths.push(tempPath);
+  return tempPath;
+}
+
+async function createRepositoryPath(): Promise<string> {
+  const repositoryPath = await createTempPath();
+  await mkdir(path.join(repositoryPath, ".git"));
+  return repositoryPath;
+}
+
 afterEach(async () => {
   await server?.close();
   server = undefined;
+
+  await Promise.all(
+    tempPaths.splice(0).map((tempPath) =>
+      rm(tempPath, {
+        force: true,
+        recursive: true,
+      }),
+    ),
+  );
 });
 
 describe("repository selection endpoint", () => {
-  it("accepts an absolute local filesystem path", async () => {
-    const repositoryPath = path.resolve("example-repo");
+  it("accepts an existing git repository directory", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      repositoryPath: path.normalize(repositoryPath),
+    });
+  });
+
+  it("accepts a git worktree marker file", async () => {
+    const repositoryPath = await createTempPath();
+    await writeFile(
+      path.join(repositoryPath, ".git"),
+      "gitdir: ../.git/worktrees/example\n",
+    );
     const app = await getServer();
 
     const response = await app.inject({
@@ -53,6 +99,79 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid repository selection request.",
+    });
+  });
+
+  it("rejects a missing absolute path", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: path.join(os.tmpdir(), "codex-goal-runner-missing-repo"),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid repository selection request.",
+      issues: [
+        {
+          path: "path",
+          message: "Path must exist.",
+        },
+      ],
+    });
+  });
+
+  it("rejects a file path", async () => {
+    const repositoryPath = await createTempPath();
+    const filePath = path.join(repositoryPath, "file.txt");
+    await writeFile(filePath, "not a repository\n");
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: filePath,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid repository selection request.",
+      issues: [
+        {
+          path: "path",
+          message: "Path must be an existing directory.",
+        },
+      ],
+    });
+  });
+
+  it("rejects a directory without a git marker", async () => {
+    const repositoryPath = await createTempPath();
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid repository selection request.",
+      issues: [
+        {
+          path: "path",
+          message: "Path must be a git repository.",
+        },
+      ],
     });
   });
 });

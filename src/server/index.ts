@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
@@ -18,6 +19,55 @@ const repositorySelectionSchema = z
       .transform((value) => path.normalize(value)),
   })
   .strict();
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await stat(targetPath);
+    return true;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function validateRepositoryPath(repositoryPath: string): Promise<string | undefined> {
+  let pathStats;
+
+  try {
+    pathStats = await stat(repositoryPath);
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return "Path must exist.";
+    }
+
+    throw error;
+  }
+
+  if (!pathStats.isDirectory()) {
+    return "Path must be an existing directory.";
+  }
+
+  const gitMarkerPath = path.join(repositoryPath, ".git");
+
+  if (!(await pathExists(gitMarkerPath))) {
+    return "Path must be a git repository.";
+  }
+
+  return undefined;
+}
 
 export async function buildServer(): Promise<FastifyInstance> {
   const server = Fastify({
@@ -47,6 +97,20 @@ export async function buildServer(): Promise<FastifyInstance> {
           path: issue.path.join("."),
           message: issue.message,
         })),
+      });
+    }
+
+    const repositoryPathIssue = await validateRepositoryPath(parsedBody.data.path);
+
+    if (repositoryPathIssue) {
+      return reply.code(400).send({
+        error: "Invalid repository selection request.",
+        issues: [
+          {
+            path: "path",
+            message: repositoryPathIssue,
+          },
+        ],
       });
     }
 
