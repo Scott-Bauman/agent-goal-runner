@@ -161,7 +161,7 @@ Before implementation, Codex must:
   - [x] Add Tailwind configuration and the frontend stylesheet entry.
   - [x] Add only the UI primitives needed by the first screen.
   - [x] Add a short README with local development and verification commands.
-- [ ] Update README.md with the completed Phase 1 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 1 behavior, commands, and usage.
 
 ### Phase 2: Backend Repository and Goal File API
 
