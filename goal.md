@@ -168,7 +168,7 @@ Before implementation, Codex must:
 - [x] Add repository selection endpoint with `zod` validation for a local path.
 - [x] Validate selected paths as existing directories and git repositories.
 - [x] Store the selected repository only in local in-memory runtime state.
-- [ ] Add `goal.md` read endpoint restricted to `<selected-repo>/goal.md`.
+- [x] Add `goal.md` read endpoint restricted to `<selected-repo>/goal.md`.
 - [ ] Return a clear missing-goal state when `goal.md` does not exist.
 - [ ] Add explicit user-requested default `goal.md` creation.
 - [ ] Refuse arbitrary markdown paths and alternate plan names.

@@ -268,3 +268,73 @@ describe("repository selection endpoint", () => {
     });
   });
 });
+
+describe("goal read endpoint", () => {
+  it("requires a selected repository", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No repository selected.",
+    });
+  });
+
+  it("reads the selected repository goal.md", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
+      markdown: "# Selected Goal\n",
+    });
+  });
+
+  it("ignores caller-provided path query parameters", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const otherPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    await writeFile(path.join(otherPath, "goal.md"), "# Other Goal\n");
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/goal?path=${encodeURIComponent(path.join(otherPath, "goal.md"))}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
+      markdown: "# Selected Goal\n",
+    });
+  });
+});

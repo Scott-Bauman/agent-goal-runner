@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
@@ -69,6 +69,22 @@ async function validateRepositoryPath(repositoryPath: string): Promise<string | 
   return undefined;
 }
 
+function getGoalFilePath(repositoryPath: string): string {
+  const normalizedRepositoryPath = path.resolve(repositoryPath);
+  const goalFilePath = path.resolve(normalizedRepositoryPath, "goal.md");
+  const relativeGoalPath = path.relative(normalizedRepositoryPath, goalFilePath);
+
+  if (
+    relativeGoalPath === "" ||
+    relativeGoalPath.startsWith("..") ||
+    path.isAbsolute(relativeGoalPath)
+  ) {
+    throw new Error("Resolved goal path escaped the selected repository.");
+  }
+
+  return goalFilePath;
+}
+
 export async function buildServer(): Promise<FastifyInstance> {
   const server = Fastify({
     logger: true,
@@ -95,6 +111,23 @@ export async function buildServer(): Promise<FastifyInstance> {
   server.get("/api/repository/selection", async () => ({
     repositoryPath: runtimeState.selectedRepositoryPath,
   }));
+
+  server.get("/api/goal", async (_request, reply) => {
+    if (!runtimeState.selectedRepositoryPath) {
+      return reply.code(409).send({
+        error: "No repository selected.",
+      });
+    }
+
+    const goalFilePath = getGoalFilePath(runtimeState.selectedRepositoryPath);
+    const markdown = await readFile(goalFilePath, "utf8");
+
+    return {
+      repositoryPath: runtimeState.selectedRepositoryPath,
+      goalPath: goalFilePath,
+      markdown,
+    };
+  });
 
   server.post("/api/repository/select", async (request, reply) => {
     const parsedBody = repositorySelectionSchema.safeParse(request.body);
