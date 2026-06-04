@@ -208,6 +208,18 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
   );
 }
 
+function detectGoalStopMarker(markdown: string): "GOAL_COMPLETE" | "GOAL_BLOCKED" | null {
+  if (markdown.includes("GOAL_BLOCKED")) {
+    return "GOAL_BLOCKED";
+  }
+
+  if (markdown.includes("GOAL_COMPLETE")) {
+    return "GOAL_COMPLETE";
+  }
+
+  return null;
+}
+
 async function validateRepositoryPath(repositoryPath: string): Promise<string | undefined> {
   let pathStats;
 
@@ -624,6 +636,25 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
                 ? "goal.md became unavailable after Codex run 1."
                 : "Failed to refresh goal.md after Codex run 1.",
             );
+            return;
+          }
+
+          const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
+
+          if (goalStopMarker) {
+            const markerStatus = goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
+
+            runtimeState.stream.runLoop = {
+              ...runtimeState.stream.runLoop,
+              status: markerStatus,
+              stopRequested: false,
+              activeProcessId: null,
+              latestSummary: {
+                status: markerStatus,
+                message: `Stopped after Codex run 1 of ${parsedBody.data.runCount} because refreshed goal.md contains ${goalStopMarker}.`,
+              },
+            };
+            publishRunStatus();
             return;
           }
 

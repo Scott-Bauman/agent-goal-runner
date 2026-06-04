@@ -196,7 +196,7 @@ Before implementation, Codex must:
 - [x] Stream Codex stdout and stderr to connected clients.
 - [x] Stop immediately on non-zero Codex exit.
 - [x] Re-read `goal.md` after each successful Codex run.
-- [ ] Stop when refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`.
+- [x] Stop when refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`.
 - [ ] Continue only when no stop condition is present and runs remain.
 - [ ] Add stop endpoint that terminates the active child process when possible.
 - [ ] Prevent new runs from starting after stop is requested.

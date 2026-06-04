@@ -1295,6 +1295,114 @@ describe("run start endpoint", () => {
     ]);
   });
 
+  it("stops with complete status when refreshed goal.md contains GOAL_COMPLETE", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(
+      path.join(repositoryPath, "goal.md"),
+      "# Selected Goal\n\nGOAL_COMPLETE\n",
+    );
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 3,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(summaryPayloads).toEqual([
+      {
+        status: "complete",
+        message:
+          "Stopped after Codex run 1 of 3 because refreshed goal.md contains GOAL_COMPLETE.",
+      },
+    ]);
+  });
+
+  it("stops with blocked status when refreshed goal.md contains GOAL_BLOCKED", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(
+      path.join(repositoryPath, "goal.md"),
+      "# Selected Goal\n\nGOAL_BLOCKED: waiting for user input\n",
+    );
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 3,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(summaryPayloads).toEqual([
+      {
+        status: "blocked",
+        message:
+          "Stopped after Codex run 1 of 3 because refreshed goal.md contains GOAL_BLOCKED.",
+      },
+    ]);
+  });
+
   it("fails the run when goal.md cannot be re-read after a successful Codex run", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
