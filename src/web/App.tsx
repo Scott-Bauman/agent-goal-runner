@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FileText } from "lucide-react";
 
 type RunnerStatus =
   | "idle"
@@ -76,6 +77,52 @@ function TopBar({
   );
 }
 
+function GoalDocumentPanel({
+  repositorySelection,
+}: {
+  repositorySelection: RepositorySelectionState;
+}) {
+  const panelMessage =
+    repositorySelection.status === "loading"
+      ? "Loading repository selection..."
+      : repositorySelection.status === "error"
+        ? "Repository selection is unavailable."
+        : repositorySelection.repositoryPath === null
+          ? "Select a repository to view its goal.md."
+          : "goal.md rendering will appear here.";
+
+  return (
+    <section
+      aria-labelledby="goal-document-title"
+      className="flex min-h-[32rem] min-w-0 flex-col rounded-lg border border-zinc-200 bg-white shadow-sm"
+    >
+      <div className="flex min-h-14 items-center justify-between gap-3 border-b border-zinc-200 px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-zinc-500"
+            strokeWidth={2}
+          />
+          <h2
+            id="goal-document-title"
+            className="truncate text-sm font-semibold text-zinc-950"
+          >
+            goal.md
+          </h2>
+        </div>
+        <span className="shrink-0 text-xs font-medium text-zinc-500">
+          Rendered document
+        </span>
+      </div>
+      <div className="flex flex-1 items-center justify-center px-4 py-10">
+        <p className="max-w-sm text-center text-sm leading-6 text-zinc-500">
+          {panelMessage}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const [repositorySelection, setRepositorySelection] =
     useState<RepositorySelectionState>({
@@ -124,6 +171,9 @@ export function App() {
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-950">
       <TopBar repositorySelection={repositorySelection} status="idle" />
+      <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
+        <GoalDocumentPanel repositorySelection={repositorySelection} />
+      </div>
     </main>
   );
 }

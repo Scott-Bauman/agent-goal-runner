@@ -217,9 +217,14 @@ Before implementation, Codex must:
 
 ### Phase 6: Frontend Shell and Layout
 
-- [x] Initialize shadcn/ui if missing, including `components.json`, and add only the shadcn/ui components needed for the selected UI work.
+- [x] Add shadcn/ui configuration for this repository, including `components.json`, Tailwind semantic tokens, and shadcn aliases.
+- [ ] Generate the first focused shadcn/ui components needed by the current shell, plus required local helper files, without migrating the UI in the same pass.
+- [ ] Import generated shadcn/ui components into the current UI for the first focused shell control replacement.
+- [ ] Refactor the existing top bar status badge to generated shadcn/ui components without changing repository loading behavior.
+- [ ] Refactor the existing `goal.md` document panel shell to generated shadcn/ui components without changing placeholder states.
+- [ ] Re-check the current frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new panels.
 - [x] Add top bar with app name, selected repository path, and status badge.
-- [ ] Add main left panel for rendered `goal.md`.
+- [x] Add main left panel for rendered `goal.md`.
 - [ ] Add compact right-side controls panel.
 - [ ] Add bottom logs and latest summary panel.
 - [ ] Keep the UI responsive without changing the primary workflow.
