@@ -24,7 +24,16 @@ Describe the desired end state for this repository.
 
 - [ ] Replace this default goal with project-specific implementation steps.
 `;
-type RunnerStatus = "idle";
+export const RUNNER_STATUSES = [
+  "idle",
+  "running",
+  "stopping",
+  "complete",
+  "blocked",
+  "failed",
+  "stopped",
+] as const;
+type RunnerStatus = (typeof RUNNER_STATUSES)[number];
 type LogEntry = {
   id: number;
   stream: "system" | "stdout" | "stderr";
@@ -38,11 +47,16 @@ type LatestSummary = {
   status: RunnerStatus;
   message: string;
 } | null;
-type RuntimeStreamState = {
+type RunLoopState = {
   status: RunnerStatus;
-  logs: LogEntry[];
+  stopRequested: boolean;
+  activeProcessId: number | null;
   progress: RunProgress;
   latestSummary: LatestSummary;
+};
+type RuntimeStreamState = {
+  runLoop: RunLoopState;
+  logs: LogEntry[];
 };
 type SseEventMap = {
   status: {
@@ -81,13 +95,17 @@ const emptyGoalRequestSchema = z.object({}).strict();
 
 function createInitialStreamState(): RuntimeStreamState {
   return {
-    status: "idle",
-    logs: [],
-    progress: {
-      currentRun: 0,
-      totalRuns: null,
+    runLoop: {
+      status: "idle",
+      stopRequested: false,
+      activeProcessId: null,
+      progress: {
+        currentRun: 0,
+        totalRuns: null,
+      },
+      latestSummary: null,
     },
-    latestSummary: null,
+    logs: [],
   };
 }
 
@@ -104,14 +122,14 @@ function createSseSnapshot(
 ): string {
   return [
     formatSseEvent("status", {
-      status: streamState.status,
+      status: streamState.runLoop.status,
       selectedRepositoryPath,
     }),
     formatSseEvent("logs", {
       entries: streamState.logs,
     }),
-    formatSseEvent("progress", streamState.progress),
-    formatSseEvent("summary", streamState.latestSummary),
+    formatSseEvent("progress", streamState.runLoop.progress),
+    formatSseEvent("summary", streamState.runLoop.latestSummary),
   ].join("");
 }
 
@@ -464,7 +482,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     runtimeState.selectedRepositoryPath = parsedBody.data.path;
     await replaceGoalWatcher(runtimeState.selectedRepositoryPath);
     broadcastSseEvent("status", {
-      status: runtimeState.stream.status,
+      status: runtimeState.stream.runLoop.status,
       selectedRepositoryPath: runtimeState.selectedRepositoryPath,
     });
 

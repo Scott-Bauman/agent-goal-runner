@@ -6,7 +6,7 @@ import path from "node:path";
 import { TextDecoder } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildServer } from "../../src/server/index";
+import { RUNNER_STATUSES, buildServer } from "../../src/server/index";
 
 const chokidarMocks = vi.hoisted(() => {
   const close = vi.fn(() => Promise.resolve());
@@ -479,6 +479,18 @@ describe("repository selection endpoint", () => {
 });
 
 describe("events endpoint", () => {
+  it("defines the Phase 4 run-loop statuses", () => {
+    expect(RUNNER_STATUSES).toEqual([
+      "idle",
+      "running",
+      "stopping",
+      "complete",
+      "blocked",
+      "failed",
+      "stopped",
+    ]);
+  });
+
   it("streams the initial status, logs, progress, and summary snapshot", async () => {
     const app = await getServer();
     const origin = await listenOnRandomPort(app);
