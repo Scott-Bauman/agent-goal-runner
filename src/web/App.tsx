@@ -146,7 +146,7 @@ function GoalDocumentPanel({
     <Card
       aria-labelledby="goal-document-title"
       role="region"
-      className="flex min-h-[32rem] min-w-0 flex-col rounded-lg"
+      className="flex min-h-[32rem] min-w-0 flex-col rounded-lg lg:min-h-[calc(100vh-8rem)]"
     >
       <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
         <div className="flex min-w-0 items-center gap-2">
@@ -172,6 +172,20 @@ function GoalDocumentPanel({
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+function OperationsWorkspace({
+  repositorySelection,
+}: {
+  repositorySelection: RepositorySelectionState;
+}) {
+  return (
+    <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 lg:col-start-1">
+        <GoalDocumentPanel repositorySelection={repositorySelection} />
+      </div>
+    </div>
   );
 }
 
@@ -224,7 +238,7 @@ export function App() {
     <main className="min-h-screen bg-zinc-50 text-zinc-950">
       <TopBar repositorySelection={repositorySelection} status="idle" />
       <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
-        <GoalDocumentPanel repositorySelection={repositorySelection} />
+        <OperationsWorkspace repositorySelection={repositorySelection} />
       </div>
     </main>
   );
