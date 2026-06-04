@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Play, Settings2, Square } from "lucide-react";
 
 import { Badge, type BadgeProps } from "@/web/components/ui/badge";
 import {
@@ -76,6 +76,14 @@ const statusBadgeConfig: Record<
   },
 };
 
+function getRepositoryLabel(repositorySelection: RepositorySelectionState) {
+  return repositorySelection.status === "loading"
+    ? "Loading repository..."
+    : repositorySelection.status === "error"
+      ? "Repository unavailable"
+      : (repositorySelection.repositoryPath ?? "No repository selected");
+}
+
 function RunnerStatusBadge({ status }: { status: RunnerStatus }) {
   const config = statusBadgeConfig[status];
 
@@ -98,12 +106,7 @@ function TopBar({
   repositorySelection: RepositorySelectionState;
   status: RunnerStatus;
 }) {
-  const selectedRepositoryLabel =
-    repositorySelection.status === "loading"
-      ? "Loading repository..."
-      : repositorySelection.status === "error"
-        ? "Repository unavailable"
-        : (repositorySelection.repositoryPath ?? "No repository selected");
+  const selectedRepositoryLabel = getRepositoryLabel(repositorySelection);
 
   return (
     <header className="border-b border-zinc-200 bg-white">
@@ -125,6 +128,154 @@ function TopBar({
         <RunnerStatusBadge status={status} />
       </div>
     </header>
+  );
+}
+
+function ControlsPanel({
+  repositorySelection,
+}: {
+  repositorySelection: RepositorySelectionState;
+}) {
+  const selectedRepositoryLabel = getRepositoryLabel(repositorySelection);
+
+  return (
+    <Card
+      aria-labelledby="controls-panel-title"
+      role="region"
+      className="flex min-w-0 flex-col rounded-lg lg:min-h-[calc(100vh-8rem)]"
+    >
+      <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <Settings2
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            strokeWidth={2}
+          />
+          <CardTitle
+            id="controls-panel-title"
+            className="truncate text-sm"
+          >
+            Controls
+          </CardTitle>
+        </div>
+        <CardDescription className="shrink-0 text-xs font-medium">
+          Run setup
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col gap-4 px-4 py-4">
+        <div className="space-y-2">
+          <label
+            className="text-xs font-medium text-zinc-700"
+            htmlFor="repository-path"
+          >
+            Repository
+          </label>
+          <input
+            className="h-9 w-full rounded-md border border-input bg-muted px-3 font-mono text-xs text-muted-foreground"
+            disabled
+            id="repository-path"
+            readOnly
+            title={selectedRepositoryLabel}
+            value={selectedRepositoryLabel}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label
+            className="text-xs font-medium text-zinc-700"
+            htmlFor="repeat-prompt"
+          >
+            Repeat prompt
+          </label>
+          <textarea
+            className="min-h-28 w-full resize-none rounded-md border border-input bg-muted px-3 py-2 text-sm leading-5 text-muted-foreground"
+            disabled
+            id="repeat-prompt"
+            placeholder="Use goal.md as the source of truth."
+            readOnly
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <label
+              className="text-xs font-medium text-zinc-700"
+              htmlFor="run-count"
+            >
+              Runs
+            </label>
+            <input
+              className="h-9 w-full rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground"
+              disabled
+              id="run-count"
+              min={1}
+              readOnly
+              type="number"
+              value={1}
+            />
+          </div>
+          <div className="space-y-2">
+            <label
+              className="text-xs font-medium text-zinc-700"
+              htmlFor="auto-commit"
+            >
+              Auto-commit
+            </label>
+            <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3">
+              <input
+                className="h-4 w-4"
+                disabled
+                id="auto-commit"
+                type="checkbox"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label
+            className="text-xs font-medium text-zinc-700"
+            htmlFor="verification-command"
+          >
+            Verification
+          </label>
+          <input
+            className="h-9 w-full rounded-md border border-input bg-muted px-3 font-mono text-xs text-muted-foreground"
+            disabled
+            id="verification-command"
+            placeholder="npm test"
+            readOnly
+          />
+        </div>
+
+        <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+          <button
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground opacity-50"
+            disabled
+            type="button"
+          >
+            <Play
+              aria-hidden="true"
+              className="h-4 w-4"
+              strokeWidth={2}
+            />
+            Start
+          </button>
+          <button
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-muted-foreground opacity-50"
+            disabled
+            type="button"
+          >
+            <Square
+              aria-hidden="true"
+              className="h-4 w-4"
+              strokeWidth={2}
+            />
+            Stop
+          </button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -185,6 +336,9 @@ function OperationsWorkspace({
       <div className="min-w-0 lg:col-start-1">
         <GoalDocumentPanel repositorySelection={repositorySelection} />
       </div>
+      <aside className="min-w-0 lg:col-start-2">
+        <ControlsPanel repositorySelection={repositorySelection} />
+      </aside>
     </div>
   );
 }
