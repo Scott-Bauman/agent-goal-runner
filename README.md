@@ -9,7 +9,8 @@ The MVP is currently through Phase 5 backend run-loop control. It has a Fastify 
 - Backend server starts on `127.0.0.1:4317` by default.
 - Backend exposes `GET /` with the app name and status, plus `GET /health` for a simple health check.
 - Frontend starts with Vite and renders the initial operations-panel shell.
-- The initial shell shows the app name, idle status badge, and repository selection button.
+- The initial top bar shows the app name, selected repository path state, and idle status badge.
+- Vite proxies frontend `/api/*` requests to the local backend during development.
 - Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.
 - The selected repository is kept only in server memory and can be read with `GET /api/repository/selection`.
