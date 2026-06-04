@@ -1,6 +1,6 @@
 ---
 name: goal-runner-framework
-description: Create, repair, or refine goal.md files for Codex-driven multi-pass implementation work. Use when making a durable Codex source-of-truth control document with scope rules, execution discipline, verification guidance, blocked handling, and completion markers.
+description: Create, repair, or refine goal.md files for Codex-driven multi-pass implementation work. Use only for authoring durable Codex source-of-truth control documents with scope rules, execution discipline, verification guidance, blocked handling, checklist quality, and completion marker policy. Do not use for implementing project code or running checklist items.
 ---
 
 # Goal Runner Framework Skill
@@ -11,7 +11,7 @@ Use this skill to create, repair, or refine a `goal.md` file for Codex-driven im
 
 A strong `goal.md` is not a loose checklist. It is a durable execution control document that Codex can safely use across repeated runs. It should define the product or implementation goal, constrain scope, describe safe operating behavior, provide stop conditions, define verification requirements, and keep the document clean over time.
 
-This skill is especially useful when creating a new program, refactoring an existing project, running a migration, building an MVP, or setting up a repeated Codex execution loop.
+This skill is especially useful when creating or refining the `goal.md` control file for a new program, an existing project refactor, a migration, an MVP, or a repeated Codex execution loop.
 
 ---
 
@@ -91,6 +91,7 @@ Use these when the project is a migration, refactor, UI pass, cleanup, or large 
 
 ## Information To Gather Or Infer
 
+Gather or infer these only for the purpose of writing or repairing `goal.md`. Do not use this skill to inspect, modify, or implement project code except as needed to understand the control document.
 When creating or repairing a `goal.md`, gather or infer:
 
 - project name,
@@ -604,34 +605,6 @@ When generating checklist items:
 - Avoid marking strategic guidance as checkboxes.
 - Keep suggested order as a numbered list unless it is executable work.
 - Do not duplicate the same work in both the checklist and inventory.
-
----
-
-## Default Codex Repeat Prompt
-
-After `goal.md` exists, use this prompt repeatedly:
-
-```txt
-Use `goal.md` as the source of truth.
-
-Complete the next smallest safe unchecked checkbox/sub-checkbox according to the rules in `goal.md`.
-
-Update only that checkbox in `goal.md`.
-
-Run the relevant verification command.
-
-Report:
-- completed checkbox
-- changed files
-- verification run
-- whether `goal.md` was updated
-
-Before finishing, rerun relevant diagnostics for the changed path. If active bugs remain, say `GOAL_BLOCKED` with the reason instead of reporting completion.
-
-If complete, say `GOAL_COMPLETE`.
-
-If blocked, say `GOAL_BLOCKED` with the reason and do not persist the marker unless explicitly instructed.
-```
 
 ---
 
