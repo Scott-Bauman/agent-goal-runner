@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Activity, FileText, Play, Settings2, Square, Terminal } from "lucide-react";
 
 import { Badge, type BadgeProps } from "@/web/components/ui/badge";
+import { Button } from "@/web/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/web/components/ui/card";
+import { Input } from "@/web/components/ui/input";
+import { Textarea } from "@/web/components/ui/textarea";
 
 type RunnerStatus =
   | "idle"
@@ -163,15 +166,15 @@ function ControlsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4 px-4 py-4">
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <label
             className="text-xs font-medium text-zinc-700"
             htmlFor="repository-path"
           >
             Repository
           </label>
-          <input
-            className="h-9 w-full rounded-md border border-input bg-muted px-3 font-mono text-xs text-muted-foreground"
+          <Input
+            className="bg-muted font-mono text-xs text-muted-foreground"
             disabled
             id="repository-path"
             readOnly
@@ -180,15 +183,15 @@ function ControlsPanel({
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <label
             className="text-xs font-medium text-zinc-700"
             htmlFor="repeat-prompt"
           >
             Repeat prompt
           </label>
-          <textarea
-            className="min-h-28 w-full resize-none rounded-md border border-input bg-muted px-3 py-2 text-sm leading-5 text-muted-foreground"
+          <Textarea
+            className="min-h-28 resize-none bg-muted leading-5 text-muted-foreground"
             disabled
             id="repeat-prompt"
             placeholder="Use goal.md as the source of truth."
@@ -197,15 +200,15 @@ function ControlsPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label
               className="text-xs font-medium text-zinc-700"
               htmlFor="run-count"
             >
               Runs
             </label>
-            <input
-              className="h-9 w-full rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground"
+            <Input
+              className="bg-muted text-muted-foreground"
               disabled
               id="run-count"
               min={1}
@@ -214,7 +217,7 @@ function ControlsPanel({
               value={1}
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label
               className="text-xs font-medium text-zinc-700"
               htmlFor="auto-commit"
@@ -232,15 +235,15 @@ function ControlsPanel({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <label
             className="text-xs font-medium text-zinc-700"
             htmlFor="verification-command"
           >
             Verification
           </label>
-          <input
-            className="h-9 w-full rounded-md border border-input bg-muted px-3 font-mono text-xs text-muted-foreground"
+          <Input
+            className="bg-muted font-mono text-xs text-muted-foreground"
             disabled
             id="verification-command"
             placeholder="npm test"
@@ -249,30 +252,29 @@ function ControlsPanel({
         </div>
 
         <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
-          <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground opacity-50"
+          <Button
             disabled
             type="button"
           >
             <Play
               aria-hidden="true"
-              className="h-4 w-4"
+              data-icon="inline-start"
               strokeWidth={2}
             />
             Start
-          </button>
-          <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-muted-foreground opacity-50"
+          </Button>
+          <Button
             disabled
             type="button"
+            variant="outline"
           >
             <Square
               aria-hidden="true"
-              className="h-4 w-4"
+              data-icon="inline-start"
               strokeWidth={2}
             />
             Stop
-          </button>
+          </Button>
         </div>
       </CardContent>
     </Card>

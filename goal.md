@@ -230,7 +230,7 @@ Before implementation, Codex must:
 - [x] Add main left panel for rendered `goal.md`.
 - [x] Add compact right-side controls panel using generated shadcn/ui primitives where appropriate.
 - [x] Add bottom logs and latest summary panel using generated shadcn/ui primitives where appropriate.
-- [ ] Re-check the completed frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new workflow behavior.
+- [x] Re-check the completed frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new workflow behavior.
 - [ ] Keep the UI responsive without changing the primary workflow.
 - [ ] Add repository path entry, selected-path display, and validation errors.
 - [ ] Show a create-default-`goal.md` action when missing.
