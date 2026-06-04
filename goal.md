@@ -153,7 +153,7 @@ Before implementation, Codex must:
 
 ### Phase 1: Project Foundation
 
-- [ ] Create the minimal project scaffold.
+- [x] Create the minimal project scaffold.
   - [x] Add `package.json` with development, typecheck, lint, test, and production build scripts.
   - [x] Add TypeScript configuration for backend and frontend.
   - [x] Add the minimal Fastify server entrypoint.
