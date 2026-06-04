@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileText } from "lucide-react";
 
-import { Badge } from "@/web/components/ui/badge";
+import { Badge, type BadgeProps } from "@/web/components/ui/badge";
 
 type RunnerStatus =
   | "idle"
@@ -30,15 +30,59 @@ type RepositorySelectionState =
       repositoryPath: null;
     };
 
-const statusLabels: Record<RunnerStatus, string> = {
-  idle: "Idle",
-  running: "Running",
-  stopping: "Stopping",
-  complete: "Complete",
-  blocked: "Blocked",
-  failed: "Failed",
-  stopped: "Stopped",
+type BadgeVariant = NonNullable<BadgeProps["variant"]>;
+
+const statusBadgeConfig: Record<
+  RunnerStatus,
+  {
+    label: string;
+    variant: BadgeVariant;
+  }
+> = {
+  idle: {
+    label: "Idle",
+    variant: "secondary",
+  },
+  running: {
+    label: "Running",
+    variant: "default",
+  },
+  stopping: {
+    label: "Stopping",
+    variant: "outline",
+  },
+  complete: {
+    label: "Complete",
+    variant: "default",
+  },
+  blocked: {
+    label: "Blocked",
+    variant: "destructive",
+  },
+  failed: {
+    label: "Failed",
+    variant: "destructive",
+  },
+  stopped: {
+    label: "Stopped",
+    variant: "outline",
+  },
 };
+
+function RunnerStatusBadge({ status }: { status: RunnerStatus }) {
+  const config = statusBadgeConfig[status];
+
+  return (
+    <Badge
+      aria-label={`Runner status: ${config.label}`}
+      className="h-7 w-fit shrink-0"
+      role="status"
+      variant={config.variant}
+    >
+      {config.label}
+    </Badge>
+  );
+}
 
 function TopBar({
   repositorySelection,
@@ -71,12 +115,7 @@ function TopBar({
             </span>
           </div>
         </div>
-        <Badge
-          variant="outline"
-          className="h-7 w-fit shrink-0 bg-zinc-50 font-medium text-zinc-700"
-        >
-          {statusLabels[status]}
-        </Badge>
+        <RunnerStatusBadge status={status} />
       </div>
     </header>
   );

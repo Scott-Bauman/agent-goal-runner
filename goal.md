@@ -224,7 +224,7 @@ Before implementation, Codex must:
 - [x] Add shadcn/ui configuration for this repository, including `components.json`, Tailwind semantic tokens, and shadcn aliases.
 - [x] Generate the first focused shadcn/ui components needed by the current shell, plus required local helper files, without migrating the UI in the same pass.
 - [x] Import generated shadcn/ui components into the current UI for the first focused shell control replacement.
-- [ ] Refactor the existing top bar status badge to generated shadcn/ui components without changing repository loading behavior.
+- [x] Refactor the existing top bar status badge to generated shadcn/ui components without changing repository loading behavior.
 - [ ] Refactor the existing `goal.md` document panel shell to generated shadcn/ui components without changing placeholder states.
 - [ ] Add top bar with app name, selected repository path, and status badge.
 - [ ] Add main left panel for rendered `goal.md`.
