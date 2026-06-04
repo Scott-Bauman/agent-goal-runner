@@ -10,12 +10,29 @@ import { buildServer } from "../../src/server/index";
 
 const chokidarMocks = vi.hoisted(() => {
   const close = vi.fn(() => Promise.resolve());
+  const watcherInstances: Array<{
+    handlers: Map<string, Array<() => void>>;
+  }> = [];
 
   return {
     close,
-    watch: vi.fn(() => ({
-      close,
-    })),
+    watcherInstances,
+    watch: vi.fn(() => {
+      const handlers = new Map<string, Array<() => void>>();
+      const watcher = {
+        close,
+        on: vi.fn((eventName: string, handler: () => void) => {
+          handlers.set(eventName, [...(handlers.get(eventName) ?? []), handler]);
+          return watcher;
+        }),
+      };
+
+      watcherInstances.push({
+        handlers,
+      });
+
+      return watcher;
+    }),
   };
 });
 
@@ -84,9 +101,22 @@ async function readSseChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Pr
   return new TextDecoder().decode(result.value);
 }
 
+function emitLatestGoalWatcherEvent(eventName: string): void {
+  const latestWatcher = chokidarMocks.watcherInstances.at(-1);
+
+  if (!latestWatcher) {
+    throw new Error("No goal watcher has been created.");
+  }
+
+  for (const handler of latestWatcher.handlers.get(eventName) ?? []) {
+    handler();
+  }
+}
+
 beforeEach(() => {
   chokidarMocks.close.mockClear();
   chokidarMocks.watch.mockClear();
+  chokidarMocks.watcherInstances.splice(0);
 });
 
 afterEach(async () => {
@@ -510,6 +540,50 @@ describe("events endpoint", () => {
       },
     ]);
   });
+
+  it.each<[string, boolean]>([
+    ["add", true],
+    ["change", true],
+    ["unlink", false],
+  ])(
+    "broadcasts goalChanged updates when the watched goal.md emits %s",
+    async (watcherEvent, exists) => {
+      const repositoryPath = await createRepositoryPath();
+      const app = await getServer();
+      const origin = await listenOnRandomPort(app);
+
+      const response = await globalThis.fetch(`${origin}/api/events`);
+      const reader = response.body?.getReader();
+
+      if (!reader) {
+        throw new Error("Missing SSE response body.");
+      }
+
+      await readSseChunk(reader);
+
+      await app.inject({
+        method: "POST",
+        url: "/api/repository/select",
+        payload: {
+          path: repositoryPath,
+        },
+      });
+      await readSseChunk(reader);
+
+      emitLatestGoalWatcherEvent(watcherEvent);
+
+      const updateChunk = await readSseChunk(reader);
+      await reader.cancel();
+
+      expect(parseSsePayloads(updateChunk, "goalChanged")).toEqual([
+        {
+          repositoryPath: path.normalize(repositoryPath),
+          goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
+          exists,
+        },
+      ]);
+    },
+  );
 });
 
 describe("goal read endpoint", () => {

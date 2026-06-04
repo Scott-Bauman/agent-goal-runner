@@ -49,6 +49,11 @@ type SseEventMap = {
     status: RunnerStatus;
     selectedRepositoryPath: string | null;
   };
+  goalChanged: {
+    repositoryPath: string;
+    goalPath: string;
+    exists: boolean;
+  };
   logs: {
     entries: LogEntry[];
   };
@@ -250,6 +255,27 @@ export async function buildServer(): Promise<FastifyInstance> {
 
     goalWatcher = watch(goalFilePath, {
       ignoreInitial: true,
+    });
+    goalWatcher.on("add", () => {
+      broadcastSseEvent("goalChanged", {
+        repositoryPath,
+        goalPath: goalFilePath,
+        exists: true,
+      });
+    });
+    goalWatcher.on("change", () => {
+      broadcastSseEvent("goalChanged", {
+        repositoryPath,
+        goalPath: goalFilePath,
+        exists: true,
+      });
+    });
+    goalWatcher.on("unlink", () => {
+      broadcastSseEvent("goalChanged", {
+        repositoryPath,
+        goalPath: goalFilePath,
+        exists: false,
+      });
     });
     watchedGoalPath = goalFilePath;
   }

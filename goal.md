@@ -180,7 +180,7 @@ Before implementation, Codex must:
 - [x] Add Server-Sent Events for status, logs, run progress, and latest summary.
 - [x] Start a `chokidar` watcher when a repository is selected.
 - [x] Stop or replace the watcher when the selected repository changes.
-- [ ] Notify connected clients when `goal.md` changes.
+- [x] Notify connected clients when `goal.md` changes.
 - [ ] Avoid watching unrelated files.
 - [ ] Update README.md with the completed Phase 3 behavior, commands, and usage.
 
