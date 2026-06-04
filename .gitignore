@@ -27,3 +27,6 @@ pnpm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+!.vscode/
+!.vscode/settings.json
+!.vscode/tailwind.css-data.json

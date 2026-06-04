@@ -102,6 +102,7 @@ Rules for future runs:
 - When editing this file after implementation, update only the relevant checkbox state and any short durable blocker or decision that future runs need. This restriction applies only to edits made inside `goal.md`.
 - At the end of every phase, update `README.md` to reflect the completed behavior, commands, and usage before considering the phase complete.
 - Do not mark a checkbox complete unless the required files or behavior were implemented and verified.
+- Do not finish or mark work complete while active bugs, failing diagnostics, failing tests, build failures, runtime exceptions, or relevant console errors remain in the changed code path.
 - Do not scaffold ahead of the selected checkbox.
 - Do not broaden scope beyond the selected checkbox or sub-checkbox.
 - Do not add support for plan files other than `goal.md`.
@@ -128,9 +129,11 @@ A checklist item is complete only when:
 
 - the relevant code or documentation has been implemented,
 - existing behavior and contracts have been preserved unless the checkbox requires changing them,
+- active bugs in the touched code path have been investigated and fixed or explicitly classified as pre-existing blockers,
 - the most focused practical verification has passed,
 - broader verification has been run when the change affects shared behavior or the main workflow,
 - visible UI changes have been manually checked in a browser when practical,
+- diagnostics, test failures, build failures, runtime errors, console errors, and lint/type errors introduced or exposed by the change are resolved,
 - the relevant checkbox has been checked off in this file.
 
 For API, process, and filesystem behavior:
@@ -145,6 +148,7 @@ Before implementation, Codex must:
 
 - Inspect the relevant project structure.
 - Identify existing conventions, dependencies, tests, scripts, and verification commands.
+- Identify currently visible bugs or diagnostics related to the selected work before editing code.
 - Confirm whether the next checklist item is stale, incomplete, or too broad.
 - Split oversized checklist items before implementation.
 - Avoid adding reconnaissance notes unless they record a blocker, user approval, or durable decision.
@@ -261,6 +265,12 @@ Use the repo's actual scripts:
 - `npm test` or the closest available focused test command
 - `npm run build`
 - Manual browser verification of the main workflow when UI or run-loop behavior changes
+
+Active bug gate:
+
+- Before finishing, rerun the most relevant diagnostics for the changed code path.
+- Treat any active bug, failing diagnostic, failing test, build failure, runtime exception, or obvious console error in the changed path as a blocker.
+- Do not mark work complete while active bugs remain unless the bug is clearly unrelated pre-existing behavior; in that case, document it as `GOAL_BLOCKED` or add a durable blocker rather than silently finishing.
 
 For small documentation-only changes, no code verification is required, but the markdown should still be reviewed for consistency.
 

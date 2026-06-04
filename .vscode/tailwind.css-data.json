@@ -1,0 +1,25 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@tailwind",
+      "description": "Tailwind CSS directive expanded by the project's PostCSS pipeline."
+    },
+    {
+      "name": "@apply",
+      "description": "Tailwind CSS directive for applying utility classes in CSS."
+    },
+    {
+      "name": "@screen",
+      "description": "Tailwind CSS directive for media queries based on configured breakpoints."
+    },
+    {
+      "name": "@variants",
+      "description": "Tailwind CSS directive for generating utility variants."
+    },
+    {
+      "name": "@responsive",
+      "description": "Tailwind CSS directive for generating responsive variants."
+    }
+  ]
+}

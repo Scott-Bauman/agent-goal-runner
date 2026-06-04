@@ -356,6 +356,7 @@ Rules for future runs:
 - Do not interpret "update only that checkbox" as "only edit `goal.md`"; that restriction applies only to edits made inside `goal.md`.
 - At the end of every phase, update `README.md` to reflect the completed behavior, commands, and usage before marking the phase complete.
 - Do not mark a checkbox complete unless the required files or behavior were actually created or changed and verified.
+- Do not finish or mark work complete while active bugs, failing diagnostics, failing tests, build failures, runtime exceptions, or relevant console errors remain in the changed code path.
 - Do not scaffold ahead of the current checkbox.
 - Do not broaden scope beyond the selected checkbox or sub-checkbox.
 - If blocked, clearly say `GOAL_BLOCKED` in the Codex response with the exact reason.
@@ -397,8 +398,10 @@ A checklist item is complete only when:
 
 - the relevant code or documentation has been implemented,
 - behavior preservation has been reviewed,
+- active bugs in the touched code path have been investigated and fixed or explicitly classified as pre-existing blockers,
 - the most focused available verification command has passed,
 - broader verification has been run when appropriate,
+- diagnostics, test failures, build failures, runtime errors, console errors, and lint/type errors introduced or exposed by the change are resolved,
 - the relevant checkbox has been checked off in this file.
 ```
 
@@ -437,6 +440,7 @@ Before implementation, Codex must:
 - Inspect the relevant project structure.
 - Ensure the repository has a `.gitignore`; if it is missing, create one before implementation.
 - Identify existing conventions, dependencies, tests, scripts, and verification commands.
+- Identify currently visible bugs or diagnostics related to the selected work before editing code.
 - Confirm whether this checklist is stale, incomplete, or too broad.
 - Split oversized checklist items before implementation.
 - Update this file only if the checklist materially needs correction.
@@ -542,6 +546,12 @@ Expected verification path:
 - `npm run build`
 - manual runtime verification of the main workflow when applicable
 
+Active bug gate:
+
+- Before finishing, rerun the most relevant diagnostics for the changed code path.
+- Treat any active bug, failing diagnostic, failing test, build failure, runtime exception, or obvious console error in the changed path as a blocker.
+- Do not mark work complete while active bugs remain unless the bug is clearly unrelated pre-existing behavior; in that case, document it as `GOAL_BLOCKED` or add a durable blocker rather than silently finishing.
+
 Until scripts exist, each implementation step should include the smallest practical verification for the files changed.
 
 Do not mark a checkbox complete unless its behavior has been implemented and verified.
@@ -616,6 +626,8 @@ Report:
 - verification run
 - whether `goal.md` was updated
 
+Before finishing, rerun relevant diagnostics for the changed path. If active bugs remain, say `GOAL_BLOCKED` with the reason instead of reporting completion.
+
 If complete, say `GOAL_COMPLETE`.
 
 If blocked, say `GOAL_BLOCKED` with the reason and do not persist the marker unless explicitly instructed.
@@ -647,6 +659,7 @@ Include:
 - scope inventory if useful
 - suggested execution order
 - verification guidance
+- an active-bug gate that prevents completion while unresolved bugs or diagnostics remain
 - blocked status handling
 - completion markers
 
@@ -670,6 +683,7 @@ Make sure the result:
 - has future Codex run discipline
 - has file hygiene rules
 - has verification guidance
+- has an active-bug gate that prevents completion while unresolved bugs or diagnostics remain
 - has blocked status handling
 - has completion marker rules
 - uses small, independently verifiable checkboxes
@@ -697,6 +711,7 @@ Your job is to:
 - merge duplicate rules
 - split oversized checklist items
 - make checklist items independently verifiable
+- add or preserve an active-bug gate that prevents completion while unresolved bugs or diagnostics remain
 - preserve completed checkbox state when clearly valid
 - avoid changing completed state when uncertain
 - keep scope boundaries explicit
@@ -725,3 +740,4 @@ Before returning a generated or refined `goal.md`, verify that:
 - The file does not read like a progress journal.
 - The file does not invite Codex to perform multiple unrelated tasks in one pass.
 - The file does not allow silent scope expansion.
+- The file contains an active-bug gate that prevents completion while unresolved bugs, diagnostics, failing tests, build failures, runtime exceptions, or relevant console errors remain.
