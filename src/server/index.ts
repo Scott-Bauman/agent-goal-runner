@@ -220,6 +220,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   const sseClients = new Map<number, SseClient>();
   let nextSseClientId = 1;
   let goalWatcher: FSWatcher | null = null;
+  let watchedGoalPath: string | null = null;
 
   function broadcastSseEvent<EventName extends keyof SseEventMap>(
     event: EventName,
@@ -232,14 +233,25 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
   }
 
-  function startGoalWatcher(repositoryPath: string): void {
-    if (goalWatcher) {
+  async function stopGoalWatcher(): Promise<void> {
+    await goalWatcher?.close();
+    goalWatcher = null;
+    watchedGoalPath = null;
+  }
+
+  async function replaceGoalWatcher(repositoryPath: string): Promise<void> {
+    const goalFilePath = getGoalFilePath(repositoryPath);
+
+    if (goalWatcher && watchedGoalPath === goalFilePath) {
       return;
     }
 
-    goalWatcher = watch(getGoalFilePath(repositoryPath), {
+    await stopGoalWatcher();
+
+    goalWatcher = watch(goalFilePath, {
       ignoreInitial: true,
     });
+    watchedGoalPath = goalFilePath;
   }
 
   await server.register(cors, {
@@ -247,8 +259,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   server.addHook("onClose", async () => {
-    await goalWatcher?.close();
-    goalWatcher = null;
+    await stopGoalWatcher();
   });
 
   server.get("/", async () => ({
@@ -418,7 +429,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
 
     runtimeState.selectedRepositoryPath = parsedBody.data.path;
-    startGoalWatcher(runtimeState.selectedRepositoryPath);
+    await replaceGoalWatcher(runtimeState.selectedRepositoryPath);
     broadcastSseEvent("status", {
       status: runtimeState.stream.status,
       selectedRepositoryPath: runtimeState.selectedRepositoryPath,

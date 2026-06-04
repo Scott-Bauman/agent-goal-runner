@@ -198,6 +198,38 @@ describe("repository selection endpoint", () => {
     expect(chokidarMocks.watch).toHaveBeenCalledTimes(1);
   });
 
+  it("replaces the goal watcher when a different repository is selected", async () => {
+    const firstRepositoryPath = await createRepositoryPath();
+    const secondRepositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: firstRepositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: secondRepositoryPath,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(chokidarMocks.close).toHaveBeenCalledTimes(1);
+    expect(chokidarMocks.watch).toHaveBeenCalledTimes(2);
+    expect(chokidarMocks.watch).toHaveBeenLastCalledWith(
+      path.join(path.normalize(secondRepositoryPath), "goal.md"),
+      {
+        ignoreInitial: true,
+      },
+    );
+  });
+
   it("closes the goal watcher when the server closes", async () => {
     const repositoryPath = await createRepositoryPath();
     const app = await getServer();
