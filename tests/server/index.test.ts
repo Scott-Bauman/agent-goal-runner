@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -363,5 +363,79 @@ describe("goal read endpoint", () => {
       goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
       markdown: "# Selected Goal\n",
     });
+  });
+});
+
+describe("goal creation endpoint", () => {
+  it("requires a selected repository", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No repository selected.",
+    });
+  });
+
+  it("creates a default goal.md in the selected repository", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath,
+      exists: true,
+    });
+    expect(response.json().markdown).toContain("# Project Goal");
+    expect(await readFile(goalPath, "utf8")).toBe(response.json().markdown);
+  });
+
+  it("does not overwrite an existing goal.md", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+    await writeFile(goalPath, "# Existing Goal\n");
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "goal.md already exists in the selected repository.",
+      code: "GOAL_EXISTS",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath,
+      exists: true,
+    });
+    expect(await readFile(goalPath, "utf8")).toBe("# Existing Goal\n");
   });
 });

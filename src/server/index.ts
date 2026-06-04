@@ -1,11 +1,28 @@
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 4317;
+const DEFAULT_GOAL_MARKDOWN = `# Project Goal
+
+## Product Goal
+
+Describe the desired end state for this repository.
+
+## Future Codex Run Discipline
+
+- Use this \`goal.md\` as the source of truth.
+- Complete one unchecked checkbox or sub-checkbox at a time.
+- Verify the change before marking a checkbox complete.
+- Report what changed and what verification ran.
+
+## Implementation Checklist
+
+- [ ] Replace this default goal with project-specific implementation steps.
+`;
 
 const repositorySelectionSchema = z
   .object({
@@ -152,6 +169,42 @@ export async function buildServer(): Promise<FastifyInstance> {
       goalPath: goalFilePath,
       markdown,
     };
+  });
+
+  server.post("/api/goal", async (_request, reply) => {
+    if (!runtimeState.selectedRepositoryPath) {
+      return reply.code(409).send({
+        error: "No repository selected.",
+      });
+    }
+
+    const goalFilePath = getGoalFilePath(runtimeState.selectedRepositoryPath);
+
+    try {
+      await writeFile(goalFilePath, DEFAULT_GOAL_MARKDOWN, {
+        encoding: "utf8",
+        flag: "wx",
+      });
+    } catch (error) {
+      if (isNodeErrorCode(error, "EEXIST")) {
+        return reply.code(409).send({
+          error: "goal.md already exists in the selected repository.",
+          code: "GOAL_EXISTS",
+          repositoryPath: runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
+          exists: true,
+        });
+      }
+
+      throw error;
+    }
+
+    return reply.code(201).send({
+      repositoryPath: runtimeState.selectedRepositoryPath,
+      goalPath: goalFilePath,
+      markdown: DEFAULT_GOAL_MARKDOWN,
+      exists: true,
+    });
   });
 
   server.post("/api/repository/select", async (request, reply) => {
