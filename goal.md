@@ -205,7 +205,7 @@ Before implementation, Codex must:
 
 ### Phase 5: Optional Verification and Auto-Commit
 
-- [ ] Accept an empty verification value or a single command with arguments.
+- [x] Accept an empty verification value or a single command with arguments.
 - [ ] Validate or parse verification before spawning it.
 - [ ] Run verification only after a successful Codex run in the selected repository.
 - [ ] Stream verification output and stop on verification failure.

@@ -1002,6 +1002,16 @@ describe("run start endpoint", () => {
       "Run count must be at least 1.",
     ],
     [
+      "non-string verification command",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: ["npm", "test"],
+      },
+      "verificationCommand",
+      "Verification command must be a string.",
+    ],
+    [
       "extra fields",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -1074,6 +1084,46 @@ describe("run start endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       prompt: "Use goal.md as the source of truth.",
       runCount: 2,
+      verificationCommand: "",
+    });
+  });
+
+  it.each([
+    ["empty verification command", "   ", ""],
+    [
+      "single verification command with arguments",
+      "  npm test -- --runInBand  ",
+      "npm test -- --runInBand",
+    ],
+  ])("accepts an optional %s", async (_name, verificationCommand, expected) => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand,
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      status: "running",
+      repositoryPath: path.normalize(repositoryPath),
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommand: expected,
     });
   });
 

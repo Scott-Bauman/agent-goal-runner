@@ -108,6 +108,12 @@ const repositorySelectionSchema = z
 const runStartSchema = z
   .object({
     prompt: z.string().trim().min(1, "Prompt is required."),
+    verificationCommand: z
+      .string({
+        invalid_type_error: "Verification command must be a string.",
+      })
+      .trim()
+      .default(""),
     runCount: z
       .number({
         invalid_type_error: "Run count must be a number.",
@@ -627,7 +633,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     }
 
     const repositoryPath = runtimeState.selectedRepositoryPath;
-    const { prompt, runCount } = parsedBody.data;
+    const { prompt, runCount, verificationCommand } = parsedBody.data;
 
     function startCodexRun(runNumber: number): void {
       const childProcess = spawnProcess("codex", ["exec", prompt], {
@@ -754,6 +760,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       repositoryPath,
       prompt,
       runCount,
+      verificationCommand,
     });
   });
 
