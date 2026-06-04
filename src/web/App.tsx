@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText, Play, Settings2, Square } from "lucide-react";
+import { Activity, FileText, Play, Settings2, Square, Terminal } from "lucide-react";
 
 import { Badge, type BadgeProps } from "@/web/components/ui/badge";
 import {
@@ -326,6 +326,95 @@ function GoalDocumentPanel({
   );
 }
 
+function LogsSummaryPanel() {
+  return (
+    <Card
+      aria-labelledby="logs-summary-title"
+      role="region"
+      className="flex min-h-64 min-w-0 flex-col rounded-lg"
+    >
+      <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <Terminal
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            strokeWidth={2}
+          />
+          <CardTitle
+            id="logs-summary-title"
+            className="truncate text-sm"
+          >
+            Logs
+          </CardTitle>
+        </div>
+        <CardDescription className="shrink-0 text-xs font-medium">
+          Latest run
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid flex-1 gap-0 p-0 md:grid-cols-[minmax(0,1fr)_18rem]">
+        <section
+          aria-labelledby="live-logs-title"
+          className="flex min-h-48 min-w-0 flex-col border-b md:border-b-0 md:border-r"
+        >
+          <div className="flex h-11 items-center gap-2 border-b px-4">
+            <Terminal
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+              strokeWidth={2}
+            />
+            <h2
+              id="live-logs-title"
+              className="truncate text-xs font-medium text-zinc-700"
+            >
+              Live logs
+            </h2>
+          </div>
+          <div className="flex flex-1 items-center justify-center bg-zinc-950 px-4 py-8">
+            <p className="max-w-sm text-center font-mono text-xs leading-5 text-zinc-400">
+              Run output will stream here when a Codex loop starts.
+            </p>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="latest-summary-title"
+          className="flex min-h-48 min-w-0 flex-col"
+        >
+          <div className="flex h-11 items-center gap-2 border-b px-4">
+            <Activity
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+              strokeWidth={2}
+            />
+            <h2
+              id="latest-summary-title"
+              className="truncate text-xs font-medium text-zinc-700"
+            >
+              Latest summary
+            </h2>
+          </div>
+          <dl className="grid flex-1 content-start gap-3 px-4 py-4 text-xs">
+            <div className="grid gap-1">
+              <dt className="font-medium text-zinc-500">Status</dt>
+              <dd className="text-sm font-medium text-zinc-800">Idle</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium text-zinc-500">Progress</dt>
+              <dd className="text-sm font-medium text-zinc-800">No active run</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium text-zinc-500">Last event</dt>
+              <dd className="leading-5 text-muted-foreground">
+                Run summaries will appear here after backend events are connected.
+              </dd>
+            </div>
+          </dl>
+        </section>
+      </CardContent>
+    </Card>
+  );
+}
+
 function OperationsWorkspace({
   repositorySelection,
 }: {
@@ -339,6 +428,9 @@ function OperationsWorkspace({
       <aside className="min-w-0 lg:col-start-2">
         <ControlsPanel repositorySelection={repositorySelection} />
       </aside>
+      <div className="min-w-0 lg:col-span-2">
+        <LogsSummaryPanel />
+      </div>
     </div>
   );
 }
