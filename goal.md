@@ -182,7 +182,7 @@ Before implementation, Codex must:
 - [x] Stop or replace the watcher when the selected repository changes.
 - [x] Notify connected clients when `goal.md` changes.
 - [x] Avoid watching unrelated files.
-- [ ] Update README.md with the completed Phase 3 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 3 behavior, commands, and usage.
 
 ### Phase 4: Codex Run Loop
 

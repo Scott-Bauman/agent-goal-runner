@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently through the Phase 2 backend API. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, and local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`. Runtime goal rendering, streaming, run-loop control, verification, and auto-commit features are tracked in `goal.md`.
+The MVP is currently through Phase 3 backend streaming and file watching. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, and Server-Sent Events for status and `goal.md` change notifications. Runtime goal rendering, run-loop control, verification, and auto-commit features are tracked in `goal.md`.
 
 ## Current Behavior
 
@@ -18,6 +18,11 @@ The MVP is currently through the Phase 2 backend API. It has a Fastify backend, 
 - A default `goal.md` can be created only by explicit request with `POST /api/goal`, and existing goals are not overwritten.
 - Goal API requests reject caller-provided alternate markdown paths or plan names.
 - Validation failures return frontend-ready issue details with `VALIDATION_ERROR`.
+- Server-Sent Events are available through `GET /api/events`.
+- New SSE clients receive the current `status`, `logs`, `progress`, and `summary` snapshot.
+- Selecting a repository starts or replaces a watcher for only that repository's `goal.md`.
+- Repository selection changes broadcast a `status` event with the selected repository path.
+- `goal.md` add, change, and unlink events broadcast `goalChanged` with the repository path, goal path, and existence state.
 - Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
 
 ## Requirements
