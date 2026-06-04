@@ -1295,6 +1295,98 @@ describe("run start endpoint", () => {
     ]);
   });
 
+  it("continues with the next Codex run only when no stop condition is present", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const firstRunProcess = createMockRunProcess(321);
+    const secondRunProcess = createMockRunProcess(654);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(firstRunProcess)
+      .mockReturnValueOnce(secondRunProcess);
+    const app = await buildServer({
+      spawnProcess,
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    firstRunProcess.emit("close", 0, null);
+    const nextRunSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+
+    expect(spawnProcess).toHaveBeenCalledTimes(2);
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      2,
+      "codex",
+      ["exec", "Use goal.md as the source of truth."],
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+    expect(nextRunSummaryPayloads).toEqual([
+      {
+        status: "running",
+        message: "Started Codex run 2 of 2.",
+      },
+    ]);
+
+    const snapshotResponse = await globalThis.fetch(`${origin}/api/events`);
+    const snapshotReader = snapshotResponse.body?.getReader();
+
+    if (!snapshotReader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    const snapshotChunk = await readSseChunk(snapshotReader);
+    expect(parseSsePayloads(snapshotChunk, "progress")).toEqual([
+      {
+        currentRun: 2,
+        totalRuns: 2,
+      },
+    ]);
+
+    secondRunProcess.emit("close", 0, null);
+    const completeSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+    await snapshotReader.cancel();
+
+    expect(completeSummaryPayloads).toEqual([
+      {
+        status: "complete",
+        message: `Completed Codex run 2 of 2 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      },
+    ]);
+  });
+
   it("stops with complete status when refreshed goal.md contains GOAL_COMPLETE", async () => {
     const repositoryPath = await createRepositoryPath();
     await writeFile(
@@ -1302,8 +1394,9 @@ describe("run start endpoint", () => {
       "# Selected Goal\n\nGOAL_COMPLETE\n",
     );
     const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
     const app = await buildServer({
-      spawnProcess: vi.fn(() => runProcess),
+      spawnProcess,
     });
     server = app;
     const origin = await listenOnRandomPort(app);
@@ -1347,6 +1440,7 @@ describe("run start endpoint", () => {
           "Stopped after Codex run 1 of 3 because refreshed goal.md contains GOAL_COMPLETE.",
       },
     ]);
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
   });
 
   it("stops with blocked status when refreshed goal.md contains GOAL_BLOCKED", async () => {
@@ -1356,8 +1450,9 @@ describe("run start endpoint", () => {
       "# Selected Goal\n\nGOAL_BLOCKED: waiting for user input\n",
     );
     const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
     const app = await buildServer({
-      spawnProcess: vi.fn(() => runProcess),
+      spawnProcess,
     });
     server = app;
     const origin = await listenOnRandomPort(app);
@@ -1401,6 +1496,7 @@ describe("run start endpoint", () => {
           "Stopped after Codex run 1 of 3 because refreshed goal.md contains GOAL_BLOCKED.",
       },
     ]);
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
   });
 
   it("fails the run when goal.md cannot be re-read after a successful Codex run", async () => {

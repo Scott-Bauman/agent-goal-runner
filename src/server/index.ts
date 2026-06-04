@@ -606,106 +606,118 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     }
 
     const repositoryPath = runtimeState.selectedRepositoryPath;
-    const childProcess = spawnProcess("codex", ["exec", parsedBody.data.prompt], {
-      cwd: repositoryPath,
-      windowsHide: true,
-    });
+    const { prompt, runCount } = parsedBody.data;
 
-    childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      appendProcessLog("stdout", chunk);
-    });
-    childProcess.stderr.on("data", (chunk: Buffer | string) => {
-      appendProcessLog("stderr", chunk);
-    });
-    childProcess.on("close", (code) => {
-      void (async () => {
-        if (activeRunProcess !== childProcess) {
-          return;
-        }
+    function startCodexRun(runNumber: number): void {
+      const childProcess = spawnProcess("codex", ["exec", prompt], {
+        cwd: repositoryPath,
+        windowsHide: true,
+      });
 
-        activeRunProcess = null;
-
-        if (code === 0) {
-          let refreshedGoalMarkdown: string;
-
-          try {
-            refreshedGoalMarkdown = await readGoalMarkdownForRun(repositoryPath);
-          } catch (error) {
-            failRun(
-              isNodeErrorCode(error, "ENOENT")
-                ? "goal.md became unavailable after Codex run 1."
-                : "Failed to refresh goal.md after Codex run 1.",
-            );
+      childProcess.stdout.on("data", (chunk: Buffer | string) => {
+        appendProcessLog("stdout", chunk);
+      });
+      childProcess.stderr.on("data", (chunk: Buffer | string) => {
+        appendProcessLog("stderr", chunk);
+      });
+      childProcess.on("close", (code) => {
+        void (async () => {
+          if (activeRunProcess !== childProcess) {
             return;
           }
 
-          const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
+          activeRunProcess = null;
 
-          if (goalStopMarker) {
-            const markerStatus = goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
+          if (code === 0) {
+            let refreshedGoalMarkdown: string;
+
+            try {
+              refreshedGoalMarkdown = await readGoalMarkdownForRun(repositoryPath);
+            } catch (error) {
+              failRun(
+                isNodeErrorCode(error, "ENOENT")
+                  ? `goal.md became unavailable after Codex run ${runNumber}.`
+                  : `Failed to refresh goal.md after Codex run ${runNumber}.`,
+              );
+              return;
+            }
+
+            const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
+
+            if (goalStopMarker) {
+              const markerStatus =
+                goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
+
+              runtimeState.stream.runLoop = {
+                ...runtimeState.stream.runLoop,
+                status: markerStatus,
+                stopRequested: false,
+                activeProcessId: null,
+                latestSummary: {
+                  status: markerStatus,
+                  message: `Stopped after Codex run ${runNumber} of ${runCount} because refreshed goal.md contains ${goalStopMarker}.`,
+                },
+              };
+              publishRunStatus();
+              return;
+            }
+
+            if (runNumber < runCount) {
+              startCodexRun(runNumber + 1);
+              return;
+            }
 
             runtimeState.stream.runLoop = {
               ...runtimeState.stream.runLoop,
-              status: markerStatus,
+              status: "complete",
               stopRequested: false,
               activeProcessId: null,
               latestSummary: {
-                status: markerStatus,
-                message: `Stopped after Codex run 1 of ${parsedBody.data.runCount} because refreshed goal.md contains ${goalStopMarker}.`,
+                status: "complete",
+                message: `Completed Codex run ${runNumber} of ${runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`,
               },
             };
             publishRunStatus();
             return;
           }
 
-          runtimeState.stream.runLoop = {
-            ...runtimeState.stream.runLoop,
-            status: "complete",
-            stopRequested: false,
-            activeProcessId: null,
-            latestSummary: {
-              status: "complete",
-              message: `Completed Codex run 1 of ${parsedBody.data.runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`,
-            },
-          };
-          publishRunStatus();
-          return;
-        }
+          failRun(
+            code === null
+              ? `Codex run ${runNumber} exited without an exit code.`
+              : `Codex run ${runNumber} exited with code ${code}.`,
+          );
+        })();
+      });
+      activeRunProcess = childProcess;
 
-        failRun(
-          code === null
-            ? "Codex run 1 exited without an exit code."
-            : `Codex run 1 exited with code ${code}.`,
-        );
-      })();
-    });
-    activeRunProcess = childProcess;
-
-    runtimeState.stream.runLoop = {
-      status: "running",
-      stopRequested: false,
-      activeProcessId: childProcess.pid ?? null,
-      progress: {
-        currentRun: 1,
-        totalRuns: parsedBody.data.runCount,
-      },
-      latestSummary: {
+      runtimeState.stream.runLoop = {
         status: "running",
-        message: `Started Codex run 1 of ${parsedBody.data.runCount}.`,
-      },
-    };
-    broadcastSseEvent("status", {
-      status: runtimeState.stream.runLoop.status,
-      selectedRepositoryPath: runtimeState.selectedRepositoryPath,
-    });
-    broadcastSseEvent("progress", runtimeState.stream.runLoop.progress);
-    broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+        stopRequested: false,
+        activeProcessId: childProcess.pid ?? null,
+        progress: {
+          currentRun: runNumber,
+          totalRuns: runCount,
+        },
+        latestSummary: {
+          status: "running",
+          message: `Started Codex run ${runNumber} of ${runCount}.`,
+        },
+      };
+      broadcastSseEvent("status", {
+        status: runtimeState.stream.runLoop.status,
+        selectedRepositoryPath: runtimeState.selectedRepositoryPath,
+      });
+      broadcastSseEvent("progress", runtimeState.stream.runLoop.progress);
+      broadcastSseEvent("summary", runtimeState.stream.runLoop.latestSummary);
+    }
+
+    startCodexRun(1);
 
     return reply.code(202).send({
       status: runtimeState.stream.runLoop.status,
       repositoryPath,
-      prompt: parsedBody.data.prompt,
-      runCount: parsedBody.data.runCount,
+      prompt,
+      runCount,
     });
   });
 
