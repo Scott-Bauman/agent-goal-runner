@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { FileText } from "lucide-react";
 
+import { Badge } from "@/web/components/ui/badge";
+
 type RunnerStatus =
   | "idle"
   | "running"
@@ -69,9 +71,12 @@ function TopBar({
             </span>
           </div>
         </div>
-        <span className="inline-flex h-7 w-fit shrink-0 items-center rounded-md border border-zinc-200 bg-zinc-50 px-2.5 text-xs font-medium text-zinc-700">
+        <Badge
+          variant="outline"
+          className="h-7 w-fit shrink-0 bg-zinc-50 font-medium text-zinc-700"
+        >
           {statusLabels[status]}
-        </span>
+        </Badge>
       </div>
     </header>
   );
