@@ -51,7 +51,7 @@ function createMockRunProcess(pid = 321): ChildProcessWithoutNullStreams {
     pid,
     stdout: new PassThrough(),
     stderr: new PassThrough(),
-    kill: vi.fn(),
+    kill: vi.fn(() => true),
   }) as unknown as ChildProcessWithoutNullStreams;
 }
 
@@ -1582,5 +1582,157 @@ describe("run start endpoint", () => {
     expect(response.json()).toEqual({
       error: "A run is already active.",
     });
+  });
+
+  it("rejects a stop request when no run is active", async () => {
+    const app = await getServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/stop",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No active run to stop.",
+    });
+  });
+
+  it("rejects caller-provided stop options", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    const bodyResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/stop",
+      payload: {
+        signal: "SIGKILL",
+      },
+    });
+    const queryResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/stop?signal=SIGKILL",
+    });
+
+    expect(bodyResponse.statusCode).toBe(400);
+    expect(bodyResponse.json()).toEqual({
+      error: "Invalid run stop request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'signal'",
+        },
+      ],
+    });
+    expect(queryResponse.statusCode).toBe(400);
+    expect(queryResponse.json()).toEqual({
+      error: "Invalid run stop request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'signal'",
+        },
+      ],
+    });
+    expect(runProcess.kill).not.toHaveBeenCalled();
+  });
+
+  it("marks the run as stopping and terminates the active Codex process", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess(987);
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    const stopResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/stop",
+    });
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(stopResponse.statusCode).toBe(202);
+    expect(stopResponse.json()).toEqual({
+      status: "stopping",
+      activeProcessId: 987,
+      killSignalSent: true,
+    });
+    expect(runProcess.kill).toHaveBeenCalledTimes(1);
+    expect(summaryPayloads).toEqual([
+      {
+        status: "stopping",
+        message: "Stop requested; terminating the active Codex process.",
+      },
+    ]);
+
+    const snapshotResponse = await globalThis.fetch(`${origin}/api/events`);
+    const snapshotReader = snapshotResponse.body?.getReader();
+
+    if (!snapshotReader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    const snapshotChunk = await readSseChunk(snapshotReader);
+    await snapshotReader.cancel();
+
+    expect(parseSsePayloads(snapshotChunk, "status")).toEqual([
+      {
+        status: "stopping",
+        selectedRepositoryPath: path.normalize(repositoryPath),
+      },
+    ]);
   });
 });

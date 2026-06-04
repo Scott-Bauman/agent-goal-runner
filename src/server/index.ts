@@ -345,6 +345,27 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     publishRunStatus();
   }
 
+  function requestRunStop(): boolean {
+    if (!activeRunProcess) {
+      return false;
+    }
+
+    const activeProcessId = activeRunProcess.pid ?? null;
+    runtimeState.stream.runLoop = {
+      ...runtimeState.stream.runLoop,
+      status: "stopping",
+      stopRequested: true,
+      activeProcessId,
+      latestSummary: {
+        status: "stopping",
+        message: "Stop requested; terminating the active Codex process.",
+      },
+    };
+    publishRunStatus();
+
+    return activeRunProcess.kill();
+  }
+
   async function stopGoalWatcher(): Promise<void> {
     await goalWatcher?.close();
     goalWatcher = null;
@@ -718,6 +739,34 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       repositoryPath,
       prompt,
       runCount,
+    });
+  });
+
+  server.post("/api/run/stop", async (request, reply) => {
+    const parsedQuery = emptyGoalRequestSchema.safeParse(request.query);
+    const parsedBody = emptyGoalRequestSchema.safeParse(request.body ?? {});
+
+    if (!parsedQuery.success || !parsedBody.success) {
+      return reply.code(400).send(
+        validationError("Invalid run stop request.", [
+          ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
+          ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
+        ]),
+      );
+    }
+
+    if (!activeRunProcess) {
+      return reply.code(409).send({
+        error: "No active run to stop.",
+      });
+    }
+
+    const killSignalSent = requestRunStop();
+
+    return reply.code(202).send({
+      status: runtimeState.stream.runLoop.status,
+      activeProcessId: runtimeState.stream.runLoop.activeProcessId,
+      killSignalSent,
     });
   });
 
