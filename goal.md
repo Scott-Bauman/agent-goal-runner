@@ -171,7 +171,7 @@ Before implementation, Codex must:
 - [x] Add `goal.md` read endpoint restricted to `<selected-repo>/goal.md`.
 - [x] Return a clear missing-goal state when `goal.md` does not exist.
 - [x] Add explicit user-requested default `goal.md` creation.
-- [ ] Refuse arbitrary markdown paths and alternate plan names.
+- [x] Refuse arbitrary markdown paths and alternate plan names.
 - [ ] Return useful validation errors to the frontend.
 - [ ] Update README.md with the completed Phase 2 behavior, commands, and usage.
 

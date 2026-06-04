@@ -36,6 +36,14 @@ const repositorySelectionSchema = z
       .transform((value) => path.normalize(value)),
   })
   .strict();
+const emptyGoalRequestSchema = z.object({}).strict();
+
+function formatZodIssues(error: z.ZodError): Array<{ path: string; message: string }> {
+  return error.issues.map((issue) => ({
+    path: issue.path.join(".") || "request",
+    message: issue.message,
+  }));
+}
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -138,7 +146,16 @@ export async function buildServer(): Promise<FastifyInstance> {
     repositoryPath: runtimeState.selectedRepositoryPath,
   }));
 
-  server.get("/api/goal", async (_request, reply) => {
+  server.get("/api/goal", async (request, reply) => {
+    const parsedQuery = emptyGoalRequestSchema.safeParse(request.query);
+
+    if (!parsedQuery.success) {
+      return reply.code(400).send({
+        error: "Invalid goal request.",
+        issues: formatZodIssues(parsedQuery.error),
+      });
+    }
+
     if (!runtimeState.selectedRepositoryPath) {
       return reply.code(409).send({
         error: "No repository selected.",
@@ -171,7 +188,20 @@ export async function buildServer(): Promise<FastifyInstance> {
     };
   });
 
-  server.post("/api/goal", async (_request, reply) => {
+  server.post("/api/goal", async (request, reply) => {
+    const parsedQuery = emptyGoalRequestSchema.safeParse(request.query);
+    const parsedBody = emptyGoalRequestSchema.safeParse(request.body ?? {});
+
+    if (!parsedQuery.success || !parsedBody.success) {
+      return reply.code(400).send({
+        error: "Invalid goal creation request.",
+        issues: [
+          ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
+          ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
+        ],
+      });
+    }
+
     if (!runtimeState.selectedRepositoryPath) {
       return reply.code(409).send({
         error: "No repository selected.",
@@ -213,10 +243,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     if (!parsedBody.success) {
       return reply.code(400).send({
         error: "Invalid repository selection request.",
-        issues: parsedBody.error.issues.map((issue) => ({
-          path: issue.path.join("."),
-          message: issue.message,
-        })),
+        issues: formatZodIssues(parsedBody.error),
       });
     }
 

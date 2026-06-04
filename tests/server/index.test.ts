@@ -337,7 +337,7 @@ describe("goal read endpoint", () => {
     });
   });
 
-  it("ignores caller-provided path query parameters", async () => {
+  it("rejects caller-provided path query parameters", async () => {
     const repositoryPath = await createRepositoryPath();
     const otherPath = await createRepositoryPath();
     await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
@@ -357,11 +357,34 @@ describe("goal read endpoint", () => {
       url: `/api/goal?path=${encodeURIComponent(path.join(otherPath, "goal.md"))}`,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
-      repositoryPath: path.normalize(repositoryPath),
-      goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
-      markdown: "# Selected Goal\n",
+      error: "Invalid goal request.",
+    });
+  });
+
+  it("rejects alternate plan names", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    await writeFile(path.join(repositoryPath, "refactor.md"), "# Refactor Plan\n");
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/goal?name=refactor.md",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid goal request.",
     });
   });
 });
@@ -407,6 +430,44 @@ describe("goal creation endpoint", () => {
     });
     expect(response.json().markdown).toContain("# Project Goal");
     expect(await readFile(goalPath, "utf8")).toBe(response.json().markdown);
+  });
+
+  it("rejects caller-provided creation paths and alternate names", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const pathResponse = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+      payload: {
+        path: path.join(repositoryPath, "refactor.md"),
+      },
+    });
+
+    const nameResponse = await app.inject({
+      method: "POST",
+      url: "/api/goal?name=refactor.md",
+    });
+
+    expect(pathResponse.statusCode).toBe(400);
+    expect(pathResponse.json()).toMatchObject({
+      error: "Invalid goal creation request.",
+    });
+    expect(nameResponse.statusCode).toBe(400);
+    expect(nameResponse.json()).toMatchObject({
+      error: "Invalid goal creation request.",
+    });
+    await expect(readFile(path.join(repositoryPath, "goal.md"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("does not overwrite an existing goal.md", async () => {
