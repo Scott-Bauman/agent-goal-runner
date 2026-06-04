@@ -201,7 +201,7 @@ Before implementation, Codex must:
 - [x] Add stop endpoint that terminates the active child process when possible.
 - [x] Prevent new runs from starting after stop is requested.
 - [x] Report stopped status clearly.
-- [ ] Update README.md with the completed Phase 4 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 4 behavior, commands, and usage.
 
 ### Phase 5: Optional Verification and Auto-Commit
 

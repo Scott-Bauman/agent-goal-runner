@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently through Phase 3 backend streaming and file watching. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, and Server-Sent Events for status and `goal.md` change notifications. Runtime goal rendering, run-loop control, verification, and auto-commit features are tracked in `goal.md`.
+The MVP is currently through Phase 4 backend run-loop control. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, and a controlled Codex run loop. Runtime goal rendering, optional verification, and auto-commit features are tracked in `goal.md`.
 
 ## Current Behavior
 
@@ -23,13 +23,21 @@ The MVP is currently through Phase 3 backend streaming and file watching. It has
 - Selecting a repository starts or replaces a watcher for only that repository's `goal.md`.
 - Repository selection changes broadcast a `status` event with the selected repository path.
 - `goal.md` add, change, and unlink events broadcast `goalChanged` with the repository path, goal path, and existence state.
+- Run-loop statuses include `idle`, `running`, `stopping`, `complete`, `blocked`, `failed`, and `stopped`.
+- Codex runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100.
+- The run loop requires a selected repository, rejects concurrent starts, and spawns `codex exec <prompt>` inside the selected repository for each pass.
+- Codex stdout and stderr stream to connected SSE clients as log entries.
+- After each successful Codex pass, the backend re-reads the selected repository's `goal.md`.
+- The run loop stops when Codex exits non-zero, the requested run count is reached, refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`, `goal.md` becomes unavailable, or the user requests stop.
+- User stop is available through `POST /api/run/stop`; it marks the run as stopping, terminates the active Codex process when possible, and prevents additional passes from starting.
+- Run progress and latest summary updates are broadcast over SSE.
 - Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
-- Codex CLI installed and authenticated for future run-loop features
+- Codex CLI installed and authenticated for run-loop execution
 
 ## Local Development
 
@@ -58,6 +66,24 @@ You can also run each side separately:
 npm run dev:server
 npm run dev:web
 ```
+
+## Run Loop API
+
+After selecting a repository with `POST /api/repository/select`, start a controlled Codex loop with:
+
+```sh
+curl -X POST http://127.0.0.1:4317/api/run/start \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1}"
+```
+
+Request a stop for the active run with:
+
+```sh
+curl -X POST http://127.0.0.1:4317/api/run/stop
+```
+
+Subscribe to status, log, progress, summary, and `goal.md` change events with `GET /api/events`.
 
 ## Verification
 
