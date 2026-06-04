@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { FileText } from "lucide-react";
 
 import { Badge, type BadgeProps } from "@/web/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/web/components/ui/card";
 
 type RunnerStatus =
   | "idle"
@@ -136,34 +143,35 @@ function GoalDocumentPanel({
           : "goal.md rendering will appear here.";
 
   return (
-    <section
+    <Card
       aria-labelledby="goal-document-title"
-      className="flex min-h-[32rem] min-w-0 flex-col rounded-lg border border-zinc-200 bg-white shadow-sm"
+      role="region"
+      className="flex min-h-[32rem] min-w-0 flex-col rounded-lg"
     >
-      <div className="flex min-h-14 items-center justify-between gap-3 border-b border-zinc-200 px-4">
+      <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
         <div className="flex min-w-0 items-center gap-2">
           <FileText
             aria-hidden="true"
-            className="h-4 w-4 shrink-0 text-zinc-500"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
             strokeWidth={2}
           />
-          <h2
+          <CardTitle
             id="goal-document-title"
-            className="truncate text-sm font-semibold text-zinc-950"
+            className="truncate text-sm"
           >
             goal.md
-          </h2>
+          </CardTitle>
         </div>
-        <span className="shrink-0 text-xs font-medium text-zinc-500">
+        <CardDescription className="shrink-0 text-xs font-medium">
           Rendered document
-        </span>
-      </div>
-      <div className="flex flex-1 items-center justify-center px-4 py-10">
-        <p className="max-w-sm text-center text-sm leading-6 text-zinc-500">
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-1 items-center justify-center px-4 py-10">
+        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
           {panelMessage}
         </p>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
