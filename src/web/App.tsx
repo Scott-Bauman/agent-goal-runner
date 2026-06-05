@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -77,10 +78,37 @@ type GoalChangedEvent = {
   exists: boolean;
 };
 
+type StatusEvent = {
+  status: RunnerStatus;
+  selectedRepositoryPath: string | null;
+};
+
+type LogEntry = {
+  id: number;
+  stream: "system" | "stdout" | "stderr";
+  message: string;
+};
+
+type LogsEvent = {
+  entries: LogEntry[];
+};
+
+type RunProgressEvent = {
+  currentRun: number;
+  totalRuns: number | null;
+};
+
 type RunSummaryEvent = {
   status: RunnerStatus;
   message: string;
 } | null;
+
+type RuntimeStreamState = {
+  connectionStatus: "connecting" | "open" | "error";
+  logs: LogEntry[];
+  progress: RunProgressEvent;
+  latestSummary: RunSummaryEvent;
+};
 
 type RunStartResponse = {
   status: RunnerStatus;
@@ -177,6 +205,24 @@ const DEFAULT_REPEAT_PROMPT = [
   "Complete the next valid unchecked item.",
 ].join("\n");
 const RUNNER_ACTIVE_STATUSES = new Set<RunnerStatus>(["running", "stopping"]);
+const RUNNER_STATUSES = new Set<RunnerStatus>([
+  "idle",
+  "running",
+  "stopping",
+  "complete",
+  "blocked",
+  "failed",
+  "stopped",
+]);
+const INITIAL_RUNTIME_STREAM_STATE: RuntimeStreamState = {
+  connectionStatus: "connecting",
+  logs: [],
+  progress: {
+    currentRun: 0,
+    totalRuns: null,
+  },
+  latestSummary: null,
+};
 
 function getRepositoryLabel(repositorySelection: RepositorySelectionState) {
   return repositorySelection.status === "loading"
@@ -219,6 +265,18 @@ function getApiErrorMessage(
 
 function isActiveRunnerStatus(status: RunnerStatus): boolean {
   return RUNNER_ACTIVE_STATUSES.has(status);
+}
+
+function isRunnerStatus(value: unknown): value is RunnerStatus {
+  return typeof value === "string" && RUNNER_STATUSES.has(value as RunnerStatus);
+}
+
+function parseSseData<T>(event: MessageEvent<string>): T | null {
+  try {
+    return JSON.parse(event.data) as T;
+  } catch {
+    return null;
+  }
 }
 
 function RunnerStatusBadge({ status }: { status: RunnerStatus }) {
@@ -792,8 +850,10 @@ function ControlsPanel({
 }
 
 function GoalDocumentPanel({
+  goalRefreshToken,
   repositorySelection,
 }: {
+  goalRefreshToken: number;
   repositorySelection: RepositorySelectionState;
 }) {
   const [goalFileState, setGoalFileState] = useState<GoalFileState>({
@@ -899,46 +959,7 @@ function GoalDocumentPanel({
     return () => {
       abortController.abort();
     };
-  }, [loadGoalFile, selectedRepositoryPath]);
-
-  useEffect(() => {
-    if (!selectedRepositoryPath) {
-      return;
-    }
-
-    const eventSource = new EventSource("/api/events");
-
-    function refreshGoalFile(): void {
-      void loadGoalFile();
-    }
-
-    function handleGoalChanged(event: MessageEvent<string>): void {
-      const goalChanged = JSON.parse(event.data) as GoalChangedEvent;
-
-      if (goalChanged.repositoryPath !== selectedRepositoryPath) {
-        return;
-      }
-
-      refreshGoalFile();
-    }
-
-    function handleSummary(event: MessageEvent<string>): void {
-      const summary = JSON.parse(event.data) as RunSummaryEvent;
-
-      if (summary?.status === "complete" || summary?.status === "blocked") {
-        refreshGoalFile();
-      }
-    }
-
-    eventSource.addEventListener("goalChanged", handleGoalChanged);
-    eventSource.addEventListener("summary", handleSummary);
-
-    return () => {
-      eventSource.removeEventListener("goalChanged", handleGoalChanged);
-      eventSource.removeEventListener("summary", handleSummary);
-      eventSource.close();
-    };
-  }, [loadGoalFile, selectedRepositoryPath]);
+  }, [goalRefreshToken, loadGoalFile, selectedRepositoryPath]);
 
   async function handleCreateDefaultGoal() {
     if (!selectedRepositoryPath || goalFileState.status === "creating") {
@@ -1231,11 +1252,13 @@ function LogsSummaryPanel() {
 }
 
 function OperationsWorkspace({
+  goalRefreshToken,
   onRepositorySelected,
   onRunnerStatusChange,
   repositorySelection,
   runnerStatus,
 }: {
+  goalRefreshToken: number;
   onRepositorySelected: (repositoryPath: string) => void;
   onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
@@ -1244,7 +1267,10 @@ function OperationsWorkspace({
   return (
     <div className="grid gap-4 lg:min-h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,20rem)] lg:grid-rows-[minmax(24rem,1fr)_minmax(14rem,0.45fr)]">
       <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:min-h-0">
-        <GoalDocumentPanel repositorySelection={repositorySelection} />
+        <GoalDocumentPanel
+          goalRefreshToken={goalRefreshToken}
+          repositorySelection={repositorySelection}
+        />
       </div>
       <aside className="min-w-0 lg:col-start-2 lg:row-start-1 lg:min-h-0">
         <ControlsPanel
@@ -1268,6 +1294,18 @@ export function App() {
       repositoryPath: null,
     });
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>("idle");
+  const [goalRefreshToken, setGoalRefreshToken] = useState(0);
+  const [, setRuntimeStream] = useState<RuntimeStreamState>(
+    INITIAL_RUNTIME_STREAM_STATE,
+  );
+  const selectedRepositoryPathRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    selectedRepositoryPathRef.current =
+      repositorySelection.status === "ready"
+        ? repositorySelection.repositoryPath
+        : null;
+  }, [repositorySelection]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -1307,11 +1345,121 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const eventSource = new EventSource("/api/events");
+
+    setRuntimeStream((currentStream) => ({
+      ...currentStream,
+      connectionStatus: "connecting",
+    }));
+
+    function requestGoalRefresh(): void {
+      setGoalRefreshToken((currentToken) => currentToken + 1);
+    }
+
+    function handleStatus(event: MessageEvent<string>): void {
+      const statusEvent = parseSseData<StatusEvent>(event);
+
+      if (!statusEvent || !isRunnerStatus(statusEvent.status)) {
+        return;
+      }
+
+      setRunnerStatus(statusEvent.status);
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        connectionStatus: "open",
+      }));
+      setRepositorySelection({
+        status: "ready",
+        repositoryPath: statusEvent.selectedRepositoryPath,
+      });
+    }
+
+    function handleLogs(event: MessageEvent<string>): void {
+      const logsEvent = parseSseData<LogsEvent>(event);
+
+      if (!logsEvent || !Array.isArray(logsEvent.entries)) {
+        return;
+      }
+
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        logs: logsEvent.entries,
+      }));
+    }
+
+    function handleProgress(event: MessageEvent<string>): void {
+      const progress = parseSseData<RunProgressEvent>(event);
+
+      if (
+        !progress ||
+        typeof progress.currentRun !== "number" ||
+        (progress.totalRuns !== null && typeof progress.totalRuns !== "number")
+      ) {
+        return;
+      }
+
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        progress,
+      }));
+    }
+
+    function handleSummary(event: MessageEvent<string>): void {
+      const summary = parseSseData<RunSummaryEvent>(event);
+
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        latestSummary: summary,
+      }));
+
+      if (summary?.status === "complete" || summary?.status === "blocked") {
+        requestGoalRefresh();
+      }
+    }
+
+    function handleGoalChanged(event: MessageEvent<string>): void {
+      const goalChanged = parseSseData<GoalChangedEvent>(event);
+
+      if (
+        goalChanged?.repositoryPath &&
+        goalChanged.repositoryPath === selectedRepositoryPathRef.current
+      ) {
+        requestGoalRefresh();
+      }
+    }
+
+    function handleError(): void {
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        connectionStatus: "error",
+      }));
+    }
+
+    eventSource.addEventListener("status", handleStatus);
+    eventSource.addEventListener("logs", handleLogs);
+    eventSource.addEventListener("progress", handleProgress);
+    eventSource.addEventListener("summary", handleSummary);
+    eventSource.addEventListener("goalChanged", handleGoalChanged);
+    eventSource.addEventListener("error", handleError);
+
+    return () => {
+      eventSource.removeEventListener("status", handleStatus);
+      eventSource.removeEventListener("logs", handleLogs);
+      eventSource.removeEventListener("progress", handleProgress);
+      eventSource.removeEventListener("summary", handleSummary);
+      eventSource.removeEventListener("goalChanged", handleGoalChanged);
+      eventSource.removeEventListener("error", handleError);
+      eventSource.close();
+    };
+  }, []);
+
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-950">
       <TopBar repositorySelection={repositorySelection} status={runnerStatus} />
       <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
         <OperationsWorkspace
+          goalRefreshToken={goalRefreshToken}
           onRepositorySelected={(repositoryPath) => {
             setRepositorySelection({
               status: "ready",

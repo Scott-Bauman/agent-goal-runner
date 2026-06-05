@@ -252,7 +252,7 @@ Before implementation, Codex must:
 - [x] Add optional verification command input.
 - [x] Add auto-commit switch.
 - [x] Add start and stop buttons with correct disabled states.
-- [ ] Connect to the SSE stream.
+- [x] Connect to the SSE stream.
 - [ ] Show status, run progress, logs, and latest run summary.
 - [ ] Update README.md with the completed Phase 8 behavior, commands, and usage.
 
