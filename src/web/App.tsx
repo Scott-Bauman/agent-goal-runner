@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   Activity,
   AlertCircle,
@@ -64,6 +70,17 @@ type GoalFileResponse = {
   markdown: string;
   repositoryPath: string;
 };
+
+type GoalChangedEvent = {
+  repositoryPath: string;
+  goalPath: string;
+  exists: boolean;
+};
+
+type RunSummaryEvent = {
+  status: RunnerStatus;
+  message: string;
+} | null;
 
 type RepositorySelectionState =
   | {
@@ -541,7 +558,7 @@ function GoalDocumentPanel({
     [goalFileState.markdown, goalFileState.status],
   );
 
-  async function loadGoalFile(signal?: AbortSignal) {
+  const loadGoalFile = useCallback(async (signal?: AbortSignal) => {
     setGoalFileState({
       status: "loading",
       error: null,
@@ -604,7 +621,7 @@ function GoalDocumentPanel({
         repositoryPath: null,
       });
     }
-  }
+  }, []);
 
   useEffect(() => {
     if (!selectedRepositoryPath) {
@@ -625,7 +642,46 @@ function GoalDocumentPanel({
     return () => {
       abortController.abort();
     };
-  }, [selectedRepositoryPath]);
+  }, [loadGoalFile, selectedRepositoryPath]);
+
+  useEffect(() => {
+    if (!selectedRepositoryPath) {
+      return;
+    }
+
+    const eventSource = new EventSource("/api/events");
+
+    function refreshGoalFile(): void {
+      void loadGoalFile();
+    }
+
+    function handleGoalChanged(event: MessageEvent<string>): void {
+      const goalChanged = JSON.parse(event.data) as GoalChangedEvent;
+
+      if (goalChanged.repositoryPath !== selectedRepositoryPath) {
+        return;
+      }
+
+      refreshGoalFile();
+    }
+
+    function handleSummary(event: MessageEvent<string>): void {
+      const summary = JSON.parse(event.data) as RunSummaryEvent;
+
+      if (summary?.status === "complete" || summary?.status === "blocked") {
+        refreshGoalFile();
+      }
+    }
+
+    eventSource.addEventListener("goalChanged", handleGoalChanged);
+    eventSource.addEventListener("summary", handleSummary);
+
+    return () => {
+      eventSource.removeEventListener("goalChanged", handleGoalChanged);
+      eventSource.removeEventListener("summary", handleSummary);
+      eventSource.close();
+    };
+  }, [loadGoalFile, selectedRepositoryPath]);
 
   async function handleCreateDefaultGoal() {
     if (!selectedRepositoryPath || goalFileState.status === "creating") {
