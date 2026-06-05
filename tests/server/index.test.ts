@@ -9,7 +9,11 @@ import { PassThrough } from "node:stream";
 import { TextDecoder } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RUNNER_STATUSES, buildServer } from "../../src/server/index";
+import {
+  RUNNER_STATUSES,
+  buildServer,
+  detectGoalStopMarker,
+} from "../../src/server/index";
 
 const chokidarMocks = vi.hoisted(() => {
   const close = vi.fn(() => Promise.resolve());
@@ -180,6 +184,28 @@ afterEach(async () => {
       }),
     ),
   );
+});
+
+describe("goal stop marker detection", () => {
+  it("detects a complete marker", () => {
+    expect(detectGoalStopMarker("# Goal\n\nGOAL_COMPLETE\n")).toBe("GOAL_COMPLETE");
+  });
+
+  it("detects a blocked marker", () => {
+    expect(detectGoalStopMarker("GOAL_BLOCKED: waiting for input")).toBe(
+      "GOAL_BLOCKED",
+    );
+  });
+
+  it("returns null when no stop marker is present", () => {
+    expect(detectGoalStopMarker("- [ ] Keep going\n")).toBeNull();
+  });
+
+  it("treats blocked as the higher-priority marker when both are present", () => {
+    expect(detectGoalStopMarker("GOAL_COMPLETE\n\nGOAL_BLOCKED")).toBe(
+      "GOAL_BLOCKED",
+    );
+  });
 });
 
 describe("repository selection endpoint", () => {

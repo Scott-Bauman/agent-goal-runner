@@ -258,7 +258,7 @@ Before implementation, Codex must:
 
 ### Phase 9: Verification and Polish
 
-- [ ] Add unit tests for stop-condition detection.
+- [x] Add unit tests for stop-condition detection.
 - [ ] Add unit tests for request validation.
 - [ ] Add unit tests for `goal.md` path restrictions.
 - [ ] Add unit tests for run-loop state transitions.

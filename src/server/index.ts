@@ -367,7 +367,9 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
   );
 }
 
-function detectGoalStopMarker(markdown: string): "GOAL_COMPLETE" | "GOAL_BLOCKED" | null {
+export function detectGoalStopMarker(
+  markdown: string,
+): "GOAL_COMPLETE" | "GOAL_BLOCKED" | null {
   if (markdown.includes("GOAL_BLOCKED")) {
     return "GOAL_BLOCKED";
   }
