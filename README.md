@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, and start/stop controls wired to the run-loop API. Remaining connected status streaming, logs, and summary display work is tracked in `goal.md`.
+The MVP has completed Phase 8 run controls and live status. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, start/stop controls wired to the run-loop API, and connected live status, progress, logs, and latest-summary display.
 
 ## Current Behavior
 
@@ -21,7 +21,11 @@ The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite R
 - The Start button submits the repeat prompt, run count, optional verification command, and auto-commit flag to `POST /api/run/start`.
 - The Start button is disabled until a repository is selected, the prompt is non-empty, the run count is from 1 through 100, no run is active, and no run-control request is pending.
 - The Stop button submits `POST /api/run/stop` and is enabled only while the frontend has a running status and no run-control request is pending.
-- The logs and latest-summary areas remain static shell panels until later phases connect runtime event display.
+- The frontend connects to `GET /api/events` with EventSource and tracks the stream as connecting, open, or errored.
+- The top status badge updates from backend `status` events.
+- The logs panel renders streamed system, stdout, and stderr entries from backend `logs` events.
+- The logs header and latest-summary panel render current run progress from backend `progress` events.
+- The latest-summary panel renders the most recent run-loop message from backend `summary` events.
 - Vite proxies frontend `/api/*` requests to the local backend during development.
 - Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.
@@ -77,7 +81,7 @@ By default:
 - Backend: `http://127.0.0.1:4317`
 - Frontend: Vite's printed local URL, usually `http://127.0.0.1:5173`
 
-Open the frontend URL in a browser to view the current scaffold UI. Use `http://127.0.0.1:4317/health` to confirm the backend is running.
+Open the frontend URL in a browser to select a repository, render its `goal.md`, configure a run, and watch live status, logs, progress, and the latest run summary. Use `http://127.0.0.1:4317/health` to confirm the backend is running.
 
 You can also run each side separately:
 
@@ -103,6 +107,8 @@ curl -X POST http://127.0.0.1:4317/api/run/stop
 ```
 
 Subscribe to status, log, progress, summary, and `goal.md` change events with `GET /api/events`.
+
+The frontend subscribes to this stream automatically during local development and updates the status badge, live logs, run progress, latest summary, and rendered `goal.md` refreshes from those events.
 
 ## Verification
 
