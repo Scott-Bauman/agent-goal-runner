@@ -88,10 +88,16 @@ type GoalFileState =
   | {
       status: "idle" | "loading" | "available" | "missing" | "creating";
       error: null;
+      goalPath: string | null;
+      markdown: string | null;
+      repositoryPath: string | null;
     }
   | {
       status: "error";
       error: string;
+      goalPath: null;
+      markdown: null;
+      repositoryPath: null;
     };
 
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
@@ -518,6 +524,9 @@ function GoalDocumentPanel({
   const [goalFileState, setGoalFileState] = useState<GoalFileState>({
     status: "idle",
     error: null,
+    goalPath: null,
+    markdown: null,
+    repositoryPath: null,
   });
   const selectedRepositoryPath =
     repositorySelection.status === "ready"
@@ -528,6 +537,9 @@ function GoalDocumentPanel({
     setGoalFileState({
       status: "loading",
       error: null,
+      goalPath: null,
+      markdown: null,
+      repositoryPath: null,
     });
 
     try {
@@ -539,9 +551,14 @@ function GoalDocumentPanel({
         | ApiErrorResponse;
 
       if (response.ok) {
+        const goalFile = responseBody as GoalFileResponse;
+
         setGoalFileState({
           status: "available",
           error: null,
+          goalPath: goalFile.goalPath,
+          markdown: goalFile.markdown,
+          repositoryPath: goalFile.repositoryPath,
         });
         return;
       }
@@ -552,6 +569,9 @@ function GoalDocumentPanel({
         setGoalFileState({
           status: "missing",
           error: null,
+          goalPath: null,
+          markdown: null,
+          repositoryPath: null,
         });
         return;
       }
@@ -559,6 +579,9 @@ function GoalDocumentPanel({
       setGoalFileState({
         status: "error",
         error: getApiErrorMessage(errorResponse, "Failed to load goal.md."),
+        goalPath: null,
+        markdown: null,
+        repositoryPath: null,
       });
     } catch {
       if (signal?.aborted) {
@@ -568,6 +591,9 @@ function GoalDocumentPanel({
       setGoalFileState({
         status: "error",
         error: "Failed to load goal.md. Confirm the backend is running.",
+        goalPath: null,
+        markdown: null,
+        repositoryPath: null,
       });
     }
   }
@@ -577,6 +603,9 @@ function GoalDocumentPanel({
       setGoalFileState({
         status: "idle",
         error: null,
+        goalPath: null,
+        markdown: null,
+        repositoryPath: null,
       });
       return;
     }
@@ -598,6 +627,9 @@ function GoalDocumentPanel({
     setGoalFileState({
       status: "creating",
       error: null,
+      goalPath: null,
+      markdown: null,
+      repositoryPath: null,
     });
 
     try {
@@ -613,9 +645,14 @@ function GoalDocumentPanel({
         | ApiErrorResponse;
 
       if (response.ok) {
+        const goalFile = responseBody as GoalFileResponse;
+
         setGoalFileState({
           status: "available",
           error: null,
+          goalPath: goalFile.goalPath,
+          markdown: goalFile.markdown,
+          repositoryPath: goalFile.repositoryPath,
         });
         return;
       }
@@ -633,11 +670,17 @@ function GoalDocumentPanel({
           errorResponse,
           "Failed to create default goal.md.",
         ),
+        goalPath: null,
+        markdown: null,
+        repositoryPath: null,
       });
     } catch {
       setGoalFileState({
         status: "error",
         error: "Failed to create default goal.md. Confirm the backend is running.",
+        goalPath: null,
+        markdown: null,
+        repositoryPath: null,
       });
     }
   }
@@ -728,11 +771,18 @@ function GoalDocumentPanel({
       );
     }
 
-    return (
-      <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
-        goal.md rendering will appear here.
-      </p>
-    );
+    if (goalFileState.status === "available") {
+      return (
+        <pre
+          className="min-h-full w-full whitespace-pre-wrap break-words font-mono text-xs leading-5 text-zinc-800"
+          title={goalFileState.goalPath ?? undefined}
+        >
+          {goalFileState.markdown}
+        </pre>
+      );
+    }
+
+    return null;
   }
 
   return (
@@ -759,7 +809,10 @@ function GoalDocumentPanel({
           Rendered document
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-10">
+      <CardContent
+        className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-10 data-[goal-available=true]:items-start data-[goal-available=true]:justify-start data-[goal-available=true]:py-4"
+        data-goal-available={goalFileState.status === "available"}
+      >
         {renderGoalPanelContent()}
       </CardContent>
     </Card>

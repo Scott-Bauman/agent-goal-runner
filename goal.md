@@ -238,7 +238,7 @@ Before implementation, Codex must:
 
 ### Phase 7: Markdown Rendering
 
-- [ ] Fetch `goal.md` from the backend.
+- [x] Fetch `goal.md` from the backend.
 - [ ] Convert markdown with `marked`. Marked Documentation: https://marked.js.org/ and https://www.npmjs.com/package/marked
 - [ ] Sanitize rendered HTML with DOMPurify. DOMPurify Documentation: https://github.com/cure53/DOMPurify and https://www.npmjs.com/package/dompurify
 - [ ] Style markdown output for readability.
