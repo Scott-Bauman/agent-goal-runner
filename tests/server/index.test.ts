@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -76,6 +76,19 @@ async function createRepositoryPath(): Promise<string> {
   const repositoryPath = await createTempPath();
   await mkdir(path.join(repositoryPath, ".git"));
   return repositoryPath;
+}
+
+async function createEscapingGoalPath(repositoryPath: string): Promise<string> {
+  const outsidePath = await createTempPath();
+  const goalPath = path.join(repositoryPath, "goal.md");
+
+  await symlink(
+    outsidePath,
+    goalPath,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+
+  return goalPath;
 }
 
 async function listenOnRandomPort(app: FastifyInstance): Promise<string> {
@@ -860,6 +873,33 @@ describe("goal read endpoint", () => {
       ],
     });
   });
+
+  it("rejects a goal.md path that resolves outside the selected repository", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = await createEscapingGoalPath(repositoryPath);
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "goal.md resolves outside the selected repository.",
+      code: "GOAL_PATH_RESTRICTED",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath: path.normalize(goalPath),
+    });
+  });
 });
 
 describe("goal creation endpoint", () => {
@@ -985,6 +1025,33 @@ describe("goal creation endpoint", () => {
       exists: true,
     });
     expect(await readFile(goalPath, "utf8")).toBe("# Existing Goal\n");
+  });
+
+  it("rejects creation when goal.md resolves outside the selected repository", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = await createEscapingGoalPath(repositoryPath);
+    const app = await getServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "goal.md resolves outside the selected repository.",
+      code: "GOAL_PATH_RESTRICTED",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath: path.normalize(goalPath),
+    });
   });
 });
 

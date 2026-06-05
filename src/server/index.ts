@@ -6,7 +6,7 @@ import {
   type ChildProcessWithoutNullStreams,
   type SpawnOptionsWithoutStdio,
 } from "node:child_process";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -106,6 +106,13 @@ type VerificationCommandParseResult =
 type BuildServerOptions = {
   spawnProcess?: ProcessSpawner;
 };
+
+class GoalPathRestrictionError extends Error {
+  constructor() {
+    super("goal.md resolves outside the selected repository.");
+    this.name = "GoalPathRestrictionError";
+  }
+}
 
 const SHELL_OPERATOR_CHARACTERS = new Set(["|", "&", ";", "<", ">", "`"]);
 const SHELL_EXECUTABLES = new Set([
@@ -368,6 +375,10 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
   );
 }
 
+function isGoalPathRestrictionError(error: unknown): error is GoalPathRestrictionError {
+  return error instanceof GoalPathRestrictionError;
+}
+
 export function detectGoalStopMarker(
   markdown: string,
 ): "GOAL_COMPLETE" | "GOAL_BLOCKED" | null {
@@ -413,20 +424,62 @@ async function validateRepositoryPath(repositoryPath: string): Promise<string | 
   return undefined;
 }
 
+function isPathInsideDirectory(directoryPath: string, targetPath: string): boolean {
+  const relativePath = path.relative(directoryPath, targetPath);
+
+  return (
+    relativePath !== "" &&
+    !relativePath.startsWith("..") &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
 function getGoalFilePath(repositoryPath: string): string {
   const normalizedRepositoryPath = path.resolve(repositoryPath);
   const goalFilePath = path.resolve(normalizedRepositoryPath, "goal.md");
-  const relativeGoalPath = path.relative(normalizedRepositoryPath, goalFilePath);
 
-  if (
-    relativeGoalPath === "" ||
-    relativeGoalPath.startsWith("..") ||
-    path.isAbsolute(relativeGoalPath)
-  ) {
+  if (!isPathInsideDirectory(normalizedRepositoryPath, goalFilePath)) {
     throw new Error("Resolved goal path escaped the selected repository.");
   }
 
   return goalFilePath;
+}
+
+async function assertResolvedGoalPathInsideRepository(
+  repositoryPath: string,
+  goalFilePath: string,
+): Promise<void> {
+  const [resolvedRepositoryPath, resolvedGoalFilePath] = await Promise.all([
+    realpath(repositoryPath),
+    realpath(goalFilePath),
+  ]);
+
+  if (!isPathInsideDirectory(resolvedRepositoryPath, resolvedGoalFilePath)) {
+    throw new GoalPathRestrictionError();
+  }
+}
+
+async function readGoalMarkdown(repositoryPath: string): Promise<string> {
+  const goalFilePath = getGoalFilePath(repositoryPath);
+
+  await assertResolvedGoalPathInsideRepository(repositoryPath, goalFilePath);
+
+  return readFile(goalFilePath, "utf8");
+}
+
+async function assertExistingGoalPathDoesNotEscape(
+  repositoryPath: string,
+  goalFilePath: string,
+): Promise<void> {
+  try {
+    await assertResolvedGoalPathInsideRepository(repositoryPath, goalFilePath);
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return;
+    }
+
+    throw error;
+  }
 }
 
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
@@ -483,7 +536,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   }
 
   async function readGoalMarkdownForRun(repositoryPath: string): Promise<string> {
-    return readFile(getGoalFilePath(repositoryPath), "utf8");
+    return readGoalMarkdown(repositoryPath);
   }
 
   function publishRunStatus(): void {
@@ -664,7 +717,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     let markdown: string;
 
     try {
-      markdown = await readFile(goalFilePath, "utf8");
+      markdown = await readGoalMarkdown(runtimeState.selectedRepositoryPath);
     } catch (error) {
       if (isNodeErrorCode(error, "ENOENT")) {
         return reply.code(404).send({
@@ -673,6 +726,15 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           repositoryPath: runtimeState.selectedRepositoryPath,
           goalPath: goalFilePath,
           exists: false,
+        });
+      }
+
+      if (isGoalPathRestrictionError(error)) {
+        return reply.code(400).send({
+          error: error.message,
+          code: "GOAL_PATH_RESTRICTED",
+          repositoryPath: runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
         });
       }
 
@@ -708,6 +770,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     const goalFilePath = getGoalFilePath(runtimeState.selectedRepositoryPath);
 
     try {
+      await assertExistingGoalPathDoesNotEscape(
+        runtimeState.selectedRepositoryPath,
+        goalFilePath,
+      );
       await writeFile(goalFilePath, DEFAULT_GOAL_MARKDOWN, {
         encoding: "utf8",
         flag: "wx",
@@ -720,6 +786,15 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           repositoryPath: runtimeState.selectedRepositoryPath,
           goalPath: goalFilePath,
           exists: true,
+        });
+      }
+
+      if (isGoalPathRestrictionError(error)) {
+        return reply.code(400).send({
+          error: error.message,
+          code: "GOAL_PATH_RESTRICTED",
+          repositoryPath: runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
         });
       }
 
@@ -874,7 +949,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
               failRun(
                 isNodeErrorCode(error, "ENOENT")
                   ? `goal.md became unavailable after Codex run ${runNumber}.`
-                  : `Failed to refresh goal.md after Codex run ${runNumber}.`,
+                  : isGoalPathRestrictionError(error)
+                    ? `goal.md resolves outside the selected repository after Codex run ${runNumber}.`
+                    : `Failed to refresh goal.md after Codex run ${runNumber}.`,
               );
               return;
             }

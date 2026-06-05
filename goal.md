@@ -260,7 +260,7 @@ Before implementation, Codex must:
 
 - [x] Add unit tests for stop-condition detection.
 - [x] Add unit tests for request validation.
-- [ ] Add unit tests for `goal.md` path restrictions.
+- [x] Add unit tests for `goal.md` path restrictions.
 - [ ] Add unit tests for run-loop state transitions.
 - [ ] Manually verify repository selection, goal creation, and goal rendering.
 - [ ] Manually verify a one-run Codex loop with a harmless prompt.
