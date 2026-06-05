@@ -250,7 +250,7 @@ Before implementation, Codex must:
 - [x] Add repeat prompt textarea.
 - [x] Add run count input.
 - [x] Add optional verification command input.
-- [ ] Add auto-commit switch.
+- [x] Add auto-commit switch.
 - [ ] Add start and stop buttons with correct disabled states.
 - [ ] Connect to the SSE stream.
 - [ ] Show status, run progress, logs, and latest run summary.
