@@ -1,8 +1,8 @@
-# codex-goal-runner
+# Agent-goal-runner
 
-Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
+Lightweight local operations panel for repeatedly running the Agent CLI against a selected repository's `goal.md`.
 
-The MVP has completed Phase 9 verification and polish. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, start/stop controls wired to the run-loop API, connected live status, progress, logs, and latest-summary display, and unit coverage for the core safety and run-loop behavior.
+The MVP has completed Phase 9 verification and polish. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Agent run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, start/stop controls wired to the run-loop API, connected live status, progress, logs, and latest-summary display, and unit coverage for the core safety and run-loop behavior.
 
 ## Current Behavior
 
@@ -44,18 +44,18 @@ The MVP has completed Phase 9 verification and polish. It has a Fastify backend,
 - `goal.md` add, change, and unlink events broadcast `goalChanged` with the repository path, goal path, and existence state.
 - The frontend refreshes the rendered `goal.md` after matching `goalChanged` events and after complete or blocked run summaries.
 - Run-loop statuses include `idle`, `running`, `stopping`, `complete`, `blocked`, `failed`, and `stopped`.
-- Codex runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100.
+- Agent runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100.
 - The run loop requires a selected repository, rejects concurrent starts, and spawns `codex exec <prompt>` inside the selected repository for each pass.
-- Codex stdout and stderr stream to connected SSE clients as log entries.
-- After each successful Codex pass, the backend re-reads the selected repository's `goal.md`.
-- The run loop stops when Codex exits non-zero, the requested run count is reached, refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`, `goal.md` becomes unavailable, or the user requests stop.
-- User stop is available through `POST /api/run/stop`; it marks the run as stopping, terminates the active Codex process when possible, and prevents additional passes from starting.
+- Agent stdout and stderr stream to connected SSE clients as log entries.
+- After each successful Agent pass, the backend re-reads the selected repository's `goal.md`.
+- The run loop stops when Agent exits non-zero, the requested run count is reached, refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`, `goal.md` becomes unavailable, or the user requests stop.
+- User stop is available through `POST /api/run/stop`; it marks the run as stopping, terminates the active Agent process when possible, and prevents additional passes from starting.
 - Optional verification is accepted as an empty value or a single executable with arguments; shell operators and shell wrappers are rejected.
-- Verification runs only after a successful Codex pass, streams stdout and stderr over SSE, and stops the run loop on failure.
+- Verification runs only after a successful Agent pass, streams stdout and stderr over SSE, and stops the run loop on failure.
 - Auto-commit is opt-in per run. When enabled, the backend runs `git add -A`, checks `git status --porcelain`, skips commits when there are no changes, creates a generated commit message when changes exist, streams git output over SSE, and stops the run loop on git failure.
 - Run progress and latest summary updates are broadcast over SSE.
 - Unit tests cover stop-condition detection, request validation, `goal.md` path restrictions, and run-loop state transitions.
-- Manual Phase 9 verification covered repository selection, default goal creation, goal rendering, a harmless one-run Codex loop, max-run stop, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
+- Manual Phase 9 verification covered repository selection, default goal creation, goal rendering, a harmless one-run Agent loop, max-run stop, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
 - Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
 
 ## Requirements
@@ -94,7 +94,7 @@ npm run dev:web
 
 ## Run Loop API
 
-After selecting a repository with `POST /api/repository/select`, start a controlled Codex loop with:
+After selecting a repository with `POST /api/repository/select`, start a controlled Agent loop with:
 
 ```sh
 curl -X POST http://127.0.0.1:4317/api/run/start \
@@ -149,4 +149,4 @@ Browser automation is intentionally not part of normal verification for this pro
 
 ## Project Control
 
-Implementation work is controlled by this repository's `goal.md`. Future Codex runs should complete one valid unchecked checkbox or sub-checkbox at a time, verify the change, and update only the completed checkbox in `goal.md`.
+Implementation work is controlled by this repository's `goal.md`. Future Agent runs should complete one valid unchecked checkbox or sub-checkbox at a time, verify the change, and update only the completed checkbox in `goal.md`.
