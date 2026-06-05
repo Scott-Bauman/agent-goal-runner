@@ -2,14 +2,19 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently through Phase 5 backend run-loop control. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused UI primitives for the first screen, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, and optional auto-commit. Runtime goal rendering and the full frontend control surface are tracked in `goal.md`.
+The MVP is currently through Phase 6 frontend shell and layout. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, and optional auto-commit. Runtime markdown rendering, live run controls, and connected status streaming are tracked in `goal.md`.
 
 ## Current Behavior
 
 - Backend server starts on `127.0.0.1:4317` by default.
 - Backend exposes `GET /` with the app name and status, plus `GET /health` for a simple health check.
-- Frontend starts with Vite and renders the initial operations-panel shell.
-- The initial top bar shows the app name, selected repository path state, and idle status badge.
+- Frontend starts with Vite and renders a responsive operations-panel shell.
+- shadcn/ui is configured with local aliases, Tailwind semantic tokens, and generated focused primitives for badges, buttons, cards, empty states, inputs, and textareas.
+- The top bar shows the app name, selected repository path state, and idle status badge.
+- The main workspace has a left `goal.md` document panel, a compact right-side controls panel, and a bottom logs plus latest-summary panel.
+- Repository path entry is available in the controls panel with selected-path display and frontend-ready validation errors.
+- When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
+- Repeat prompt, run count, verification, auto-commit, start, stop, logs, and latest-summary areas are present as disabled/static shell controls until later phases connect runtime behavior.
 - Vite proxies frontend `/api/*` requests to the local backend during development.
 - Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.

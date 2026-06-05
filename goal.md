@@ -234,13 +234,13 @@ Before implementation, Codex must:
 - [x] Keep the UI responsive without changing the primary workflow.
 - [x] Add repository path entry, selected-path display, and validation errors.
 - [x] Show a create-default-`goal.md` action when missing. Use https://ui.shadcn.com/docs/components/radix/empty to do this if possible.
-- [ ] Update README.md with the completed Phase 6 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 6 behavior, commands, and usage.
 
 ### Phase 7: Markdown Rendering
 
 - [ ] Fetch `goal.md` from the backend.
-- [ ] Convert markdown with `marked`.
-- [ ] Sanitize rendered HTML with DOMPurify.
+- [ ] Convert markdown with `marked`. Marked Documentation: https://marked.js.org/ and https://www.npmjs.com/package/marked
+- [ ] Sanitize rendered HTML with DOMPurify. DOMPurify Documentation: https://github.com/cure53/DOMPurify and https://www.npmjs.com/package/dompurify
 - [ ] Style markdown output for readability.
 - [ ] Refresh rendering when the backend reports a file change or completed run.
 - [ ] Update README.md with the completed Phase 7 behavior, commands, and usage.
