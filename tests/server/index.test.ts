@@ -132,6 +132,22 @@ async function readSseChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Pr
   return new TextDecoder().decode(result.value);
 }
 
+async function readSseSnapshot(origin: string): Promise<string> {
+  const response = await globalThis.fetch(`${origin}/api/events`);
+  const reader = response.body?.getReader();
+
+  expect(response.status).toBe(200);
+  expect(reader).toBeDefined();
+
+  if (!reader) {
+    throw new Error("Missing SSE response body.");
+  }
+
+  const chunk = await readSseChunk(reader);
+  await reader.cancel();
+  return chunk;
+}
+
 async function readUntilSsePayloads(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   eventName: string,
@@ -1294,6 +1310,126 @@ describe("run start endpoint", () => {
       runCount: 1,
       verificationCommand: "",
       autoCommit: true,
+    });
+  });
+
+  it("transitions from idle to running when a run starts", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess(456);
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+      },
+    });
+    const snapshotChunk = await readSseSnapshot(origin);
+
+    expect(response.statusCode).toBe(202);
+    expect(parseSsePayloads(snapshotChunk, "status")).toEqual([
+      {
+        status: "running",
+        selectedRepositoryPath: path.normalize(repositoryPath),
+      },
+    ]);
+    expect(parseSsePayloads(snapshotChunk, "progress")).toEqual([
+      {
+        currentRun: 1,
+        totalRuns: 2,
+      },
+    ]);
+    expect(parseSsePayloads(snapshotChunk, "summary")).toEqual([
+      {
+        status: "running",
+        message: "Started Codex run 1 of 2.",
+      },
+    ]);
+  });
+
+  it("transitions from running to complete after the final successful run", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("close", 0, null);
+    await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    const snapshotChunk = await readSseSnapshot(origin);
+    const stopResponse = await app.inject({
+      method: "POST",
+      url: "/api/run/stop",
+    });
+
+    expect(parseSsePayloads(snapshotChunk, "status")).toEqual([
+      {
+        status: "complete",
+        selectedRepositoryPath: path.normalize(repositoryPath),
+      },
+    ]);
+    expect(parseSsePayloads(snapshotChunk, "progress")).toEqual([
+      {
+        currentRun: 1,
+        totalRuns: 1,
+      },
+    ]);
+    expect(parseSsePayloads(snapshotChunk, "summary")).toEqual([
+      {
+        status: "complete",
+        message: `Completed Codex run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      },
+    ]);
+    expect(stopResponse.statusCode).toBe(409);
+    expect(stopResponse.json()).toEqual({
+      error: "No active run to stop.",
     });
   });
 
