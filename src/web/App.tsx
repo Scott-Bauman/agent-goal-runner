@@ -82,6 +82,14 @@ type RunSummaryEvent = {
   message: string;
 } | null;
 
+type RunStartResponse = {
+  status: RunnerStatus;
+};
+
+type RunStopResponse = {
+  status: RunnerStatus;
+};
+
 type RepositorySelectionState =
   | {
       status: "loading";
@@ -98,6 +106,12 @@ type RepositorySelectionState =
 
 type RepositoryPathFormState = {
   status: "idle" | "submitting";
+  error: string | null;
+  issues: ValidationIssue[];
+};
+
+type RunControlFormState = {
+  status: "idle" | "starting" | "stopping";
   error: string | null;
   issues: ValidationIssue[];
 };
@@ -162,6 +176,7 @@ const DEFAULT_REPEAT_PROMPT = [
   "",
   "Complete the next valid unchecked item.",
 ].join("\n");
+const RUNNER_ACTIVE_STATUSES = new Set<RunnerStatus>(["running", "stopping"]);
 
 function getRepositoryLabel(repositorySelection: RepositorySelectionState) {
   return repositorySelection.status === "loading"
@@ -183,11 +198,27 @@ function formatRepositorySelectionError(errorResponse: ApiErrorResponse): {
   };
 }
 
+function formatApiError(errorResponse: ApiErrorResponse, fallback: string): {
+  error: string;
+  issues: ValidationIssue[];
+} {
+  const issues = Array.isArray(errorResponse.issues) ? errorResponse.issues : [];
+
+  return {
+    error: errorResponse.error ?? fallback,
+    issues,
+  };
+}
+
 function getApiErrorMessage(
   errorResponse: ApiErrorResponse,
   fallback: string,
 ): string {
   return errorResponse.error ?? fallback;
+}
+
+function isActiveRunnerStatus(status: RunnerStatus): boolean {
+  return RUNNER_ACTIVE_STATUSES.has(status);
 }
 
 function RunnerStatusBadge({ status }: { status: RunnerStatus }) {
@@ -239,10 +270,14 @@ function TopBar({
 
 function ControlsPanel({
   onRepositorySelected,
+  onRunnerStatusChange,
   repositorySelection,
+  runnerStatus,
 }: {
   onRepositorySelected: (repositoryPath: string) => void;
+  onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
+  runnerStatus: RunnerStatus;
 }) {
   const [repositoryPathInput, setRepositoryPathInput] = useState("");
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
@@ -255,18 +290,53 @@ function ControlsPanel({
       error: null,
       issues: [],
     });
+  const [runControlForm, setRunControlForm] = useState<RunControlFormState>({
+    status: "idle",
+    error: null,
+    issues: [],
+  });
   const selectedRepositoryLabel = getRepositoryLabel(repositorySelection);
+  const selectedRepositoryPath =
+    repositorySelection.status === "ready"
+      ? repositorySelection.repositoryPath
+      : null;
   const repositoryPathErrorId = "repository-path-error";
   const repositoryPathIssuesId = "repository-path-issues";
+  const runControlErrorId = "run-control-error";
+  const runControlIssuesId = "run-control-issues";
   const hasRepositoryPathError =
     repositoryPathForm.error !== null || repositoryPathForm.issues.length > 0;
+  const hasRunControlError =
+    runControlForm.error !== null || runControlForm.issues.length > 0;
   const repositoryPathIssueMessages = repositoryPathForm.issues.map(
     (issue) =>
       issue.path === "path" ? issue.message : `${issue.path}: ${issue.message}`,
   );
+  const runControlIssueMessages = runControlForm.issues.map((issue) =>
+    issue.path === "request" ? issue.message : `${issue.path}: ${issue.message}`,
+  );
   const repositoryPathDescribedBy = hasRepositoryPathError
     ? `${repositoryPathErrorId} ${repositoryPathIssuesId}`
     : undefined;
+  const parsedRunCount = Number(runCount);
+  const isRunCountValid =
+    Number.isInteger(parsedRunCount) &&
+    parsedRunCount >= 1 &&
+    parsedRunCount <= 100;
+  const isPromptValid = repeatPrompt.trim().length > 0;
+  const isRunActive = isActiveRunnerStatus(runnerStatus);
+  const isRunControlPending = runControlForm.status !== "idle";
+  const canStartRun =
+    selectedRepositoryPath !== null &&
+    isPromptValid &&
+    isRunCountValid &&
+    !isRunActive &&
+    !isRunControlPending &&
+    repositoryPathForm.status !== "submitting";
+  const canStopRun =
+    runnerStatus === "running" &&
+    !isRunControlPending &&
+    repositoryPathForm.status !== "submitting";
 
   useEffect(() => {
     if (repositorySelection.status !== "ready") {
@@ -274,6 +344,11 @@ function ControlsPanel({
     }
 
     setRepositoryPathInput(repositorySelection.repositoryPath ?? "");
+    setRunControlForm({
+      status: "idle",
+      error: null,
+      issues: [],
+    });
   }, [repositorySelection]);
 
   async function handleRepositorySubmit(event: FormEvent<HTMLFormElement>) {
@@ -334,6 +409,120 @@ function ControlsPanel({
       setRepositoryPathForm({
         status: "idle",
         error: "Failed to select repository. Confirm the backend is running.",
+        issues: [],
+      });
+    }
+  }
+
+  async function handleRunStart() {
+    if (!selectedRepositoryPath) {
+      setRunControlForm({
+        status: "idle",
+        error: "Select a repository before starting a run.",
+        issues: [],
+      });
+      return;
+    }
+
+    if (!isPromptValid || !isRunCountValid || isRunActive) {
+      return;
+    }
+
+    setRunControlForm({
+      status: "starting",
+      error: null,
+      issues: [],
+    });
+
+    try {
+      const response = await fetch("/api/run/start", {
+        body: JSON.stringify({
+          autoCommit,
+          prompt: repeatPrompt,
+          runCount: parsedRunCount,
+          verificationCommand,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const responseBody = (await response.json()) as
+        | RunStartResponse
+        | ApiErrorResponse;
+
+      if (!response.ok) {
+        const formattedError = formatApiError(
+          responseBody as ApiErrorResponse,
+          "Failed to start run.",
+        );
+
+        setRunControlForm({
+          status: "idle",
+          error: formattedError.error,
+          issues: formattedError.issues,
+        });
+        return;
+      }
+
+      onRunnerStatusChange((responseBody as RunStartResponse).status);
+      setRunControlForm({
+        status: "idle",
+        error: null,
+        issues: [],
+      });
+    } catch {
+      setRunControlForm({
+        status: "idle",
+        error: "Failed to start run. Confirm the backend is running.",
+        issues: [],
+      });
+    }
+  }
+
+  async function handleRunStop() {
+    if (runnerStatus !== "running") {
+      return;
+    }
+
+    setRunControlForm({
+      status: "stopping",
+      error: null,
+      issues: [],
+    });
+
+    try {
+      const response = await fetch("/api/run/stop", {
+        method: "POST",
+      });
+      const responseBody = (await response.json()) as
+        | RunStopResponse
+        | ApiErrorResponse;
+
+      if (!response.ok) {
+        const formattedError = formatApiError(
+          responseBody as ApiErrorResponse,
+          "Failed to stop run.",
+        );
+
+        setRunControlForm({
+          status: "idle",
+          error: formattedError.error,
+          issues: formattedError.issues,
+        });
+        return;
+      }
+
+      onRunnerStatusChange((responseBody as RunStopResponse).status);
+      setRunControlForm({
+        status: "idle",
+        error: null,
+        issues: [],
+      });
+    } catch {
+      setRunControlForm({
+        status: "idle",
+        error: "Failed to stop run. Confirm the backend is running.",
         issues: [],
       });
     }
@@ -473,6 +662,7 @@ function ControlsPanel({
               Runs
             </label>
             <Input
+              aria-invalid={!isRunCountValid}
               id="run-count"
               inputMode="numeric"
               max={100}
@@ -542,7 +732,10 @@ function ControlsPanel({
 
         <div className="mt-auto grid gap-3 pt-2 sm:grid-cols-2">
           <Button
-            disabled
+            disabled={!canStartRun}
+            onClick={() => {
+              void handleRunStart();
+            }}
             type="button"
           >
             <Play
@@ -550,10 +743,13 @@ function ControlsPanel({
               data-icon="inline-start"
               strokeWidth={2}
             />
-            Start
+            {runControlForm.status === "starting" ? "Starting..." : "Start"}
           </Button>
           <Button
-            disabled
+            disabled={!canStopRun}
+            onClick={() => {
+              void handleRunStop();
+            }}
             type="button"
             variant="outline"
           >
@@ -562,9 +758,34 @@ function ControlsPanel({
               data-icon="inline-start"
               strokeWidth={2}
             />
-            Stop
+            {runControlForm.status === "stopping" ? "Stopping..." : "Stop"}
           </Button>
         </div>
+        {hasRunControlError ? (
+          <div
+            className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
+            role="alert"
+          >
+            {runControlForm.error ? (
+              <p
+                className="font-medium"
+                id={runControlErrorId}
+              >
+                {runControlForm.error}
+              </p>
+            ) : null}
+            {runControlIssueMessages.length > 0 ? (
+              <ul
+                className="flex flex-col gap-1"
+                id={runControlIssuesId}
+              >
+                {runControlIssueMessages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -1011,10 +1232,14 @@ function LogsSummaryPanel() {
 
 function OperationsWorkspace({
   onRepositorySelected,
+  onRunnerStatusChange,
   repositorySelection,
+  runnerStatus,
 }: {
   onRepositorySelected: (repositoryPath: string) => void;
+  onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
+  runnerStatus: RunnerStatus;
 }) {
   return (
     <div className="grid gap-4 lg:min-h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,20rem)] lg:grid-rows-[minmax(24rem,1fr)_minmax(14rem,0.45fr)]">
@@ -1024,7 +1249,9 @@ function OperationsWorkspace({
       <aside className="min-w-0 lg:col-start-2 lg:row-start-1 lg:min-h-0">
         <ControlsPanel
           onRepositorySelected={onRepositorySelected}
+          onRunnerStatusChange={onRunnerStatusChange}
           repositorySelection={repositorySelection}
+          runnerStatus={runnerStatus}
         />
       </aside>
       <div className="min-w-0 lg:col-span-2 lg:row-start-2 lg:min-h-0">
@@ -1040,6 +1267,7 @@ export function App() {
       status: "loading",
       repositoryPath: null,
     });
+  const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>("idle");
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -1081,7 +1309,7 @@ export function App() {
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-950">
-      <TopBar repositorySelection={repositorySelection} status="idle" />
+      <TopBar repositorySelection={repositorySelection} status={runnerStatus} />
       <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
         <OperationsWorkspace
           onRepositorySelected={(repositoryPath) => {
@@ -1090,7 +1318,9 @@ export function App() {
               repositoryPath,
             });
           }}
+          onRunnerStatusChange={setRunnerStatus}
           repositorySelection={repositorySelection}
+          runnerStatus={runnerStatus}
         />
       </div>
     </main>

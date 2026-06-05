@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, plus a local auto-commit switch. Remaining live run controls and connected status streaming are tracked in `goal.md`.
+The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, and start/stop controls wired to the run-loop API. Remaining connected status streaming, logs, and summary display work is tracked in `goal.md`.
 
 ## Current Behavior
 
@@ -10,15 +10,18 @@ The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite R
 - Backend exposes `GET /` with the app name and status, plus `GET /health` for a simple health check.
 - Frontend starts with Vite and renders a responsive operations-panel shell.
 - shadcn/ui is configured with local aliases, Tailwind semantic tokens, and generated focused primitives for badges, buttons, cards, empty states, inputs, and textareas.
-- The top bar shows the app name, selected repository path state, and idle status badge.
+- The top bar shows the app name, selected repository path state, and locally tracked runner status badge.
 - The main workspace has a left rendered `goal.md` document panel, a compact right-side controls panel, and a bottom logs plus latest-summary panel.
 - Repository path entry is available in the controls panel with selected-path display and frontend-ready validation errors.
 - When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
 - The repeat prompt textarea is editable and prefilled with a goal-driven default prompt for future run starts.
 - The run count input is editable and uses the same 1 through 100 numeric bounds accepted by the backend start endpoint.
 - The optional verification command input is editable and accepts the same single-command style that the backend validates when run starts are connected.
-- The auto-commit switch can be toggled locally in the controls panel and is ready for the later start action to include in run submissions.
-- Start, stop, logs, and latest-summary areas are present as disabled/static shell controls until later phases connect runtime behavior.
+- The auto-commit switch can be toggled locally in the controls panel and is included in run submissions.
+- The Start button submits the repeat prompt, run count, optional verification command, and auto-commit flag to `POST /api/run/start`.
+- The Start button is disabled until a repository is selected, the prompt is non-empty, the run count is from 1 through 100, no run is active, and no run-control request is pending.
+- The Stop button submits `POST /api/run/stop` and is enabled only while the frontend has a running status and no run-control request is pending.
+- The logs and latest-summary areas remain static shell panels until later phases connect runtime event display.
 - Vite proxies frontend `/api/*` requests to the local backend during development.
 - Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.
