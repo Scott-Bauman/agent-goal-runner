@@ -264,7 +264,7 @@ Before implementation, Codex must:
 - [x] Add unit tests for run-loop state transitions.
 - [x] Manually verify repository selection, goal creation, and goal rendering.
 - [x] Manually verify a one-run Codex loop with a harmless prompt.
-- [ ] Manually verify stop conditions: max run count, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
+- [x] Manually verify stop conditions: max run count, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
 - [ ] Update README.md with the completed Phase 9 behavior, commands, usage, and final verification status.
 
 ## Verification Guidance
