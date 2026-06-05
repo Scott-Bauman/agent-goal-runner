@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Activity,
   AlertCircle,
@@ -30,6 +30,7 @@ import {
   EmptyTitle,
 } from "@/web/components/ui/empty";
 import { Input } from "@/web/components/ui/input";
+import { renderGoalMarkdown } from "@/web/markdown";
 import { Textarea } from "@/web/components/ui/textarea";
 
 type RunnerStatus =
@@ -532,6 +533,13 @@ function GoalDocumentPanel({
     repositorySelection.status === "ready"
       ? repositorySelection.repositoryPath
       : null;
+  const renderedGoalHtml = useMemo(
+    () =>
+      goalFileState.status === "available" && goalFileState.markdown !== null
+        ? renderGoalMarkdown(goalFileState.markdown)
+        : null,
+    [goalFileState.markdown, goalFileState.status],
+  );
 
   async function loadGoalFile(signal?: AbortSignal) {
     setGoalFileState({
@@ -773,12 +781,13 @@ function GoalDocumentPanel({
 
     if (goalFileState.status === "available") {
       return (
-        <pre
-          className="min-h-full w-full whitespace-pre-wrap break-words font-mono text-xs leading-5 text-zinc-800"
+        <div
+          className="min-h-full w-full break-words text-sm leading-6 text-zinc-800"
+          dangerouslySetInnerHTML={{
+            __html: renderedGoalHtml ?? "",
+          }}
           title={goalFileState.goalPath ?? undefined}
-        >
-          {goalFileState.markdown}
-        </pre>
+        />
       );
     }
 
