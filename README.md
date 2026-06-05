@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, and editable repeat prompt plus run count fields. Remaining live run controls and connected status streaming are tracked in `goal.md`.
+The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, and editable repeat prompt, run count, and verification command fields. Remaining live run controls and connected status streaming are tracked in `goal.md`.
 
 ## Current Behavior
 
@@ -16,7 +16,8 @@ The MVP is currently in Phase 8 run controls. It has a Fastify backend, a Vite R
 - When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
 - The repeat prompt textarea is editable and prefilled with a goal-driven default prompt for future run starts.
 - The run count input is editable and uses the same 1 through 100 numeric bounds accepted by the backend start endpoint.
-- Verification, auto-commit, start, stop, logs, and latest-summary areas are present as disabled/static shell controls until later phases connect runtime behavior.
+- The optional verification command input is editable and accepts the same single-command style that the backend validates when run starts are connected.
+- Auto-commit, start, stop, logs, and latest-summary areas are present as disabled/static shell controls until later phases connect runtime behavior.
 - Vite proxies frontend `/api/*` requests to the local backend during development.
 - Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.

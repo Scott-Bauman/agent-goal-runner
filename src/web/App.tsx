@@ -247,6 +247,7 @@ function ControlsPanel({
   const [repositoryPathInput, setRepositoryPathInput] = useState("");
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
   const [runCount, setRunCount] = useState("1");
+  const [verificationCommand, setVerificationCommand] = useState("");
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
       status: "idle",
@@ -506,14 +507,16 @@ function ControlsPanel({
             className="text-xs font-medium text-zinc-700"
             htmlFor="verification-command"
           >
-            Verification
+            Verification command
           </label>
           <Input
-            className="bg-muted font-mono text-xs text-muted-foreground"
-            disabled
+            className="font-mono text-xs"
             id="verification-command"
             placeholder="npm test"
-            readOnly
+            onChange={(event) => {
+              setVerificationCommand(event.target.value);
+            }}
+            value={verificationCommand}
           />
         </div>
 
