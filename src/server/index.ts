@@ -6,6 +6,7 @@ import {
   type ChildProcessWithoutNullStreams,
   type SpawnOptionsWithoutStdio,
 } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -90,6 +91,10 @@ type ProcessSpawner = (
   args: string[],
   options: SpawnOptionsWithoutStdio,
 ) => ChildProcessWithoutNullStreams;
+type SpawnCommand = {
+  command: string;
+  args: string[];
+};
 type ParsedVerificationCommand = {
   executable: string;
   args: string[];
@@ -112,6 +117,42 @@ class GoalPathRestrictionError extends Error {
     super("goal.md resolves outside the selected repository.");
     this.name = "GoalPathRestrictionError";
   }
+}
+
+export function getCodexExecSpawnCommand(prompt: string): SpawnCommand {
+  if (process.platform !== "win32") {
+    return {
+      command: "codex",
+      args: ["exec", prompt],
+    };
+  }
+
+  for (const pathEntry of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!pathEntry) {
+      continue;
+    }
+
+    const codexEntrypoint = path.join(
+      pathEntry,
+      "node_modules",
+      "@openai",
+      "codex",
+      "bin",
+      "codex.js",
+    );
+
+    if (existsSync(codexEntrypoint)) {
+      return {
+        command: process.execPath,
+        args: [codexEntrypoint, "exec", prompt],
+      };
+    }
+  }
+
+  return {
+    command: "codex",
+    args: ["exec", prompt],
+  };
 }
 
 const SHELL_OPERATOR_CHARACTERS = new Set(["|", "&", ";", "<", ">", "`"]);
@@ -561,6 +602,19 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     publishRunStatus();
   }
 
+  function handleProcessSpawnError(
+    childProcess: ChildProcessWithoutNullStreams,
+    message: string,
+  ): void {
+    if (activeRunProcess !== childProcess) {
+      return;
+    }
+
+    activeRunProcess = null;
+    activeRunProcessKind = null;
+    failRun(message);
+  }
+
   function requestRunStop(): boolean {
     if (!activeRunProcess) {
       return false;
@@ -889,7 +943,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     const verificationCommandToRun = verificationCommandParse.parsed;
 
     function startCodexRun(runNumber: number): void {
-      const childProcess = spawnProcess("codex", ["exec", prompt], {
+      const codexCommand = getCodexExecSpawnCommand(prompt);
+      const childProcess = spawnProcess(codexCommand.command, codexCommand.args, {
         cwd: repositoryPath,
         windowsHide: true,
       });
@@ -899,6 +954,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       });
       childProcess.stderr.on("data", (chunk: Buffer | string) => {
         appendProcessLog("stderr", chunk);
+      });
+      childProcess.stdin.end();
+      childProcess.on("error", () => {
+        handleProcessSpawnError(
+          childProcess,
+          `Failed to start Codex run ${runNumber}; ensure the Codex CLI is installed and available on PATH.`,
+        );
       });
       childProcess.on("close", (code) => {
         void (async () => {
@@ -1107,6 +1169,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         gitProcess.stderr.on("data", (chunk: Buffer | string) => {
           appendProcessLog("stderr", chunk);
         });
+        gitProcess.on("error", () => {
+          handleProcessSpawnError(
+            gitProcess,
+            `Failed to start auto-commit status check after Codex run ${runNumber}; ensure git is installed and available on PATH.`,
+          );
+          resolve(null);
+        });
         gitProcess.on("close", (code) => {
           if (activeRunProcess !== gitProcess) {
             resolve(null);
@@ -1177,6 +1246,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         gitProcess.stderr.on("data", (chunk: Buffer | string) => {
           appendProcessLog("stderr", chunk);
         });
+        gitProcess.on("error", () => {
+          handleProcessSpawnError(
+            gitProcess,
+            "Failed to start git for auto-commit; ensure git is installed and available on PATH.",
+          );
+          resolve(false);
+        });
         gitProcess.on("close", (code) => {
           if (activeRunProcess !== gitProcess) {
             resolve(false);
@@ -1245,6 +1321,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         });
         verificationProcess.stderr.on("data", (chunk: Buffer | string) => {
           appendProcessLog("stderr", chunk);
+        });
+        verificationProcess.on("error", () => {
+          handleProcessSpawnError(
+            verificationProcess,
+            `Failed to start verification after Codex run ${runNumber}; ensure the verification executable is installed and available on PATH.`,
+          );
+          resolve(false);
         });
         verificationProcess.on("close", (code) => {
           if (activeRunProcess !== verificationProcess) {

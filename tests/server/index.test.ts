@@ -13,6 +13,7 @@ import {
   RUNNER_STATUSES,
   buildServer,
   detectGoalStopMarker,
+  getCodexExecSpawnCommand,
 } from "../../src/server/index";
 
 const chokidarMocks = vi.hoisted(() => {
@@ -51,8 +52,11 @@ let server: FastifyInstance | undefined;
 const tempPaths: string[] = [];
 
 function createMockRunProcess(pid = 321): ChildProcessWithoutNullStreams {
+  const stdin = new PassThrough();
+
   return Object.assign(new EventEmitter(), {
     pid,
+    stdin,
     stdout: new PassThrough(),
     stderr: new PassThrough(),
     kill: vi.fn(() => true),
@@ -1480,7 +1484,8 @@ describe("run start endpoint", () => {
 
   it("spawns codex exec in the selected repository for the first run", async () => {
     const repositoryPath = await createRepositoryPath();
-    const spawnProcess = vi.fn(() => createMockRunProcess());
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
     const app = await buildServer({
       spawnProcess,
     });
@@ -1502,16 +1507,69 @@ describe("run start endpoint", () => {
         runCount: 2,
       },
     });
+    const expectedCodexCommand = getCodexExecSpawnCommand(
+      "Use goal.md as the source of truth.",
+    );
 
     expect(response.statusCode).toBe(202);
     expect(spawnProcess).toHaveBeenCalledWith(
-      "codex",
-      ["exec", "Use goal.md as the source of truth."],
+      expectedCodexCommand.command,
+      expectedCodexCommand.args,
       {
         cwd: path.normalize(repositoryPath),
         windowsHide: true,
       },
     );
+    expect(runProcess.stdin.writableEnded).toBe(true);
+  });
+
+  it("fails the run when Codex cannot be started", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const app = await buildServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    server = app;
+    const origin = await listenOnRandomPort(app);
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit("error", new Error("spawn codex ENOENT"));
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(summaryPayloads).toEqual([
+      {
+        status: "failed",
+        message:
+          "Failed to start Codex run 1; ensure the Codex CLI is installed and available on PATH.",
+      },
+    ]);
   });
 
   it("streams Codex stdout and stderr to connected SSE clients", async () => {
@@ -2404,12 +2462,15 @@ describe("run start endpoint", () => {
 
     firstRunProcess.emit("close", 0, null);
     const nextRunSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+    const expectedCodexCommand = getCodexExecSpawnCommand(
+      "Use goal.md as the source of truth.",
+    );
 
     expect(spawnProcess).toHaveBeenCalledTimes(2);
     expect(spawnProcess).toHaveBeenNthCalledWith(
       2,
-      "codex",
-      ["exec", "Use goal.md as the source of truth."],
+      expectedCodexCommand.command,
+      expectedCodexCommand.args,
       {
         cwd: path.normalize(repositoryPath),
         windowsHide: true,
