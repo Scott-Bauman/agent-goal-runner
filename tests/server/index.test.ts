@@ -413,6 +413,7 @@ describe("repository selection endpoint", () => {
   });
 
   it.each([
+    ["missing request body", undefined, "request", "Required"],
     ["missing path", {}, "path", "Required"],
     ["empty path", { path: "   " }, "path", "Path is required."],
     [
@@ -436,27 +437,27 @@ describe("repository selection endpoint", () => {
   ])(
     "rejects an invalid payload with frontend-ready issues: %s",
     async (_name, payload, issuePath, issueMessage) => {
-    const app = await getServer();
+      const app = await getServer();
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload,
-    });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/repository/select",
+        payload,
+      });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: "Invalid repository selection request.",
-      code: "VALIDATION_ERROR",
-    });
-    expect(response.json().issues).toEqual(
-      expect.arrayContaining([
-        {
-          path: issuePath,
-          message: issueMessage,
-        },
-      ]),
-    );
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: "Invalid repository selection request.",
+        code: "VALIDATION_ERROR",
+      });
+      expect(response.json().issues).toEqual(
+        expect.arrayContaining([
+          {
+            path: issuePath,
+            message: issueMessage,
+          },
+        ]),
+      );
     },
   );
 
@@ -1007,6 +1008,7 @@ describe("run start endpoint", () => {
   });
 
   it.each([
+    ["missing request body", undefined, "request", "Required"],
     ["missing prompt", { runCount: 1 }, "prompt", "Required"],
     ["empty prompt", { prompt: "   ", runCount: 1 }, "prompt", "Prompt is required."],
     [
@@ -1026,6 +1028,12 @@ describe("run start endpoint", () => {
       { prompt: "Use goal.md as the source of truth.", runCount: 0 },
       "runCount",
       "Run count must be at least 1.",
+    ],
+    [
+      "run count above maximum",
+      { prompt: "Use goal.md as the source of truth.", runCount: 101 },
+      "runCount",
+      "Run count must be at most 100.",
     ],
     [
       "non-string verification command",

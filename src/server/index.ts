@@ -163,7 +163,8 @@ const runStartSchema = z
         required_error: "Run count is required.",
       })
       .int("Run count must be a whole number.")
-      .min(1, "Run count must be at least 1."),
+      .min(1, "Run count must be at least 1.")
+      .max(100, "Run count must be at most 100."),
   })
   .strict();
 const emptyGoalRequestSchema = z.object({}).strict();
