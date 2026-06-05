@@ -1,8 +1,7 @@
 ---
-
 name: goal-runner-framework
-description: Create, repair, or refine concise goal.md files for Agent-driven multi-pass implementation work. Use only for durable Agent source-of-truth control documents with scope boundaries, execution discipline, verification guidance, blocked handling, checklist quality, and completion marker policy. Do not use for implementing project code or running checklist items.
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+description: Create, repair, or refine concise goal.md files for Agent-driven multi-pass implementation work. Use only for durable Agent source-of-truth control documents with scope boundaries, execution discipline, verification guidance, blocked handling checklist quality, and completion marker policy. Do not use for implementing project code or running checklist items.
+---
 
 # Goal Runner Framework Skill
 
