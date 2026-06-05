@@ -224,6 +224,27 @@ const INITIAL_RUNTIME_STREAM_STATE: RuntimeStreamState = {
   latestSummary: null,
 };
 
+const connectionStatusConfig: Record<
+  RuntimeStreamState["connectionStatus"],
+  {
+    label: string;
+    variant: BadgeVariant;
+  }
+> = {
+  connecting: {
+    label: "Connecting",
+    variant: "outline",
+  },
+  open: {
+    label: "Stream open",
+    variant: "secondary",
+  },
+  error: {
+    label: "Stream error",
+    variant: "destructive",
+  },
+};
+
 function getRepositoryLabel(repositorySelection: RepositorySelectionState) {
   return repositorySelection.status === "loading"
     ? "Loading repository..."
@@ -276,6 +297,29 @@ function parseSseData<T>(event: MessageEvent<string>): T | null {
     return JSON.parse(event.data) as T;
   } catch {
     return null;
+  }
+}
+
+function formatProgress(progress: RunProgressEvent): string {
+  if (progress.totalRuns === null) {
+    return progress.currentRun > 0 ? `Run ${progress.currentRun}` : "No active run";
+  }
+
+  if (progress.totalRuns <= 0 || progress.currentRun <= 0) {
+    return "No active run";
+  }
+
+  return `Run ${progress.currentRun} of ${progress.totalRuns}`;
+}
+
+function formatLogStream(stream: LogEntry["stream"]): string {
+  switch (stream) {
+    case "stderr":
+      return "stderr";
+    case "stdout":
+      return "stdout";
+    case "system":
+      return "system";
   }
 }
 
@@ -1162,7 +1206,18 @@ function GoalDocumentPanel({
   );
 }
 
-function LogsSummaryPanel() {
+function LogsSummaryPanel({
+  runnerStatus,
+  runtimeStream,
+}: {
+  runnerStatus: RunnerStatus;
+  runtimeStream: RuntimeStreamState;
+}) {
+  const connectionConfig =
+    connectionStatusConfig[runtimeStream.connectionStatus];
+  const latestSummary = runtimeStream.latestSummary;
+  const progressLabel = formatProgress(runtimeStream.progress);
+
   return (
     <Card
       aria-labelledby="logs-summary-title"
@@ -1183,9 +1238,17 @@ function LogsSummaryPanel() {
             Logs
           </CardTitle>
         </div>
-        <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
-          Latest run
-        </CardDescription>
+        <div className="flex min-w-0 items-center gap-2">
+          <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
+            {progressLabel}
+          </CardDescription>
+          <Badge
+            className="h-6 w-fit shrink-0"
+            variant={connectionConfig.variant}
+          >
+            {connectionConfig.label}
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent className="grid min-h-0 flex-1 gap-0 p-0 md:grid-cols-[minmax(0,1fr)_18rem]">
         <section
@@ -1205,10 +1268,41 @@ function LogsSummaryPanel() {
               Live logs
             </h2>
           </div>
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-x-auto bg-zinc-950 px-4 py-8">
-            <p className="max-w-sm text-center font-mono text-xs leading-5 text-zinc-400">
-              Run output will stream here when a Codex loop starts.
-            </p>
+          <div
+            aria-live="polite"
+            className="min-h-0 flex-1 overflow-auto bg-zinc-950 px-4 py-3"
+          >
+            {runtimeStream.logs.length > 0 ? (
+              <ol className="grid gap-2">
+                {runtimeStream.logs.map((entry) => (
+                  <li
+                    className="grid min-w-0 gap-1 font-mono text-xs leading-5 text-zinc-100 sm:grid-cols-[4.5rem_minmax(0,1fr)]"
+                    key={entry.id}
+                  >
+                    <span
+                      className={
+                        entry.stream === "stderr"
+                          ? "font-semibold text-red-300"
+                          : entry.stream === "stdout"
+                            ? "font-semibold text-emerald-300"
+                            : "font-semibold text-sky-300"
+                      }
+                    >
+                      {formatLogStream(entry.stream)}
+                    </span>
+                    <span className="min-w-0 whitespace-pre-wrap break-words text-zinc-200">
+                      {entry.message}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="flex min-h-full items-center justify-center py-5">
+                <p className="max-w-sm text-center font-mono text-xs leading-5 text-zinc-400">
+                  Run output will stream here when a Codex loop starts.
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1232,18 +1326,31 @@ function LogsSummaryPanel() {
           <dl className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 py-4 text-xs">
             <div className="grid gap-1">
               <dt className="font-medium text-zinc-500">Status</dt>
-              <dd className="text-sm font-medium text-zinc-800">Idle</dd>
+              <dd>
+                <RunnerStatusBadge status={runnerStatus} />
+              </dd>
             </div>
             <div className="grid gap-1">
               <dt className="font-medium text-zinc-500">Progress</dt>
-              <dd className="text-sm font-medium text-zinc-800">No active run</dd>
+              <dd className="text-sm font-medium text-zinc-800">
+                {progressLabel}
+              </dd>
             </div>
             <div className="grid gap-1">
               <dt className="font-medium text-zinc-500">Last event</dt>
               <dd className="leading-5 text-muted-foreground">
-                Run summaries will appear here after backend events are connected.
+                {latestSummary?.message ??
+                  "Run summaries will appear here after backend events are received."}
               </dd>
             </div>
+            {latestSummary ? (
+              <div className="grid gap-1">
+                <dt className="font-medium text-zinc-500">Event status</dt>
+                <dd className="text-sm font-medium text-zinc-800">
+                  {statusBadgeConfig[latestSummary.status].label}
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </section>
       </CardContent>
@@ -1257,12 +1364,14 @@ function OperationsWorkspace({
   onRunnerStatusChange,
   repositorySelection,
   runnerStatus,
+  runtimeStream,
 }: {
   goalRefreshToken: number;
   onRepositorySelected: (repositoryPath: string) => void;
   onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
   runnerStatus: RunnerStatus;
+  runtimeStream: RuntimeStreamState;
 }) {
   return (
     <div className="grid gap-4 lg:min-h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,20rem)] lg:grid-rows-[minmax(24rem,1fr)_minmax(14rem,0.45fr)]">
@@ -1281,7 +1390,10 @@ function OperationsWorkspace({
         />
       </aside>
       <div className="min-w-0 lg:col-span-2 lg:row-start-2 lg:min-h-0">
-        <LogsSummaryPanel />
+        <LogsSummaryPanel
+          runnerStatus={runnerStatus}
+          runtimeStream={runtimeStream}
+        />
       </div>
     </div>
   );
@@ -1295,7 +1407,7 @@ export function App() {
     });
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>("idle");
   const [goalRefreshToken, setGoalRefreshToken] = useState(0);
-  const [, setRuntimeStream] = useState<RuntimeStreamState>(
+  const [runtimeStream, setRuntimeStream] = useState<RuntimeStreamState>(
     INITIAL_RUNTIME_STREAM_STATE,
   );
   const selectedRepositoryPathRef = useRef<string | null>(null);
@@ -1469,6 +1581,7 @@ export function App() {
           onRunnerStatusChange={setRunnerStatus}
           repositorySelection={repositorySelection}
           runnerStatus={runnerStatus}
+          runtimeStream={runtimeStream}
         />
       </div>
     </main>
