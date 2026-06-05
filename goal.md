@@ -248,7 +248,7 @@ Before implementation, Codex must:
 ### Phase 8: Run Controls and Live Status
 
 - [x] Add repeat prompt textarea.
-- [ ] Add run count input.
+- [x] Add run count input.
 - [ ] Add optional verification command input.
 - [ ] Add auto-commit switch.
 - [ ] Add start and stop buttons with correct disabled states.

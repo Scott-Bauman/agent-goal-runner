@@ -246,6 +246,7 @@ function ControlsPanel({
 }) {
   const [repositoryPathInput, setRepositoryPathInput] = useState("");
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
+  const [runCount, setRunCount] = useState("1");
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
       status: "idle",
@@ -470,13 +471,16 @@ function ControlsPanel({
               Runs
             </label>
             <Input
-              className="bg-muted text-muted-foreground"
-              disabled
               id="run-count"
+              inputMode="numeric"
+              max={100}
               min={1}
-              readOnly
+              onChange={(event) => {
+                setRunCount(event.target.value);
+              }}
+              step={1}
               type="number"
-              value={1}
+              value={runCount}
             />
           </div>
           <div className="flex flex-col gap-2">
