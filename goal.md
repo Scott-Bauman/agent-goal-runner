@@ -243,7 +243,7 @@ Before implementation, Codex must:
 - [x] Sanitize rendered HTML with DOMPurify. DOMPurify Documentation: https://github.com/cure53/DOMPurify and https://www.npmjs.com/package/dompurify
 - [x] Style markdown output for readability.
 - [x] Refresh rendering when the backend reports a file change or completed run.
-- [ ] Update README.md with the completed Phase 7 behavior, commands, and usage.
+- [x] Update README.md with the completed Phase 7 behavior, commands, and usage.
 
 ### Phase 8: Run Controls and Live Status
 

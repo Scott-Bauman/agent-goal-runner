@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP is currently through Phase 6 frontend shell and layout. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, and optional auto-commit. Runtime markdown rendering, live run controls, and connected status streaming are tracked in `goal.md`.
+The MVP is currently through Phase 7 markdown rendering. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, and sanitized runtime markdown rendering. Live run controls and connected status streaming are tracked in `goal.md`.
 
 ## Current Behavior
 
@@ -11,7 +11,7 @@ The MVP is currently through Phase 6 frontend shell and layout. It has a Fastify
 - Frontend starts with Vite and renders a responsive operations-panel shell.
 - shadcn/ui is configured with local aliases, Tailwind semantic tokens, and generated focused primitives for badges, buttons, cards, empty states, inputs, and textareas.
 - The top bar shows the app name, selected repository path state, and idle status badge.
-- The main workspace has a left `goal.md` document panel, a compact right-side controls panel, and a bottom logs plus latest-summary panel.
+- The main workspace has a left rendered `goal.md` document panel, a compact right-side controls panel, and a bottom logs plus latest-summary panel.
 - Repository path entry is available in the controls panel with selected-path display and frontend-ready validation errors.
 - When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
 - Repeat prompt, run count, verification, auto-commit, start, stop, logs, and latest-summary areas are present as disabled/static shell controls until later phases connect runtime behavior.
@@ -24,11 +24,14 @@ The MVP is currently through Phase 6 frontend shell and layout. It has a Fastify
 - A default `goal.md` can be created only by explicit request with `POST /api/goal`, and existing goals are not overwritten.
 - Goal API requests reject caller-provided alternate markdown paths or plan names.
 - Validation failures return frontend-ready issue details with `VALIDATION_ERROR`.
+- Available `goal.md` content is converted with `marked` using GitHub-flavored markdown and sanitized with DOMPurify before rendering in the browser.
+- Rendered markdown includes readable styling for headings, lists, task checkboxes, links, inline code, code blocks, blockquotes, rules, and tables.
 - Server-Sent Events are available through `GET /api/events`.
 - New SSE clients receive the current `status`, `logs`, `progress`, and `summary` snapshot.
 - Selecting a repository starts or replaces a watcher for only that repository's `goal.md`.
 - Repository selection changes broadcast a `status` event with the selected repository path.
 - `goal.md` add, change, and unlink events broadcast `goalChanged` with the repository path, goal path, and existence state.
+- The frontend refreshes the rendered `goal.md` after matching `goalChanged` events and after complete or blocked run summaries.
 - Run-loop statuses include `idle`, `running`, `stopping`, `complete`, `blocked`, `failed`, and `stopped`.
 - Codex runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100.
 - The run loop requires a selected repository, rejects concurrent starts, and spawns `codex exec <prompt>` inside the selected repository for each pass.
