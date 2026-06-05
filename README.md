@@ -2,7 +2,7 @@
 
 Lightweight local operations panel for repeatedly running the Codex CLI against a selected repository's `goal.md`.
 
-The MVP has completed Phase 8 run controls and live status. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, start/stop controls wired to the run-loop API, and connected live status, progress, logs, and latest-summary display.
+The MVP has completed Phase 9 verification and polish. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Codex run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, start/stop controls wired to the run-loop API, connected live status, progress, logs, and latest-summary display, and unit coverage for the core safety and run-loop behavior.
 
 ## Current Behavior
 
@@ -54,6 +54,8 @@ The MVP has completed Phase 8 run controls and live status. It has a Fastify bac
 - Verification runs only after a successful Codex pass, streams stdout and stderr over SSE, and stops the run loop on failure.
 - Auto-commit is opt-in per run. When enabled, the backend runs `git add -A`, checks `git status --porcelain`, skips commits when there are no changes, creates a generated commit message when changes exist, streams git output over SSE, and stops the run loop on git failure.
 - Run progress and latest summary updates are broadcast over SSE.
+- Unit tests cover stop-condition detection, request validation, `goal.md` path restrictions, and run-loop state transitions.
+- Manual Phase 9 verification covered repository selection, default goal creation, goal rendering, a harmless one-run Codex loop, max-run stop, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
 - Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
 
 ## Requirements
@@ -135,6 +137,15 @@ Build production outputs:
 ```sh
 npm run build
 ```
+
+Final MVP verification status: passed.
+
+- `npm run typecheck`
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+Browser automation is intentionally not part of normal verification for this project; visual checks are manual unless explicitly requested.
 
 ## Project Control
 

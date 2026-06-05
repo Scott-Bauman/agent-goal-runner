@@ -265,7 +265,7 @@ Before implementation, Codex must:
 - [x] Manually verify repository selection, goal creation, and goal rendering.
 - [x] Manually verify a one-run Codex loop with a harmless prompt.
 - [x] Manually verify stop conditions: max run count, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
-- [ ] Update README.md with the completed Phase 9 behavior, commands, usage, and final verification status.
+- [x] Update README.md with the completed Phase 9 behavior, commands, usage, and final verification status.
 
 ## Verification Guidance
 
@@ -318,3 +318,5 @@ Add exactly one of these markers only when appropriate:
 
 - `GOAL_COMPLETE` when every required MVP checkbox is complete and final verification passes.
 - `GOAL_BLOCKED` only when the user explicitly asks Codex to persist blocked status in this file.
+
+GOAL_COMPLETE
