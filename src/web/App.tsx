@@ -782,7 +782,7 @@ function GoalDocumentPanel({
     if (goalFileState.status === "available") {
       return (
         <div
-          className="min-h-full w-full break-words text-sm leading-6 text-zinc-800"
+          className="goal-markdown min-h-full w-full break-words"
           dangerouslySetInnerHTML={{
             __html: renderedGoalHtml ?? "",
           }}

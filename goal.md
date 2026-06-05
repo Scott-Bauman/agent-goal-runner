@@ -241,7 +241,7 @@ Before implementation, Codex must:
 - [x] Fetch `goal.md` from the backend.
 - [x] Convert markdown with `marked`. Marked Documentation: https://marked.js.org/ and https://www.npmjs.com/package/marked
 - [x] Sanitize rendered HTML with DOMPurify. DOMPurify Documentation: https://github.com/cure53/DOMPurify and https://www.npmjs.com/package/dompurify
-- [ ] Style markdown output for readability.
+- [x] Style markdown output for readability.
 - [ ] Refresh rendering when the backend reports a file change or completed run.
 - [ ] Update README.md with the completed Phase 7 behavior, commands, and usage.
 
