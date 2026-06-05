@@ -145,9 +145,9 @@ function ControlsPanel({
     <Card
       aria-labelledby="controls-panel-title"
       role="region"
-      className="flex min-w-0 flex-col rounded-lg lg:min-h-[calc(100vh-8rem)]"
+      className="flex min-h-0 min-w-0 flex-col rounded-lg lg:h-full"
     >
-      <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
+      <CardHeader className="flex min-h-14 flex-row flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:flex-nowrap sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
           <Settings2
             aria-hidden="true"
@@ -161,11 +161,11 @@ function ControlsPanel({
             Controls
           </CardTitle>
         </div>
-        <CardDescription className="shrink-0 text-xs font-medium">
+        <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
           Run setup
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4 px-4 py-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-2">
           <label
             className="text-xs font-medium text-zinc-700"
@@ -199,7 +199,7 @@ function ControlsPanel({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
             <label
               className="text-xs font-medium text-zinc-700"
@@ -251,7 +251,7 @@ function ControlsPanel({
           />
         </div>
 
-        <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+        <div className="mt-auto grid gap-3 pt-2 sm:grid-cols-2">
           <Button
             disabled
             type="button"
@@ -299,9 +299,9 @@ function GoalDocumentPanel({
     <Card
       aria-labelledby="goal-document-title"
       role="region"
-      className="flex min-h-[32rem] min-w-0 flex-col rounded-lg lg:min-h-[calc(100vh-8rem)]"
+      className="flex min-h-[24rem] min-w-0 flex-col rounded-lg sm:min-h-[28rem] lg:h-full lg:min-h-0"
     >
-      <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
+      <CardHeader className="flex min-h-14 flex-row flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:flex-nowrap sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
           <FileText
             aria-hidden="true"
@@ -315,11 +315,11 @@ function GoalDocumentPanel({
             goal.md
           </CardTitle>
         </div>
-        <CardDescription className="shrink-0 text-xs font-medium">
+        <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
           Rendered document
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-1 items-center justify-center px-4 py-10">
+      <CardContent className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-10">
         <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
           {panelMessage}
         </p>
@@ -333,9 +333,9 @@ function LogsSummaryPanel() {
     <Card
       aria-labelledby="logs-summary-title"
       role="region"
-      className="flex min-h-64 min-w-0 flex-col rounded-lg"
+      className="flex min-h-64 min-w-0 flex-col rounded-lg lg:h-full lg:min-h-0"
     >
-      <CardHeader className="flex min-h-14 flex-row items-center justify-between gap-3 border-b px-4 py-0">
+      <CardHeader className="flex min-h-14 flex-row flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:flex-nowrap sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
           <Terminal
             aria-hidden="true"
@@ -349,14 +349,14 @@ function LogsSummaryPanel() {
             Logs
           </CardTitle>
         </div>
-        <CardDescription className="shrink-0 text-xs font-medium">
+        <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
           Latest run
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid flex-1 gap-0 p-0 md:grid-cols-[minmax(0,1fr)_18rem]">
+      <CardContent className="grid min-h-0 flex-1 gap-0 p-0 md:grid-cols-[minmax(0,1fr)_18rem]">
         <section
           aria-labelledby="live-logs-title"
-          className="flex min-h-48 min-w-0 flex-col border-b md:border-b-0 md:border-r"
+          className="flex min-h-48 min-w-0 flex-col border-b md:border-b-0 md:border-r lg:min-h-0"
         >
           <div className="flex h-11 items-center gap-2 border-b px-4">
             <Terminal
@@ -371,7 +371,7 @@ function LogsSummaryPanel() {
               Live logs
             </h2>
           </div>
-          <div className="flex flex-1 items-center justify-center bg-zinc-950 px-4 py-8">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-x-auto bg-zinc-950 px-4 py-8">
             <p className="max-w-sm text-center font-mono text-xs leading-5 text-zinc-400">
               Run output will stream here when a Codex loop starts.
             </p>
@@ -380,7 +380,7 @@ function LogsSummaryPanel() {
 
         <section
           aria-labelledby="latest-summary-title"
-          className="flex min-h-48 min-w-0 flex-col"
+          className="flex min-h-48 min-w-0 flex-col lg:min-h-0"
         >
           <div className="flex h-11 items-center gap-2 border-b px-4">
             <Activity
@@ -395,7 +395,7 @@ function LogsSummaryPanel() {
               Latest summary
             </h2>
           </div>
-          <dl className="grid flex-1 content-start gap-3 px-4 py-4 text-xs">
+          <dl className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 py-4 text-xs">
             <div className="grid gap-1">
               <dt className="font-medium text-zinc-500">Status</dt>
               <dd className="text-sm font-medium text-zinc-800">Idle</dd>
@@ -423,14 +423,14 @@ function OperationsWorkspace({
   repositorySelection: RepositorySelectionState;
 }) {
   return (
-    <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="min-w-0 lg:col-start-1">
+    <div className="grid gap-4 lg:min-h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,20rem)] lg:grid-rows-[minmax(24rem,1fr)_minmax(14rem,0.45fr)]">
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:min-h-0">
         <GoalDocumentPanel repositorySelection={repositorySelection} />
       </div>
-      <aside className="min-w-0 lg:col-start-2">
+      <aside className="min-w-0 lg:col-start-2 lg:row-start-1 lg:min-h-0">
         <ControlsPanel repositorySelection={repositorySelection} />
       </aside>
-      <div className="min-w-0 lg:col-span-2">
+      <div className="min-w-0 lg:col-span-2 lg:row-start-2 lg:min-h-0">
         <LogsSummaryPanel />
       </div>
     </div>
