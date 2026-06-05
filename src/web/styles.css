@@ -52,10 +52,17 @@
     box-sizing: border-box;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     min-width: 320px;
     min-height: 100vh;
     margin: 0;
+    overflow: hidden;
     background: #f7f7f8;
     color: #18181b;
     font-family:

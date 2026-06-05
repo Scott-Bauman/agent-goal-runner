@@ -634,7 +634,7 @@ function ControlsPanel({
     <Card
       aria-labelledby="controls-panel-title"
       role="region"
-      className="flex min-h-0 min-w-0 flex-col rounded-lg lg:h-full"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg"
     >
       <CardHeader className="flex min-h-14 flex-row flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:flex-nowrap sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
@@ -1176,7 +1176,7 @@ function GoalDocumentPanel({
     <Card
       aria-labelledby="goal-document-title"
       role="region"
-      className="flex min-h-[24rem] min-w-0 flex-col rounded-lg sm:min-h-[28rem] lg:h-full lg:min-h-0"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg"
     >
       <CardHeader className="flex min-h-14 flex-row flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:flex-nowrap sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
@@ -1222,7 +1222,7 @@ function LogsSummaryPanel({
     <Card
       aria-labelledby="logs-summary-title"
       role="region"
-      className="flex min-h-64 min-w-0 flex-col rounded-lg lg:h-full lg:min-h-0"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg"
     >
       <CardHeader className="flex min-h-14 flex-row flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:flex-nowrap sm:py-0">
         <div className="flex min-w-0 items-center gap-2">
@@ -1250,10 +1250,10 @@ function LogsSummaryPanel({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="grid min-h-0 flex-1 gap-0 p-0 md:grid-cols-[minmax(0,1fr)_18rem]">
+      <CardContent className="grid min-h-0 flex-1 gap-0 overflow-hidden p-0 md:grid-cols-[minmax(0,1fr)_18rem]">
         <section
           aria-labelledby="live-logs-title"
-          className="flex min-h-48 min-w-0 flex-col border-b md:border-b-0 md:border-r lg:min-h-0"
+          className="flex min-h-0 min-w-0 flex-col border-b md:border-b-0 md:border-r"
         >
           <div className="flex h-11 items-center gap-2 border-b px-4">
             <Terminal
@@ -1308,7 +1308,7 @@ function LogsSummaryPanel({
 
         <section
           aria-labelledby="latest-summary-title"
-          className="flex min-h-48 min-w-0 flex-col lg:min-h-0"
+          className="flex min-h-0 min-w-0 flex-col"
         >
           <div className="flex h-11 items-center gap-2 border-b px-4">
             <Activity
@@ -1374,14 +1374,14 @@ function OperationsWorkspace({
   runtimeStream: RuntimeStreamState;
 }) {
   return (
-    <div className="grid gap-4 lg:min-h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,20rem)] lg:grid-rows-[minmax(24rem,1fr)_minmax(14rem,0.45fr)]">
-      <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:min-h-0">
+    <div className="grid h-full min-h-0 w-full grid-rows-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.85fr)] gap-3 overflow-hidden sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,20rem)] lg:grid-rows-[minmax(0,1fr)_minmax(0,0.42fr)]">
+      <div className="min-h-0 min-w-0 overflow-hidden lg:col-start-1 lg:row-start-1">
         <GoalDocumentPanel
           goalRefreshToken={goalRefreshToken}
           repositorySelection={repositorySelection}
         />
       </div>
-      <aside className="min-w-0 lg:col-start-2 lg:row-start-1 lg:min-h-0">
+      <aside className="min-h-0 min-w-0 overflow-hidden lg:col-start-2 lg:row-start-1">
         <ControlsPanel
           onRepositorySelected={onRepositorySelected}
           onRunnerStatusChange={onRunnerStatusChange}
@@ -1389,7 +1389,7 @@ function OperationsWorkspace({
           runnerStatus={runnerStatus}
         />
       </aside>
-      <div className="min-w-0 lg:col-span-2 lg:row-start-2 lg:min-h-0">
+      <div className="min-h-0 min-w-0 overflow-hidden lg:col-span-2 lg:row-start-2">
         <LogsSummaryPanel
           runnerStatus={runnerStatus}
           runtimeStream={runtimeStream}
@@ -1567,9 +1567,9 @@ export function App() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-zinc-50 text-zinc-950">
+    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-zinc-50 text-zinc-950">
       <TopBar repositorySelection={repositorySelection} status={runnerStatus} />
-      <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 px-4 py-4 sm:px-6 sm:py-6">
         <OperationsWorkspace
           goalRefreshToken={goalRefreshToken}
           onRepositorySelected={(repositoryPath) => {
