@@ -157,6 +157,12 @@ const statusBadgeConfig: Record<
   },
 };
 
+const DEFAULT_REPEAT_PROMPT = [
+  "Use goal.md as the source of truth.",
+  "",
+  "Complete the next valid unchecked item.",
+].join("\n");
+
 function getRepositoryLabel(repositorySelection: RepositorySelectionState) {
   return repositorySelection.status === "loading"
     ? "Loading repository..."
@@ -239,6 +245,7 @@ function ControlsPanel({
   repositorySelection: RepositorySelectionState;
 }) {
   const [repositoryPathInput, setRepositoryPathInput] = useState("");
+  const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
       status: "idle",
@@ -444,11 +451,13 @@ function ControlsPanel({
             Repeat prompt
           </label>
           <Textarea
-            className="min-h-28 resize-none bg-muted leading-5 text-muted-foreground"
-            disabled
+            className="min-h-28 resize-y leading-5"
             id="repeat-prompt"
             placeholder="Use goal.md as the source of truth."
-            readOnly
+            onChange={(event) => {
+              setRepeatPrompt(event.target.value);
+            }}
+            value={repeatPrompt}
           />
         </div>
 
