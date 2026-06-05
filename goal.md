@@ -233,7 +233,7 @@ Before implementation, Codex must:
 - [x] Re-check the completed frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new workflow behavior.
 - [x] Keep the UI responsive without changing the primary workflow.
 - [x] Add repository path entry, selected-path display, and validation errors.
-- [ ] Show a create-default-`goal.md` action when missing. Use https://ui.shadcn.com/docs/components/radix/empty to do this if possible.
+- [x] Show a create-default-`goal.md` action when missing. Use https://ui.shadcn.com/docs/components/radix/empty to do this if possible.
 - [ ] Update README.md with the completed Phase 6 behavior, commands, and usage.
 
 ### Phase 7: Markdown Rendering
@@ -274,7 +274,6 @@ Use the repo's actual scripts:
 - `npm run typecheck`
 - `npm test` or the closest available focused test command
 - `npm run build`
-- Manual browser verification of the main workflow when UI or run-loop behavior changes
 
 Active bug gate:
 
@@ -285,6 +284,26 @@ Active bug gate:
 For small documentation-only changes, no code verification is required, but the markdown should still be reviewed for consistency.
 
 Do not mark a checkbox complete unless its behavior has been implemented and verified.
+
+## Browser / Visual Verification Policy
+
+Do not run visual browser inspection, `agent-browser`, Playwright, Cypress, headed browser checks, screenshot checks, or browser automation during normal goal execution.
+
+Default verification should use non-visual commands only:
+- `npm test`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- targeted HTTP/API checks when relevant
+
+If a task affects UI behavior, prefer one of these non-visual checks:
+- verify the dev server starts only when necessary
+- use HTTP checks such as `Invoke-WebRequest`, `curl`, or API endpoint calls
+- inspect rendered/client code statically
+- report that visual verification was skipped by project policy
+
+Only run visual browser verification when the user explicitly asks for it in the current prompt.
+If visual browser verification is unavailable, do not troubleshoot it unless explicitly asked. Continue with non-visual verification and report the limitation briefly.
 
 ## Blocked Status Handling
 

@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Activity,
+  AlertCircle,
   Check,
+  FilePlus2,
   FileText,
   FolderOpen,
   Play,
@@ -19,6 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/web/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/web/components/ui/empty";
 import { Input } from "@/web/components/ui/input";
 import { Textarea } from "@/web/components/ui/textarea";
 
@@ -41,8 +51,17 @@ type ValidationIssue = {
 };
 
 type ApiErrorResponse = {
+  code?: string;
   error?: string;
+  exists?: boolean;
   issues?: ValidationIssue[];
+};
+
+type GoalFileResponse = {
+  exists?: boolean;
+  goalPath: string;
+  markdown: string;
+  repositoryPath: string;
 };
 
 type RepositorySelectionState =
@@ -64,6 +83,16 @@ type RepositoryPathFormState = {
   error: string | null;
   issues: ValidationIssue[];
 };
+
+type GoalFileState =
+  | {
+      status: "idle" | "loading" | "available" | "missing" | "creating";
+      error: null;
+    }
+  | {
+      status: "error";
+      error: string;
+    };
 
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
@@ -122,6 +151,13 @@ function formatRepositorySelectionError(errorResponse: ApiErrorResponse): {
     error: errorResponse.error ?? "Failed to select repository.",
     issues,
   };
+}
+
+function getApiErrorMessage(
+  errorResponse: ApiErrorResponse,
+  fallback: string,
+): string {
+  return errorResponse.error ?? fallback;
 }
 
 function RunnerStatusBadge({ status }: { status: RunnerStatus }) {
@@ -479,14 +515,225 @@ function GoalDocumentPanel({
 }: {
   repositorySelection: RepositorySelectionState;
 }) {
-  const panelMessage =
-    repositorySelection.status === "loading"
-      ? "Loading repository selection..."
-      : repositorySelection.status === "error"
-        ? "Repository selection is unavailable."
-        : repositorySelection.repositoryPath === null
-          ? "Select a repository to view its goal.md."
-          : "goal.md rendering will appear here.";
+  const [goalFileState, setGoalFileState] = useState<GoalFileState>({
+    status: "idle",
+    error: null,
+  });
+  const selectedRepositoryPath =
+    repositorySelection.status === "ready"
+      ? repositorySelection.repositoryPath
+      : null;
+
+  async function loadGoalFile(signal?: AbortSignal) {
+    setGoalFileState({
+      status: "loading",
+      error: null,
+    });
+
+    try {
+      const response = await fetch("/api/goal", {
+        signal,
+      });
+      const responseBody = (await response.json()) as
+        | GoalFileResponse
+        | ApiErrorResponse;
+
+      if (response.ok) {
+        setGoalFileState({
+          status: "available",
+          error: null,
+        });
+        return;
+      }
+
+      const errorResponse = responseBody as ApiErrorResponse;
+
+      if (response.status === 404 && errorResponse.code === "GOAL_MISSING") {
+        setGoalFileState({
+          status: "missing",
+          error: null,
+        });
+        return;
+      }
+
+      setGoalFileState({
+        status: "error",
+        error: getApiErrorMessage(errorResponse, "Failed to load goal.md."),
+      });
+    } catch {
+      if (signal?.aborted) {
+        return;
+      }
+
+      setGoalFileState({
+        status: "error",
+        error: "Failed to load goal.md. Confirm the backend is running.",
+      });
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedRepositoryPath) {
+      setGoalFileState({
+        status: "idle",
+        error: null,
+      });
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    void loadGoalFile(abortController.signal);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedRepositoryPath]);
+
+  async function handleCreateDefaultGoal() {
+    if (!selectedRepositoryPath || goalFileState.status === "creating") {
+      return;
+    }
+
+    setGoalFileState({
+      status: "creating",
+      error: null,
+    });
+
+    try {
+      const response = await fetch("/api/goal", {
+        body: JSON.stringify({}),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const responseBody = (await response.json()) as
+        | GoalFileResponse
+        | ApiErrorResponse;
+
+      if (response.ok) {
+        setGoalFileState({
+          status: "available",
+          error: null,
+        });
+        return;
+      }
+
+      const errorResponse = responseBody as ApiErrorResponse;
+
+      if (response.status === 409 && errorResponse.code === "GOAL_EXISTS") {
+        await loadGoalFile();
+        return;
+      }
+
+      setGoalFileState({
+        status: "error",
+        error: getApiErrorMessage(
+          errorResponse,
+          "Failed to create default goal.md.",
+        ),
+      });
+    } catch {
+      setGoalFileState({
+        status: "error",
+        error: "Failed to create default goal.md. Confirm the backend is running.",
+      });
+    }
+  }
+
+  function renderGoalPanelContent() {
+    if (repositorySelection.status === "loading") {
+      return (
+        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
+          Loading repository selection...
+        </p>
+      );
+    }
+
+    if (repositorySelection.status === "error") {
+      return (
+        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
+          Repository selection is unavailable.
+        </p>
+      );
+    }
+
+    if (repositorySelection.repositoryPath === null) {
+      return (
+        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
+          Select a repository to view its goal.md.
+        </p>
+      );
+    }
+
+    if (goalFileState.status === "loading") {
+      return (
+        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
+          Loading goal.md...
+        </p>
+      );
+    }
+
+    if (goalFileState.status === "missing" || goalFileState.status === "creating") {
+      return (
+        <Empty className="max-w-md">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FilePlus2
+                aria-hidden="true"
+                strokeWidth={2}
+              />
+            </EmptyMedia>
+            <EmptyTitle>No goal.md found</EmptyTitle>
+            <EmptyDescription>
+              Create the default goal.md in the selected repository to start
+              controlling Codex runs from that repo.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button
+              disabled={goalFileState.status === "creating"}
+              onClick={() => {
+                void handleCreateDefaultGoal();
+              }}
+              type="button"
+            >
+              <FilePlus2
+                aria-hidden="true"
+                data-icon="inline-start"
+                strokeWidth={2}
+              />
+              {goalFileState.status === "creating" ? "Creating..." : "Create goal.md"}
+            </Button>
+          </EmptyContent>
+        </Empty>
+      );
+    }
+
+    if (goalFileState.status === "error") {
+      return (
+        <Empty className="max-w-md">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <AlertCircle
+                aria-hidden="true"
+                strokeWidth={2}
+              />
+            </EmptyMedia>
+            <EmptyTitle>goal.md unavailable</EmptyTitle>
+            <EmptyDescription>{goalFileState.error}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      );
+    }
+
+    return (
+      <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
+        goal.md rendering will appear here.
+      </p>
+    );
+  }
 
   return (
     <Card
@@ -513,9 +760,7 @@ function GoalDocumentPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-10">
-        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
-          {panelMessage}
-        </p>
+        {renderGoalPanelContent()}
       </CardContent>
     </Card>
   );
