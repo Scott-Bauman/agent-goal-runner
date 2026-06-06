@@ -49,6 +49,7 @@ describe("goal read endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       goalPath: path.join(path.normalize(repositoryPath), "goal.md"),
       markdown: "# Selected Goal\n",
+      revision: expect.any(String),
     });
   });
 
@@ -210,9 +211,76 @@ describe("goal creation endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       goalPath,
       exists: true,
+      revision: expect.any(String),
     });
     expect(response.json().markdown).toContain("# Project Goal");
     expect(await readFile(goalPath, "utf8")).toBe(response.json().markdown);
+  });
+
+  it("creates a goal.md with provided markdown", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+    const markdown = "# Manual Goal\n\n- [ ] Write the first step.\n";
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+      payload: {
+        markdown,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath,
+      markdown,
+      revision: expect.any(String),
+      exists: true,
+    });
+    expect(await readFile(goalPath, "utf8")).toBe(markdown);
+  });
+
+  it("rejects invalid creation bodies", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/goal",
+      payload: {
+        markdown: 123,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Invalid goal creation request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "markdown",
+          message: "Goal markdown must be a string.",
+        },
+      ],
+    });
   });
 
   it("rejects caller-provided creation paths and alternate names", async () => {
@@ -325,3 +393,238 @@ describe("goal creation endpoint", () => {
   });
 });
 
+describe("goal update endpoint", () => {
+  it("requires a selected repository", async () => {
+    const app = await createTestServer();
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        expectedRevision: "revision",
+        markdown: "# Goal\n",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No repository selected.",
+    });
+  });
+
+  it("updates existing goal.md when the expected revision matches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+    await writeFile(goalPath, "# Old Goal\n");
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    const readResponse = await app.inject({
+      method: "GET",
+      url: "/api/goal",
+    });
+    const nextMarkdown = "# New Goal\n\n- [ ] Next\n";
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        expectedRevision: readResponse.json().revision,
+        markdown: nextMarkdown,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath,
+      markdown: nextMarkdown,
+      revision: expect.any(String),
+      exists: true,
+    });
+    expect(response.json().revision).not.toBe(readResponse.json().revision);
+    expect(await readFile(goalPath, "utf8")).toBe(nextMarkdown);
+  });
+
+  it("rejects stale revisions without overwriting goal.md", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+    await writeFile(goalPath, "# Old Goal\n");
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+    const readResponse = await app.inject({
+      method: "GET",
+      url: "/api/goal",
+    });
+    await writeFile(goalPath, "# Changed Elsewhere\n");
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        expectedRevision: readResponse.json().revision,
+        markdown: "# New Goal\n",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "goal.md changed before the update could be saved.",
+      code: "GOAL_REVISION_MISMATCH",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath,
+      expectedRevision: readResponse.json().revision,
+      actualRevision: expect.any(String),
+    });
+    expect(await readFile(goalPath, "utf8")).toBe("# Changed Elsewhere\n");
+  });
+
+  it("returns a missing-goal state when updating without goal.md", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        expectedRevision: "revision",
+        markdown: "# Goal\n",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: "goal.md does not exist in the selected repository.",
+      code: "GOAL_MISSING",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath,
+      exists: false,
+    });
+  });
+
+  it("rejects invalid update bodies and caller-provided paths", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Goal\n");
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const invalidBodyResponse = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        markdown: "# Goal\n",
+      },
+    });
+    const pathResponse = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        expectedRevision: "revision",
+        markdown: "# Goal\n",
+        path: path.join(repositoryPath, "refactor.md"),
+      },
+    });
+    const nameResponse = await app.inject({
+      method: "PUT",
+      url: "/api/goal?name=refactor.md",
+      payload: {
+        expectedRevision: "revision",
+        markdown: "# Goal\n",
+      },
+    });
+
+    expect(invalidBodyResponse.statusCode).toBe(400);
+    expect(invalidBodyResponse.json()).toEqual({
+      error: "Invalid goal update request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "expectedRevision",
+          message: "Expected revision is required.",
+        },
+      ],
+    });
+    expect(pathResponse.statusCode).toBe(400);
+    expect(pathResponse.json()).toEqual({
+      error: "Invalid goal update request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'path'",
+        },
+      ],
+    });
+    expect(nameResponse.statusCode).toBe(400);
+    expect(nameResponse.json()).toEqual({
+      error: "Invalid goal update request.",
+      code: "VALIDATION_ERROR",
+      issues: [
+        {
+          path: "request",
+          message: "Unrecognized key(s) in object: 'name'",
+        },
+      ],
+    });
+  });
+
+  it("rejects updates when goal.md resolves outside the selected repository", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = await createEscapingGoalPath(repositoryPath);
+    const app = await createTestServer();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/goal",
+      payload: {
+        expectedRevision: "revision",
+        markdown: "# Goal\n",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "goal.md resolves outside the selected repository.",
+      code: "GOAL_PATH_RESTRICTED",
+      repositoryPath: path.normalize(repositoryPath),
+      goalPath: path.normalize(goalPath),
+    });
+  });
+});

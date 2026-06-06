@@ -25,7 +25,9 @@ export function OperationsWorkspace({
       <div className="min-h-0 min-w-0 overflow-hidden lg:col-start-1 lg:row-start-1">
         <GoalDocumentPanel
           goalRefreshToken={goalRefreshToken}
+          onRunnerStatusChange={onRunnerStatusChange}
           repositorySelection={repositorySelection}
+          runnerStatus={runnerStatus}
         />
       </div>
       <aside className="min-h-0 min-w-0 overflow-hidden lg:col-start-2 lg:row-start-1">

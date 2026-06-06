@@ -3,6 +3,7 @@ export type GoalFileResponse = {
   goalPath: string;
   markdown: string;
   repositoryPath: string;
+  revision: string;
 };
 
 export type GoalFileState =
@@ -12,6 +13,7 @@ export type GoalFileState =
       goalPath: string | null;
       markdown: string | null;
       repositoryPath: string | null;
+      revision: string | null;
     }
   | {
       status: "error";
@@ -19,4 +21,5 @@ export type GoalFileState =
       goalPath: null;
       markdown: null;
       repositoryPath: null;
+      revision: null;
     };

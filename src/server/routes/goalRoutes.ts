@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import {
-  createDefaultGoalMarkdown,
+  createGoalMarkdown,
   getGoalFilePath,
+  isGoalRevisionMismatchError,
   isGoalPathRestrictionError,
-  readGoalMarkdown,
+  readGoalMarkdownWithRevision,
+  updateGoalMarkdown,
 } from "../goal/goalFile.js";
 import { isNodeErrorCode } from "../shared/nodeErrors.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
@@ -13,6 +16,31 @@ import {
   formatZodIssues,
   validationError,
 } from "../shared/validation.js";
+
+const goalCreateSchema = z
+  .object({
+    markdown: z
+      .string({
+        invalid_type_error: "Goal markdown must be a string.",
+      })
+      .optional(),
+  })
+  .strict();
+
+const goalUpdateSchema = z
+  .object({
+    expectedRevision: z
+      .string({
+        invalid_type_error: "Expected revision must be a string.",
+        required_error: "Expected revision is required.",
+      })
+      .min(1, "Expected revision is required."),
+    markdown: z.string({
+      invalid_type_error: "Goal markdown must be a string.",
+      required_error: "Goal markdown is required.",
+    }),
+  })
+  .strict();
 
 export function registerGoalRoutes(
   server: FastifyInstance,
@@ -36,10 +64,12 @@ export function registerGoalRoutes(
     }
 
     const goalFilePath = getGoalFilePath(context.runtimeState.selectedRepositoryPath);
-    let markdown: string;
+    let goalFile;
 
     try {
-      markdown = await readGoalMarkdown(context.runtimeState.selectedRepositoryPath);
+      goalFile = await readGoalMarkdownWithRevision(
+        context.runtimeState.selectedRepositoryPath,
+      );
     } catch (error) {
       if (isNodeErrorCode(error, "ENOENT")) {
         return reply.code(404).send({
@@ -66,13 +96,14 @@ export function registerGoalRoutes(
     return {
       repositoryPath: context.runtimeState.selectedRepositoryPath,
       goalPath: goalFilePath,
-      markdown,
+      markdown: goalFile.markdown,
+      revision: goalFile.revision,
     };
   });
 
   server.post("/api/goal", async (request, reply) => {
     const parsedQuery = emptyRequestSchema.safeParse(request.query);
-    const parsedBody = emptyRequestSchema.safeParse(request.body ?? {});
+    const parsedBody = goalCreateSchema.safeParse(request.body ?? {});
 
     if (!parsedQuery.success || !parsedBody.success) {
       return reply.code(400).send(
@@ -93,8 +124,9 @@ export function registerGoalRoutes(
     let createdGoal;
 
     try {
-      createdGoal = await createDefaultGoalMarkdown(
+      createdGoal = await createGoalMarkdown(
         context.runtimeState.selectedRepositoryPath,
+        parsedBody.data.markdown,
       );
     } catch (error) {
       if (isNodeErrorCode(error, "EEXIST")) {
@@ -123,7 +155,79 @@ export function registerGoalRoutes(
       repositoryPath: context.runtimeState.selectedRepositoryPath,
       goalPath: goalFilePath,
       markdown: createdGoal.markdown,
+      revision: createdGoal.revision,
       exists: true,
     });
+  });
+
+  server.put("/api/goal", async (request, reply) => {
+    const parsedQuery = emptyRequestSchema.safeParse(request.query);
+    const parsedBody = goalUpdateSchema.safeParse(request.body);
+
+    if (!parsedQuery.success || !parsedBody.success) {
+      return reply.code(400).send(
+        validationError("Invalid goal update request.", [
+          ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
+          ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
+        ]),
+      );
+    }
+
+    if (!context.runtimeState.selectedRepositoryPath) {
+      return reply.code(409).send({
+        error: "No repository selected.",
+      });
+    }
+
+    const goalFilePath = getGoalFilePath(context.runtimeState.selectedRepositoryPath);
+    let updatedGoal;
+
+    try {
+      updatedGoal = await updateGoalMarkdown(
+        context.runtimeState.selectedRepositoryPath,
+        parsedBody.data.markdown,
+        parsedBody.data.expectedRevision,
+      );
+    } catch (error) {
+      if (isNodeErrorCode(error, "ENOENT")) {
+        return reply.code(404).send({
+          error: "goal.md does not exist in the selected repository.",
+          code: "GOAL_MISSING",
+          repositoryPath: context.runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
+          exists: false,
+        });
+      }
+
+      if (isGoalRevisionMismatchError(error)) {
+        return reply.code(409).send({
+          error: error.message,
+          code: "GOAL_REVISION_MISMATCH",
+          repositoryPath: context.runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
+          expectedRevision: error.expectedRevision,
+          actualRevision: error.actualRevision,
+        });
+      }
+
+      if (isGoalPathRestrictionError(error)) {
+        return reply.code(400).send({
+          error: error.message,
+          code: "GOAL_PATH_RESTRICTED",
+          repositoryPath: context.runtimeState.selectedRepositoryPath,
+          goalPath: goalFilePath,
+        });
+      }
+
+      throw error;
+    }
+
+    return {
+      repositoryPath: context.runtimeState.selectedRepositoryPath,
+      goalPath: goalFilePath,
+      markdown: updatedGoal.markdown,
+      revision: updatedGoal.revision,
+      exists: true,
+    };
   });
 }

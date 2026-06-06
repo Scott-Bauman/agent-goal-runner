@@ -4,11 +4,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertResolvedGoalPathInsideRepository,
+  createGoalMarkdown,
   createDefaultGoalMarkdown,
   detectGoalStopMarker,
   getGoalFilePath,
   isGoalPathRestrictionError,
+  isGoalRevisionMismatchError,
   readGoalMarkdown,
+  readGoalMarkdownWithRevision,
+  updateGoalMarkdown,
 } from "../../../src/server/goal/goalFile";
 import {
   createEscapingGoalPath,
@@ -63,9 +67,60 @@ describe("goal path helpers", () => {
 
     expect(createdGoal.goalPath).toBe(goalPath);
     expect(createdGoal.markdown).toContain("# Project Goal");
+    expect(createdGoal.revision).toEqual(expect.any(String));
     await expect(createDefaultGoalMarkdown(repositoryPath)).rejects.toMatchObject({
       code: "EEXIST",
     });
+  });
+
+  it("creates goal.md with caller-provided markdown", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(repositoryPath, "goal.md");
+    const markdown = "# Manual Goal\n";
+
+    const createdGoal = await createGoalMarkdown(repositoryPath, markdown);
+
+    expect(createdGoal).toEqual({
+      goalPath,
+      markdown,
+      revision: expect.any(String),
+    });
+    expect(await readGoalMarkdown(repositoryPath)).toBe(markdown);
+  });
+
+  it("updates goal.md only when the expected revision matches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(repositoryPath, "goal.md");
+    await writeFile(goalPath, "# Old Goal\n", "utf8");
+    const goalFile = await readGoalMarkdownWithRevision(repositoryPath);
+    const markdown = "# New Goal\n\n- [ ] Next\n";
+
+    const updatedGoal = await updateGoalMarkdown(
+      repositoryPath,
+      markdown,
+      goalFile.revision,
+    );
+
+    expect(updatedGoal).toEqual({
+      goalPath,
+      markdown,
+      revision: expect.any(String),
+    });
+    expect(updatedGoal.revision).not.toBe(goalFile.revision);
+    expect(await readGoalMarkdown(repositoryPath)).toBe(markdown);
+  });
+
+  it("rejects updates with stale revisions", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalPath = path.join(repositoryPath, "goal.md");
+    await writeFile(goalPath, "# Old Goal\n", "utf8");
+    const goalFile = await readGoalMarkdownWithRevision(repositoryPath);
+    await writeFile(goalPath, "# Changed Elsewhere\n", "utf8");
+
+    await expect(
+      updateGoalMarkdown(repositoryPath, "# New Goal\n", goalFile.revision),
+    ).rejects.toSatisfy(isGoalRevisionMismatchError);
+    expect(await readGoalMarkdown(repositoryPath)).toBe("# Changed Elsewhere\n");
   });
 
   it("rejects a goal.md path that resolves outside the repository", async () => {

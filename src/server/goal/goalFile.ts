@@ -1,4 +1,5 @@
-import { readFile, realpath, writeFile } from "node:fs/promises";
+import { lstat, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import path from "node:path";
 
 import { isNodeErrorCode } from "../shared/nodeErrors.js";
@@ -28,10 +29,34 @@ export class GoalPathRestrictionError extends Error {
   }
 }
 
+export class GoalRevisionMismatchError extends Error {
+  readonly actualRevision: string;
+  readonly expectedRevision: string;
+
+  constructor({
+    actualRevision,
+    expectedRevision,
+  }: {
+    actualRevision: string;
+    expectedRevision: string;
+  }) {
+    super("goal.md changed before the update could be saved.");
+    this.name = "GoalRevisionMismatchError";
+    this.actualRevision = actualRevision;
+    this.expectedRevision = expectedRevision;
+  }
+}
+
 export function isGoalPathRestrictionError(
   error: unknown,
 ): error is GoalPathRestrictionError {
   return error instanceof GoalPathRestrictionError;
+}
+
+export function isGoalRevisionMismatchError(
+  error: unknown,
+): error is GoalRevisionMismatchError {
+  return error instanceof GoalRevisionMismatchError;
 }
 
 export function detectGoalStopMarker(
@@ -101,12 +126,88 @@ export async function assertExistingGoalPathDoesNotEscape(
   }
 }
 
+async function assertGoalPathIsNotSymlink(goalFilePath: string): Promise<void> {
+  const goalPathStats = await lstat(goalFilePath);
+
+  if (goalPathStats.isSymbolicLink()) {
+    throw new GoalPathRestrictionError();
+  }
+}
+
+export function getGoalRevision(goalFileStats: Stats): string {
+  return [
+    goalFileStats.mtimeMs.toString(36),
+    goalFileStats.size.toString(36),
+    goalFileStats.ino.toString(36),
+  ].join("-");
+}
+
+async function readGoalFileMetadata(
+  repositoryPath: string,
+  goalFilePath: string,
+): Promise<Stats> {
+  await assertResolvedGoalPathInsideRepository(repositoryPath, goalFilePath);
+  await assertGoalPathIsNotSymlink(goalFilePath);
+
+  return stat(goalFilePath);
+}
+
 export async function readGoalMarkdown(repositoryPath: string): Promise<string> {
   const goalFilePath = getGoalFilePath(repositoryPath);
 
-  await assertResolvedGoalPathInsideRepository(repositoryPath, goalFilePath);
+  await readGoalFileMetadata(repositoryPath, goalFilePath);
 
   return readFile(goalFilePath, "utf8");
+}
+
+export async function readGoalMarkdownWithRevision(
+  repositoryPath: string,
+): Promise<{
+  goalPath: string;
+  markdown: string;
+  revision: string;
+}> {
+  const goalPath = getGoalFilePath(repositoryPath);
+  const goalFileStats = await readGoalFileMetadata(repositoryPath, goalPath);
+  const markdown = await readFile(goalPath, "utf8");
+
+  return {
+    goalPath,
+    markdown,
+    revision: getGoalRevision(goalFileStats),
+  };
+}
+
+export async function createGoalMarkdown(
+  repositoryPath: string,
+  markdown = DEFAULT_GOAL_MARKDOWN,
+): Promise<{
+  goalPath: string;
+  markdown: string;
+  revision: string;
+}> {
+  const goalPath = getGoalFilePath(repositoryPath);
+
+  await assertExistingGoalPathDoesNotEscape(repositoryPath, goalPath);
+  try {
+    await assertGoalPathIsNotSymlink(goalPath);
+  } catch (error) {
+    if (!isNodeErrorCode(error, "ENOENT")) {
+      throw error;
+    }
+  }
+
+  await writeFile(goalPath, markdown, {
+    encoding: "utf8",
+    flag: "wx",
+  });
+  const goalFileStats = await stat(goalPath);
+
+  return {
+    goalPath,
+    markdown,
+    revision: getGoalRevision(goalFileStats),
+  };
 }
 
 export async function createDefaultGoalMarkdown(
@@ -114,17 +215,37 @@ export async function createDefaultGoalMarkdown(
 ): Promise<{
   goalPath: string;
   markdown: string;
+  revision: string;
+}> {
+  return createGoalMarkdown(repositoryPath);
+}
+
+export async function updateGoalMarkdown(
+  repositoryPath: string,
+  markdown: string,
+  expectedRevision: string,
+): Promise<{
+  goalPath: string;
+  markdown: string;
+  revision: string;
 }> {
   const goalPath = getGoalFilePath(repositoryPath);
+  const currentGoalStats = await readGoalFileMetadata(repositoryPath, goalPath);
+  const currentRevision = getGoalRevision(currentGoalStats);
 
-  await assertExistingGoalPathDoesNotEscape(repositoryPath, goalPath);
-  await writeFile(goalPath, DEFAULT_GOAL_MARKDOWN, {
-    encoding: "utf8",
-    flag: "wx",
-  });
+  if (currentRevision !== expectedRevision) {
+    throw new GoalRevisionMismatchError({
+      actualRevision: currentRevision,
+      expectedRevision,
+    });
+  }
+
+  await writeFile(goalPath, markdown, "utf8");
+  const updatedGoalStats = await stat(goalPath);
 
   return {
     goalPath,
-    markdown: DEFAULT_GOAL_MARKDOWN,
+    markdown,
+    revision: getGoalRevision(updatedGoalStats),
   };
 }

@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, FilePlus2, FileText } from "lucide-react";
+import {
+  AlertCircle,
+  Bot,
+  Edit3,
+  FilePlus2,
+  FileText,
+  Save,
+  X,
+} from "lucide-react";
 
 import { getApiErrorMessage } from "@/web/api/errors";
-import type { ApiErrorResponse } from "@/web/api/responses";
+import type { ApiErrorResponse, RunStartResponse } from "@/web/api/responses";
 import { Button } from "@/web/components/ui/button";
 import {
   Card,
@@ -19,16 +27,57 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/web/components/ui/empty";
+import { Textarea } from "@/web/components/ui/textarea";
+import {
+  buildAgentGoalPrompt,
+  DEFAULT_MANUAL_GOAL_MARKDOWN,
+  getGoalDocumentActionLabels,
+  getGoalDocumentAvailability,
+} from "@/web/goal/goalEditing";
 import type { GoalFileResponse, GoalFileState } from "@/web/goal/goalFile";
 import { renderGoalMarkdown } from "@/web/markdown";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
+import type { RunnerStatus } from "@/web/runner/statuses";
+
+type GoalDraftState =
+  | {
+      mode: "none";
+    }
+  | {
+      error: string | null;
+      expectedRevision: string | null;
+      markdown: string;
+      mode: "manual-add" | "manual-edit";
+      status: "editing" | "saving";
+    }
+  | {
+      error: string | null;
+      mode: "agent-add" | "agent-edit";
+      prompt: string;
+      status: "editing" | "starting";
+    };
+
+function toAvailableGoalState(goalFile: GoalFileResponse): GoalFileState {
+  return {
+    status: "available",
+    error: null,
+    goalPath: goalFile.goalPath,
+    markdown: goalFile.markdown,
+    repositoryPath: goalFile.repositoryPath,
+    revision: goalFile.revision,
+  };
+}
 
 export function GoalDocumentPanel({
   goalRefreshToken,
+  onRunnerStatusChange,
   repositorySelection,
+  runnerStatus,
 }: {
   goalRefreshToken: number;
+  onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
+  runnerStatus: RunnerStatus;
 }) {
   const [goalFileState, setGoalFileState] = useState<GoalFileState>({
     status: "idle",
@@ -36,11 +85,30 @@ export function GoalDocumentPanel({
     goalPath: null,
     markdown: null,
     repositoryPath: null,
+    revision: null,
+  });
+  const [draftState, setDraftState] = useState<GoalDraftState>({
+    mode: "none",
   });
   const selectedRepositoryPath =
     repositorySelection.status === "ready"
       ? repositorySelection.repositoryPath
       : null;
+  const isDraftActive = draftState.mode !== "none";
+  const isDraftPending =
+    draftState.mode !== "none" &&
+    (draftState.status === "saving" || draftState.status === "starting");
+  const goalActionStatus =
+    goalFileState.status === "available" || goalFileState.status === "missing"
+      ? goalFileState.status
+      : null;
+  const goalActionLabels = goalActionStatus
+    ? getGoalDocumentActionLabels(goalActionStatus)
+    : null;
+  const goalAvailability = getGoalDocumentAvailability({
+    isSaving: isDraftPending,
+    runnerStatus,
+  });
   const renderedGoalHtml = useMemo(
     () =>
       goalFileState.status === "available" && goalFileState.markdown !== null
@@ -56,6 +124,7 @@ export function GoalDocumentPanel({
       goalPath: null,
       markdown: null,
       repositoryPath: null,
+      revision: null,
     });
 
     try {
@@ -67,15 +136,7 @@ export function GoalDocumentPanel({
         | ApiErrorResponse;
 
       if (response.ok) {
-        const goalFile = responseBody as GoalFileResponse;
-
-        setGoalFileState({
-          status: "available",
-          error: null,
-          goalPath: goalFile.goalPath,
-          markdown: goalFile.markdown,
-          repositoryPath: goalFile.repositoryPath,
-        });
+        setGoalFileState(toAvailableGoalState(responseBody as GoalFileResponse));
         return;
       }
 
@@ -88,6 +149,7 @@ export function GoalDocumentPanel({
           goalPath: null,
           markdown: null,
           repositoryPath: null,
+          revision: null,
         });
         return;
       }
@@ -98,6 +160,7 @@ export function GoalDocumentPanel({
         goalPath: null,
         markdown: null,
         repositoryPath: null,
+        revision: null,
       });
     } catch {
       if (signal?.aborted) {
@@ -110,6 +173,7 @@ export function GoalDocumentPanel({
         goalPath: null,
         markdown: null,
         repositoryPath: null,
+        revision: null,
       });
     }
   }, []);
@@ -122,6 +186,10 @@ export function GoalDocumentPanel({
         goalPath: null,
         markdown: null,
         repositoryPath: null,
+        revision: null,
+      });
+      setDraftState({
+        mode: "none",
       });
       return;
     }
@@ -135,40 +203,107 @@ export function GoalDocumentPanel({
     };
   }, [goalRefreshToken, loadGoalFile, selectedRepositoryPath]);
 
-  async function handleCreateDefaultGoal() {
-    if (!selectedRepositoryPath || goalFileState.status === "creating") {
+  function handleManualStart() {
+    if (!goalAvailability.canRunGoalAction) {
       return;
     }
 
-    setGoalFileState({
-      status: "creating",
+    if (goalFileState.status === "missing") {
+      setDraftState({
+        mode: "manual-add",
+        error: null,
+        expectedRevision: null,
+        markdown: DEFAULT_MANUAL_GOAL_MARKDOWN,
+        status: "editing",
+      });
+    }
+
+    if (
+      goalFileState.status === "available" &&
+      goalFileState.markdown !== null &&
+      goalFileState.revision !== null
+    ) {
+      setDraftState({
+        mode: "manual-edit",
+        error: null,
+        expectedRevision: goalFileState.revision,
+        markdown: goalFileState.markdown,
+        status: "editing",
+      });
+    }
+  }
+
+  function handleAgentStart() {
+    if (!goalAvailability.canRunGoalAction) {
+      return;
+    }
+
+    if (goalFileState.status === "missing") {
+      setDraftState({
+        mode: "agent-add",
+        error: null,
+        prompt: "Create a goal.md for this repository.",
+        status: "editing",
+      });
+    }
+
+    if (goalFileState.status === "available") {
+      setDraftState({
+        mode: "agent-edit",
+        error: null,
+        prompt: "Update goal.md for the next implementation pass.",
+        status: "editing",
+      });
+    }
+  }
+
+  function handleDraftCancel() {
+    if (draftState.mode !== "none" && draftState.status !== "saving") {
+      setDraftState({
+        mode: "none",
+      });
+    }
+  }
+
+  async function handleManualSave() {
+    if (
+      (draftState.mode !== "manual-add" && draftState.mode !== "manual-edit") ||
+      goalAvailability.isSaveDisabled
+    ) {
+      return;
+    }
+
+    setDraftState({
+      ...draftState,
       error: null,
-      goalPath: null,
-      markdown: null,
-      repositoryPath: null,
+      status: "saving",
     });
 
     try {
       const response = await fetch("/api/goal", {
-        body: JSON.stringify({}),
+        body: JSON.stringify(
+          draftState.mode === "manual-add"
+            ? {
+                markdown: draftState.markdown,
+              }
+            : {
+                expectedRevision: draftState.expectedRevision,
+                markdown: draftState.markdown,
+              },
+        ),
         headers: {
           "Content-Type": "application/json",
         },
-        method: "POST",
+        method: draftState.mode === "manual-add" ? "POST" : "PUT",
       });
       const responseBody = (await response.json()) as
         | GoalFileResponse
         | ApiErrorResponse;
 
       if (response.ok) {
-        const goalFile = responseBody as GoalFileResponse;
-
-        setGoalFileState({
-          status: "available",
-          error: null,
-          goalPath: goalFile.goalPath,
-          markdown: goalFile.markdown,
-          repositoryPath: goalFile.repositoryPath,
+        setGoalFileState(toAvailableGoalState(responseBody as GoalFileResponse));
+        setDraftState({
+          mode: "none",
         });
         return;
       }
@@ -177,31 +312,261 @@ export function GoalDocumentPanel({
 
       if (response.status === 409 && errorResponse.code === "GOAL_EXISTS") {
         await loadGoalFile();
+        setDraftState({
+          mode: "none",
+        });
         return;
       }
 
-      setGoalFileState({
-        status: "error",
-        error: getApiErrorMessage(
-          errorResponse,
-          "Failed to create default goal.md.",
-        ),
-        goalPath: null,
-        markdown: null,
-        repositoryPath: null,
+      setDraftState({
+        ...draftState,
+        error: getApiErrorMessage(errorResponse, "Failed to save goal.md."),
+        status: "editing",
       });
     } catch {
-      setGoalFileState({
-        status: "error",
-        error: "Failed to create default goal.md. Confirm the backend is running.",
-        goalPath: null,
-        markdown: null,
-        repositoryPath: null,
+      setDraftState({
+        ...draftState,
+        error: "Failed to save goal.md. Confirm the backend is running.",
+        status: "editing",
       });
     }
   }
 
+  async function handleAgentRunStart() {
+    if (
+      (draftState.mode !== "agent-add" && draftState.mode !== "agent-edit") ||
+      !goalAvailability.canRunGoalAction
+    ) {
+      return;
+    }
+
+    setDraftState({
+      ...draftState,
+      error: null,
+      status: "starting",
+    });
+
+    try {
+      const response = await fetch("/api/run/start", {
+        body: JSON.stringify({
+          autoCommit: false,
+          model: null,
+          prompt: buildAgentGoalPrompt(draftState.prompt),
+          reasoningEffort: null,
+          runCount: 1,
+          verificationCommand: "",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const responseBody = (await response.json()) as
+        | RunStartResponse
+        | ApiErrorResponse;
+
+      if (response.ok) {
+        onRunnerStatusChange((responseBody as RunStartResponse).status);
+        setDraftState({
+          mode: "none",
+        });
+        return;
+      }
+
+      setDraftState({
+        ...draftState,
+        error: getApiErrorMessage(
+          responseBody as ApiErrorResponse,
+          "Failed to start goal agent run.",
+        ),
+        status: "editing",
+      });
+    } catch {
+      setDraftState({
+        ...draftState,
+        error: "Failed to start goal agent run. Confirm the backend is running.",
+        status: "editing",
+      });
+    }
+  }
+
+  function renderHeaderActions() {
+    if (!goalActionLabels || isDraftActive) {
+      return null;
+    }
+
+    return (
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          disabled={!goalAvailability.canRunGoalAction}
+          onClick={handleManualStart}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {goalActionStatus === "missing" ? (
+            <FilePlus2
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+          ) : (
+            <Edit3
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+          )}
+          {goalActionLabels.manual}
+        </Button>
+        <Button
+          disabled={!goalAvailability.canRunGoalAction}
+          onClick={handleAgentStart}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Bot
+            aria-hidden="true"
+            data-icon="inline-start"
+            strokeWidth={2}
+          />
+          {goalActionLabels.agent}
+        </Button>
+      </div>
+    );
+  }
+
+  function renderDraftError(error: string | null) {
+    if (!error) {
+      return null;
+    }
+
+    return (
+      <p
+        className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
+        role="alert"
+      >
+        {error}
+      </p>
+    );
+  }
+
+  function renderManualEditor() {
+    if (draftState.mode !== "manual-add" && draftState.mode !== "manual-edit") {
+      return null;
+    }
+
+    return (
+      <div className="flex min-h-full w-full flex-col gap-3">
+        <Textarea
+          aria-label="goal.md markdown"
+          className="min-h-[28rem] flex-1 resize-y font-mono text-xs leading-5"
+          onChange={(event) => {
+            setDraftState({
+              ...draftState,
+              markdown: event.target.value,
+            });
+          }}
+          readOnly={goalAvailability.isDraftReadOnly}
+          value={draftState.markdown}
+        />
+        {renderDraftError(draftState.error)}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            disabled={goalAvailability.isSaveDisabled}
+            onClick={() => {
+              void handleManualSave();
+            }}
+            type="button"
+          >
+            <Save
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+            {draftState.status === "saving" ? "Saving..." : "Save"}
+          </Button>
+          <Button
+            disabled={draftState.status === "saving"}
+            onClick={handleDraftCancel}
+            type="button"
+            variant="outline"
+          >
+            <X
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderAgentEditor() {
+    if (draftState.mode !== "agent-add" && draftState.mode !== "agent-edit") {
+      return null;
+    }
+
+    return (
+      <div className="flex min-h-full w-full flex-col gap-3">
+        <Textarea
+          aria-label="Goal agent request"
+          className="min-h-40 resize-y leading-5"
+          onChange={(event) => {
+            setDraftState({
+              ...draftState,
+              prompt: event.target.value,
+            });
+          }}
+          readOnly={goalAvailability.isDraftReadOnly}
+          value={draftState.prompt}
+        />
+        {renderDraftError(draftState.error)}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            disabled={!goalAvailability.canRunGoalAction}
+            onClick={() => {
+              void handleAgentRunStart();
+            }}
+            type="button"
+          >
+            <Bot
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+            {draftState.status === "starting" ? "Starting..." : "Start Agent"}
+          </Button>
+          <Button
+            disabled={draftState.status === "starting"}
+            onClick={handleDraftCancel}
+            type="button"
+            variant="outline"
+          >
+            <X
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   function renderGoalPanelContent() {
+    if (draftState.mode === "manual-add" || draftState.mode === "manual-edit") {
+      return renderManualEditor();
+    }
+
+    if (draftState.mode === "agent-add" || draftState.mode === "agent-edit") {
+      return renderAgentEditor();
+    }
+
     if (repositorySelection.status === "loading") {
       return (
         <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
@@ -234,7 +599,7 @@ export function GoalDocumentPanel({
       );
     }
 
-    if (goalFileState.status === "missing" || goalFileState.status === "creating") {
+    if (goalFileState.status === "missing") {
       return (
         <Empty className="max-w-md">
           <EmptyHeader>
@@ -246,16 +611,14 @@ export function GoalDocumentPanel({
             </EmptyMedia>
             <EmptyTitle>No goal.md found</EmptyTitle>
             <EmptyDescription>
-              Create the default goal.md in the selected repository to start
-              controlling Codex runs from that repo.
+              Add goal.md in the selected repository to control Codex runs from
+              that repo.
             </EmptyDescription>
           </EmptyHeader>
-          <EmptyContent>
+          <EmptyContent className="flex flex-wrap justify-center gap-2">
             <Button
-              disabled={goalFileState.status === "creating"}
-              onClick={() => {
-                void handleCreateDefaultGoal();
-              }}
+              disabled={!goalAvailability.canRunGoalAction}
+              onClick={handleManualStart}
               type="button"
             >
               <FilePlus2
@@ -263,7 +626,20 @@ export function GoalDocumentPanel({
                 data-icon="inline-start"
                 strokeWidth={2}
               />
-              {goalFileState.status === "creating" ? "Creating..." : "Create goal.md"}
+              Add
+            </Button>
+            <Button
+              disabled={!goalAvailability.canRunGoalAction}
+              onClick={handleAgentStart}
+              type="button"
+              variant="outline"
+            >
+              <Bot
+                aria-hidden="true"
+                data-icon="inline-start"
+                strokeWidth={2}
+              />
+              Agent Add
             </Button>
           </EmptyContent>
         </Empty>
@@ -302,6 +678,13 @@ export function GoalDocumentPanel({
     return null;
   }
 
+  const isDocumentMode =
+    goalFileState.status === "available" ||
+    draftState.mode === "manual-add" ||
+    draftState.mode === "manual-edit" ||
+    draftState.mode === "agent-add" ||
+    draftState.mode === "agent-edit";
+
   return (
     <Card
       aria-labelledby="goal-document-title"
@@ -322,13 +705,15 @@ export function GoalDocumentPanel({
             goal.md
           </CardTitle>
         </div>
-        <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
-          Rendered document
-        </CardDescription>
+        {renderHeaderActions() ?? (
+          <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
+            Rendered document
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent
         className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-10 data-[goal-available=true]:items-start data-[goal-available=true]:justify-start data-[goal-available=true]:py-4"
-        data-goal-available={goalFileState.status === "available"}
+        data-goal-available={isDocumentMode}
       >
         {renderGoalPanelContent()}
       </CardContent>
