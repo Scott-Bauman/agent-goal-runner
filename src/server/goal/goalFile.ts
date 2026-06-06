@@ -62,11 +62,17 @@ export function isGoalRevisionMismatchError(
 export function detectGoalStopMarker(
   markdown: string,
 ): "GOAL_COMPLETE" | "GOAL_BLOCKED" | null {
-  if (markdown.includes("GOAL_BLOCKED")) {
+  const lines = markdown.split(/\r?\n/).map((line) => line.trim());
+
+  if (
+    lines.some(
+      (line) => line === "GOAL_BLOCKED" || line.startsWith("GOAL_BLOCKED:"),
+    )
+  ) {
     return "GOAL_BLOCKED";
   }
 
-  if (markdown.includes("GOAL_COMPLETE")) {
+  if (lines.includes("GOAL_COMPLETE")) {
     return "GOAL_COMPLETE";
   }
 

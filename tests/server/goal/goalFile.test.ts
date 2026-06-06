@@ -33,6 +33,39 @@ describe("goal stop marker detection", () => {
     );
   });
 
+  it("ignores marker names mentioned in prose", () => {
+    expect(
+      detectGoalStopMarker(
+        [
+          "## Stop Conditions",
+          "",
+          "- The refreshed `goal.md` contains `GOAL_COMPLETE`.",
+          "- The refreshed `goal.md` contains `GOAL_BLOCKED`.",
+          "",
+          "## Blocked / Complete Policy",
+          "",
+          "- Report blocked runs as `GOAL_BLOCKED` with the exact reason.",
+          "- Add `GOAL_COMPLETE` only when every required checkbox is complete.",
+        ].join("\n"),
+      ),
+    ).toBeNull();
+  });
+
+  it("detects a complete marker when blocked is only mentioned in policy text", () => {
+    expect(
+      detectGoalStopMarker(
+        [
+          "## Blocked / Complete Policy",
+          "",
+          "- Report blocked runs as `GOAL_BLOCKED` with the exact reason.",
+          "- Do not persist `GOAL_BLOCKED` in this file unless explicitly asked.",
+          "",
+          "GOAL_COMPLETE",
+        ].join("\n"),
+      ),
+    ).toBe("GOAL_COMPLETE");
+  });
+
   it("returns null when no stop marker is present", () => {
     expect(detectGoalStopMarker("- [ ] Keep going\n")).toBeNull();
   });

@@ -1,54 +1,54 @@
 # codex-goal-runner Goal
 
-## Product Goal
+## Goal
 
-Build a lightweight local developer tool named `codex-goal-runner`.
+Build and maintain `codex-goal-runner`, a lightweight local developer tool for running the user's existing Codex CLI against a selected repository's repo-local `goal.md`.
 
-The app provides a browser-based operations panel backed by a local Node.js server. It repeatedly runs the user's existing Codex CLI against a selected repository's repo-local `goal.md`, then refreshes the rendered goal document, live logs, and run status after each pass.
+The MVP is a browser-based operations panel backed by a local Node.js server. It lets the user select a local repository, view or create its `goal.md`, configure a repeat prompt and run count, run `codex exec <prompt>` in a controlled loop, optionally verify and commit after successful runs, and stop safely when a stop condition is reached.
 
-The MVP should let the user select a local repository, view or create its `goal.md`, configure a repeat prompt and run count, run `codex exec <prompt>` in a controlled loop, optionally verify and commit after successful runs, and stop safely when a stop condition is reached.
+## Product Shape
 
-## Durable Control File Rule
+- Primary surface: local browser operations panel.
+- Backend: Fastify, Node.js, ESM TypeScript.
+- Frontend: Vite, React, TypeScript, Tailwind CSS, and focused shadcn/ui components.
+- Main workflow: select repository, inspect `goal.md`, configure loop settings, run Codex, stream logs/status, refresh goal rendering, stop on configured conditions.
+- UX priority: compact, quiet, professional, and useful during repeated local development runs.
+
+## Scope
+
+### In Scope
+
+- Local-only repository selection and runtime state.
+- Reading, rendering, watching, and explicitly creating only `<selected-repo>/goal.md`.
+- Sanitized markdown rendering with `marked` and DOMPurify.
+- Server-Sent Events for status, logs, run progress, summaries, and goal-file changes.
+- `chokidar` watching of the selected repository's `goal.md` only.
+- `zod` validation for request bodies, paths, run configuration, and goal creation.
+- `child_process.spawn()` for Codex, git, and optional verification commands.
+- Calling Codex as `codex exec <prompt>` in the selected repository.
+- Optional verification after successful Codex runs.
+- Optional auto-commit after Codex and verification succeed.
+- In-memory runtime state only.
+
+### Out of Scope
+
+- Electron, Tauri, hosted execution, or remote repository browsing.
+- Database persistence or run history across server restarts.
+- Model provider configuration, OpenAI API keys, or API-key entry flows.
+- Code editor, file tree, arbitrary markdown browser, or diff viewer.
+- Plugin system or multi-goal workflows.
+- Support for durable plan files other than `goal.md`.
+- Telemetry, analytics, or remote log upload.
+
+## Durable Control File Rules
 
 - `goal.md` is the only supported durable goal/control file.
 - The app must not support `refactor.md`, `migration.md`, alternate plan files, arbitrary markdown files, or a file tree.
 - This repository's `goal.md` controls implementation work on `codex-goal-runner`.
 - A selected target repository's `<selected-repo>/goal.md` is runtime user data that the app reads, renders, watches, and makes available to Codex by running Codex in that repository.
 - The app may create a default `goal.md` in the selected target repository only when the user explicitly requests creation.
-- The app should read and render only `<selected-repo>/goal.md`.
-- The app process itself should not directly edit a selected repository's `goal.md` except when creating the default file.
+- The app process itself must not directly edit a selected repository's `goal.md` except when creating the default file.
 - Codex runs launched in a selected repository may edit that repository's `goal.md` according to that repository's own instructions and the user's run prompt.
-
-## Scope
-
-### In Scope
-
-- Local Node.js backend using Fastify and TypeScript.
-- Vite, React, and TypeScript frontend.
-- Tailwind CSS and focused shadcn/ui components generated into this repository for a compact operations-panel UI.
-- `marked` plus DOMPurify for sanitized markdown rendering.
-- Server-Sent Events for backend-to-frontend status and log streaming.
-- `chokidar` for watching the selected repository's `goal.md`.
-- `zod` for request and input validation.
-- `child_process.spawn()` for Codex, git, and optional verification commands.
-- Calling Codex as `codex exec <prompt>`.
-- Relying on the user's existing `codex` CLI installation and authentication.
-- In-memory runtime state only.
-- Optional verification after successful Codex runs.
-- Optional auto-commit after Codex and verification succeed.
-
-### Out of Scope
-
-- Electron or Tauri.
-- Database persistence or run history across server restarts.
-- Model provider configuration.
-- OpenAI API keys or any API-key entry flow.
-- Code editor, file tree, or diff viewer.
-- Plugin system.
-- Multi-goal workflows.
-- Support for any durable plan file other than `goal.md`.
-- Remote repository browsing or hosted execution.
-- Telemetry or remote log upload.
 
 ## Stop Conditions
 
@@ -64,16 +64,6 @@ The run loop must stop when any of these occurs:
 - Required inputs are invalid or missing.
 - The selected repository or `goal.md` becomes unavailable during a run.
 
-## Product Shape
-
-The app should feel like a small professional operations panel: focused, quiet, compact, and useful during repeated local development runs.
-
-- Top bar: app name, selected repository path, and current status badge.
-- Main left panel: rendered sanitized `goal.md`.
-- Right side panel: repository selection, repeat prompt, run count, optional verification command, auto-commit toggle, start button, and stop button.
-- Bottom panel: live logs and latest run summary.
-- Use actual generated/imported shadcn/ui controls where useful, but do not add unused component scaffolding.
-
 ## Safety Rules
 
 - Never ask for, store, or expose OpenAI API keys or model-provider credentials.
@@ -85,238 +75,66 @@ The app should feel like a small professional operations panel: focused, quiet, 
 - Do not auto-commit unless the user explicitly enables it for the current run configuration.
 - Do not run more than the requested number of Codex passes.
 - Do not continue after any stop condition.
-- Keep logs local. Do not add telemetry, analytics, or remote log upload.
-- Third-party packages, shadcn/ui components, and established libraries are allowed when they are directly needed for the selected checkbox and are the pragmatic implementation choice.
-- Do not hand-roll replacements for appropriate outside libraries or shadcn/ui components solely to avoid dependency installation.
+- Keep logs local.
+- Add third-party packages or shadcn/ui components only when directly needed for the selected work.
 - Before running any install or download command, request command approval through the sandbox escalation flow and state what will be installed.
 - Do not use persistent prefix approval for dependency install commands unless the user explicitly asks for it.
 - Do not add unused dependencies or component scaffolding.
 
-## Future Codex Run Discipline
-
-Future Codex runs working from this file must complete exactly one unchecked checkbox or one unchecked sub-checkbox at a time.
-
-Rules for future runs:
+## Execution Rules
 
 - Use this `goal.md` as the source of truth.
-- Pick the first sensible unchecked item that can be completed independently.
+- Complete the next valid unchecked item only.
+- A valid item is the first unchecked checkbox whose dependencies are complete and whose work can be safely completed in one focused pass.
 - Split oversized checklist items before implementing them.
-- Do not complete multiple checklist items in one run unless one item is only a tiny parent for already-completed substeps.
-- Future implementation runs may create, edit, or delete project files as needed to complete the selected checkbox or sub-checkbox.
-- When editing this file after implementation, update only the relevant checkbox state and any short durable blocker or decision that future runs need. This restriction applies only to edits made inside `goal.md`.
-- At the end of every phase, update `README.md` to reflect the completed behavior, commands, and usage before considering the phase complete.
-- Do not mark a checkbox complete unless the required files or behavior were implemented and verified.
-- Do not finish or mark work complete while active bugs, failing diagnostics, failing tests, build failures, runtime exceptions, or relevant console errors remain in the changed code path.
-- Do not scaffold ahead of the selected checkbox.
-- Do not broaden scope beyond the selected checkbox or sub-checkbox.
-- Do not add support for plan files other than `goal.md`.
-- If blocked, clearly say `GOAL_BLOCKED` in the Codex response with the exact reason.
-- Do not add a persistent `GOAL_BLOCKED` marker to this file unless the user explicitly asks for persistent blocked status.
-- Mark `GOAL_COMPLETE` only when every required MVP checkbox is complete and final verification passes.
+- Do not broaden scope beyond the selected checkbox.
+- Do not scaffold future phases unless required by the selected checkbox.
+- Keep each change independently verifiable.
+- Preserve existing behavior unless the selected item explicitly changes it.
+- Do not rename scripts, endpoints, event names, request fields, response fields, persisted assumptions, public APIs, IPC channels, exported functions, props, or files unless the selected item requires it.
+- Update only the relevant checkbox state after verified completion.
+- Do not add run logs, reasoning traces, routine progress notes, or command output to this file.
 
-## File Hygiene Rules
+## Implementation Plan
 
-- Keep this file as a concise execution control document, not an implementation journal.
-- Do not add progress summaries, reasoning traces, routine observations, or command output.
-- Only edit this file to:
-  - check off verified completed items,
-  - split oversized items into smaller actionable unchecked steps,
-  - add newly discovered required work or durable blockers,
-  - remove or retire work only after verifying it is no longer needed,
-  - record user approvals or decisions that materially affect future runs.
-- Keep durable notes short.
-- If a note will not matter to a future run, do not write it here.
+No active implementation checklist is currently defined.
 
-## Definition of Done
+When new work is requested, add only small unchecked items that are independently verifiable and inside the scope above.
 
-A checklist item is complete only when:
+## Verification
 
-- the relevant code or documentation has been implemented,
-- existing behavior and contracts have been preserved unless the checkbox requires changing them,
-- active bugs in the touched code path have been investigated and fixed or explicitly classified as pre-existing blockers,
-- the most focused practical verification has passed,
-- broader verification has been run when the change affects shared behavior or the main workflow,
-- visible UI changes have been manually checked in a browser when practical,
-- diagnostics, test failures, build failures, runtime errors, console errors, and lint/type errors introduced or exposed by the change are resolved,
-- the relevant checkbox has been checked off in this file.
+Use the narrowest verification that proves the selected checkbox.
 
-For API, process, and filesystem behavior:
-
-- Do not rename scripts, endpoints, event names, request fields, response fields, or persisted assumptions unless the selected checkbox requires it.
-- Do not combine unrelated behavior changes in one pass.
-- Add or update tests when stop conditions, path restrictions, validation, process spawning, or state transitions change.
-
-## Required First Pass
-
-Before implementation, Codex must:
-
-- Inspect the relevant project structure.
-- Identify existing conventions, dependencies, tests, scripts, and verification commands.
-- Identify currently visible bugs or diagnostics related to the selected work before editing code.
-- Confirm whether the next checklist item is stale, incomplete, or too broad.
-- Split oversized checklist items before implementation.
-- Avoid adding reconnaissance notes unless they record a blocker, user approval, or durable decision.
-
-## Implementation Phases
-
-### Phase 1: Project Foundation
-
-- [x] Create the minimal project scaffold.
-  - [x] Add `package.json` with development, typecheck, lint, test, and production build scripts.
-  - [x] Add TypeScript configuration for backend and frontend.
-  - [x] Add the minimal Fastify server entrypoint.
-  - [x] Add the minimal Vite + React entrypoint.
-  - [x] Add Tailwind configuration and the frontend stylesheet entry.
-  - [x] Add only the UI primitives needed by the first screen.
-  - [x] Add a short README with local development and verification commands.
-- [x] Update README.md with the completed Phase 1 behavior, commands, and usage.
-
-### Phase 2: Backend Repository and Goal File API
-
-- [x] Add repository selection endpoint with `zod` validation for a local path.
-- [x] Validate selected paths as existing directories and git repositories.
-- [x] Store the selected repository only in local in-memory runtime state.
-- [x] Add `goal.md` read endpoint restricted to `<selected-repo>/goal.md`.
-- [x] Return a clear missing-goal state when `goal.md` does not exist.
-- [x] Add explicit user-requested default `goal.md` creation.
-- [x] Refuse arbitrary markdown paths and alternate plan names.
-- [x] Return useful validation errors to the frontend.
-- [x] Update README.md with the completed Phase 2 behavior, commands, and usage.
-
-### Phase 3: Backend Streaming and File Watching
-
-- [x] Add Server-Sent Events for status, logs, run progress, and latest summary.
-- [x] Start a `chokidar` watcher when a repository is selected.
-- [x] Stop or replace the watcher when the selected repository changes.
-- [x] Notify connected clients when `goal.md` changes.
-- [x] Avoid watching unrelated files.
-- [x] Update README.md with the completed Phase 3 behavior, commands, and usage.
-
-### Phase 4: Codex Run Loop
-
-- [x] Add run-loop state for idle, running, stopping, complete, blocked, failed, and stopped.
-- [x] Add start validation for selected repo, prompt, run count, and no active run.
-- [x] Spawn a fresh `codex exec <prompt>` process for each run in the selected repository.
-- [x] Stream Codex stdout and stderr to connected clients.
-- [x] Stop immediately on non-zero Codex exit.
-- [x] Re-read `goal.md` after each successful Codex run.
-- [x] Stop when refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`.
-- [x] Continue only when no stop condition is present and runs remain.
-- [x] Add stop endpoint that terminates the active child process when possible.
-- [x] Prevent new runs from starting after stop is requested.
-- [x] Report stopped status clearly.
-- [x] Update README.md with the completed Phase 4 behavior, commands, and usage.
-
-### Phase 5: Optional Verification and Auto-Commit
-
-- [x] Accept an empty verification value or a single command with arguments.
-- [x] Validate or parse verification before spawning it.
-- [x] Run verification only after a successful Codex run in the selected repository.
-- [x] Stream verification output and stop on verification failure.
-- [x] Add explicit auto-commit toggle.
-- [x] Commit only after Codex and optional verification succeed.
-- [x] Run git status before commit and skip commit when there are no changes.
-- [x] Use a clear generated commit message, stream git output, and stop on commit failure.
-- [x] Update README.md with the completed Phase 5 behavior, commands, and usage.
-
-### Phase 6: Frontend Shell and Layout
-
-- [x] Add shadcn/ui configuration for this repository, including `components.json`, Tailwind semantic tokens, and shadcn aliases.
-- [x] Generate the first focused shadcn/ui components needed by the current shell, plus required local helper files, without migrating the UI in the same pass.
-- [x] Import generated shadcn/ui components into the current UI for the first focused shell control replacement.
-- [x] Refactor the existing top bar status badge to generated shadcn/ui components without changing repository loading behavior.
-- [x] Refactor the existing `goal.md` document panel shell to generated shadcn/ui components without changing placeholder states.
-- [x] Add top bar with app name, selected repository path, and status badge.
-- [x] Add main left panel for rendered `goal.md`.
-- [x] Add compact right-side controls panel using generated shadcn/ui primitives where appropriate.
-- [x] Add bottom logs and latest summary panel using generated shadcn/ui primitives where appropriate.
-- [x] Re-check the completed frontend shell for remaining custom controls that should use generated shadcn/ui components before adding new workflow behavior.
-- [x] Keep the UI responsive without changing the primary workflow.
-- [x] Add repository path entry, selected-path display, and validation errors.
-- [x] Show a create-default-`goal.md` action when missing. Use https://ui.shadcn.com/docs/components/radix/empty to do this if possible.
-- [x] Update README.md with the completed Phase 6 behavior, commands, and usage.
-
-### Phase 7: Markdown Rendering
-
-- [x] Fetch `goal.md` from the backend.
-- [x] Convert markdown with `marked`. Marked Documentation: https://marked.js.org/ and https://www.npmjs.com/package/marked
-- [x] Sanitize rendered HTML with DOMPurify. DOMPurify Documentation: https://github.com/cure53/DOMPurify and https://www.npmjs.com/package/dompurify
-- [x] Style markdown output for readability.
-- [x] Refresh rendering when the backend reports a file change or completed run.
-- [x] Update README.md with the completed Phase 7 behavior, commands, and usage.
-
-### Phase 8: Run Controls and Live Status
-
-- [x] Add repeat prompt textarea.
-- [x] Add run count input.
-- [x] Add optional verification command input.
-- [x] Add auto-commit switch.
-- [x] Add start and stop buttons with correct disabled states.
-- [x] Connect to the SSE stream.
-- [x] Show status, run progress, logs, and latest run summary.
-- [x] Update README.md with the completed Phase 8 behavior, commands, and usage.
-
-### Phase 9: Verification and Polish
-
-- [x] Add unit tests for stop-condition detection.
-- [x] Add unit tests for request validation.
-- [x] Add unit tests for `goal.md` path restrictions.
-- [x] Add unit tests for run-loop state transitions.
-- [x] Manually verify repository selection, goal creation, and goal rendering.
-- [x] Manually verify a one-run Codex loop with a harmless prompt.
-- [x] Manually verify stop conditions: max run count, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
-- [x] Update README.md with the completed Phase 9 behavior, commands, usage, and final verification status.
-
-## Verification Guidance
-
-Use the repo's actual scripts:
+Expected commands:
 
 - `npm run typecheck`
-- `npm test` or the closest available focused test command
+- `npm test` or the closest focused test command
+- `npm run lint`
 - `npm run build`
 
-Active bug gate:
+Do not mark a checkbox complete if the changed path has active test failures, type errors, lint errors, build failures, runtime exceptions, relevant console errors, or obvious regressions.
 
-- Before finishing, rerun the most relevant diagnostics for the changed code path.
-- Treat any active bug, failing diagnostic, failing test, build failure, runtime exception, or obvious console error in the changed path as a blocker.
-- Do not mark work complete while active bugs remain unless the bug is clearly unrelated pre-existing behavior; in that case, document it as `GOAL_BLOCKED` or add a durable blocker rather than silently finishing.
-
-For small documentation-only changes, no code verification is required, but the markdown should still be reviewed for consistency.
-
-Do not mark a checkbox complete unless its behavior has been implemented and verified.
+For small documentation-only changes, no code verification is required, but the markdown should be reviewed for consistency.
 
 ## Browser / Visual Verification Policy
 
 Do not run visual browser inspection, `agent-browser`, Playwright, Cypress, headed browser checks, screenshot checks, or browser automation during normal goal execution.
 
 Default verification should use non-visual commands only:
+
 - `npm test`
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
 - targeted HTTP/API checks when relevant
 
-If a task affects UI behavior, prefer one of these non-visual checks:
-- verify the dev server starts only when necessary
-- use HTTP checks such as `Invoke-WebRequest`, `curl`, or API endpoint calls
-- inspect rendered/client code statically
-- report that visual verification was skipped by project policy
-
 Only run visual browser verification when the user explicitly asks for it in the current prompt.
-If visual browser verification is unavailable, do not troubleshoot it unless explicitly asked. Continue with non-visual verification and report the limitation briefly.
 
-## Blocked Status Handling
+## Blocked / Complete Policy
 
-- Codex should report blocked runs in its response as `GOAL_BLOCKED` with the exact reason.
-- Codex should not persist `GOAL_BLOCKED` into this file by default.
-- The app may stop when a refreshed selected repository `goal.md` contains `GOAL_BLOCKED`.
-- A persistent `GOAL_BLOCKED` marker may be added to this file only when the user explicitly asks for persistent blocked status.
-
-## Completion Markers
-
-Add exactly one of these markers only when appropriate:
-
-- `GOAL_COMPLETE` when every required MVP checkbox is complete and final verification passes.
-- `GOAL_BLOCKED` only when the user explicitly asks Codex to persist blocked status in this file.
+- Report blocked runs as `GOAL_BLOCKED` with the exact reason.
+- Do not persist `GOAL_BLOCKED` in this file unless the user explicitly asks.
+- Add `GOAL_COMPLETE` only when every required checkbox is complete and final verification passes.
+- Do not add completion markers during ordinary intermediate runs.
 
 GOAL_COMPLETE
