@@ -128,7 +128,7 @@ export function LogsSummaryPanel({
             ) : (
               <div className="flex min-h-full items-center justify-center py-5">
                 <p className="max-w-sm text-center font-mono text-xs leading-5 text-zinc-400">
-                  Run output will stream here when a Codex loop starts.
+                  Run output will stream here when a Agent loop starts
                 </p>
               </div>
             )}
