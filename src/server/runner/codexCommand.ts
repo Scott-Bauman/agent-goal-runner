@@ -1,13 +1,46 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { SpawnCommand } from "../shared/process.js";
 
-export function getCodexExecSpawnCommand(prompt: string): SpawnCommand {
+export type CodexExecOptions = {
+  model: CodexModel | null;
+  reasoningEffort: CodexReasoningEffort | null;
+};
+
+function getCodexExecArgs(
+  prompt: string,
+  options: CodexExecOptions = {
+    model: null,
+    reasoningEffort: null,
+  },
+): string[] {
+  const args = ["exec"];
+
+  if (options.model) {
+    args.push("--model", options.model);
+  }
+
+  if (options.reasoningEffort) {
+    args.push("-c", `model_reasoning_effort=${options.reasoningEffort}`);
+  }
+
+  args.push(prompt);
+
+  return args;
+}
+
+export function getCodexExecSpawnCommand(
+  prompt: string,
+  options?: CodexExecOptions,
+): SpawnCommand {
+  const execArgs = getCodexExecArgs(prompt, options);
+
   if (process.platform !== "win32") {
     return {
       command: "codex",
-      args: ["exec", prompt],
+      args: execArgs,
     };
   }
 
@@ -28,13 +61,13 @@ export function getCodexExecSpawnCommand(prompt: string): SpawnCommand {
     if (existsSync(codexEntrypoint)) {
       return {
         command: process.execPath,
-        args: [codexEntrypoint, "exec", prompt],
+        args: [codexEntrypoint, ...execArgs],
       };
     }
   }
 
   return {
     command: "codex",
-    args: ["exec", prompt],
+    args: execArgs,
   };
 }

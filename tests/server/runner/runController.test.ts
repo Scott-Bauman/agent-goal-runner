@@ -34,6 +34,8 @@ describe("run controller orchestration", () => {
       runCount: 2,
       verificationCommandToRun: null,
       autoCommit: false,
+      model: "gpt-5.4",
+      reasoningEffort: "medium",
     });
     firstRunProcess.emit("close", 0, null);
 
@@ -52,6 +54,10 @@ describe("run controller orchestration", () => {
         message: "Started Codex run 2 of 2.",
       },
     });
+    expect(spawnProcess.mock.calls[0]?.[1]).toEqual(
+      expect.arrayContaining(["--model", "gpt-5.4", "-c", "model_reasoning_effort=medium"]),
+    );
+    expect(spawnProcess.mock.calls[1]?.[1]).toEqual(spawnProcess.mock.calls[0]?.[1]);
   });
 
   it("blocks the run loop when the refreshed goal contains GOAL_BLOCKED", async () => {
@@ -70,6 +76,8 @@ describe("run controller orchestration", () => {
       runCount: 3,
       verificationCommandToRun: null,
       autoCommit: false,
+      model: null,
+      reasoningEffort: null,
     });
     runProcess.emit("close", 0, null);
 

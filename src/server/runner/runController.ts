@@ -10,6 +10,7 @@ import type { ProcessSpawner } from "../shared/process.js";
 import type { RuntimeState } from "../shared/runtime.js";
 import type { SseHub } from "../sse/sseHub.js";
 import { getCodexExecSpawnCommand } from "./codexCommand.js";
+import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { ParsedVerificationCommand } from "./verificationCommand.js";
 
 type ActiveRunProcessKind = "codex" | "verification" | "git";
@@ -20,6 +21,8 @@ export type StartRunOptions = {
   runCount: number;
   verificationCommandToRun: ParsedVerificationCommand | null;
   autoCommit: boolean;
+  model: CodexModel | null;
+  reasoningEffort: CodexReasoningEffort | null;
 };
 
 export class RunController {
@@ -116,9 +119,19 @@ export class RunController {
   }
 
   private startCodexRun(options: StartRunOptions, runNumber: number): void {
-    const { repositoryPath, prompt, runCount, verificationCommandToRun, autoCommit } =
-      options;
-    const codexCommand = getCodexExecSpawnCommand(prompt);
+    const {
+      repositoryPath,
+      prompt,
+      runCount,
+      verificationCommandToRun,
+      autoCommit,
+      model,
+      reasoningEffort,
+    } = options;
+    const codexCommand = getCodexExecSpawnCommand(prompt, {
+      model,
+      reasoningEffort,
+    });
     const childProcess = this.spawnProcess(codexCommand.command, codexCommand.args, {
       cwd: repositoryPath,
       windowsHide: true,

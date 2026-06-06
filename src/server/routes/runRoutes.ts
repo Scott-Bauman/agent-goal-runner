@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import {
+  CODEX_MODELS,
+  CODEX_REASONING_EFFORTS,
+} from "../runner/codexOptions.js";
 import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
 import { parseVerificationCommand } from "../runner/verificationCommand.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
@@ -42,6 +46,8 @@ const runStartSchema = z
       .int("Run count must be a whole number.")
       .min(1, "Run count must be at least 1.")
       .max(100, "Run count must be at most 100."),
+    model: z.enum(CODEX_MODELS).nullable().default(null),
+    reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
   })
   .strict();
 
@@ -73,7 +79,14 @@ export function registerRunRoutes(
     }
 
     const repositoryPath = context.runtimeState.selectedRepositoryPath;
-    const { prompt, runCount, verificationCommand, autoCommit } = parsedBody.data;
+    const {
+      prompt,
+      runCount,
+      verificationCommand,
+      autoCommit,
+      model,
+      reasoningEffort,
+    } = parsedBody.data;
     const verificationCommandParse = parseVerificationCommand(verificationCommand);
 
     if (!verificationCommandParse.success) {
@@ -93,6 +106,8 @@ export function registerRunRoutes(
       runCount,
       verificationCommandToRun: verificationCommandParse.parsed,
       autoCommit,
+      model,
+      reasoningEffort,
     });
 
     return reply.code(202).send({
@@ -102,6 +117,8 @@ export function registerRunRoutes(
       runCount,
       verificationCommand,
       autoCommit,
+      model,
+      reasoningEffort,
     });
   });
 

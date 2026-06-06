@@ -84,6 +84,26 @@ describe("run start endpoint", () => {
       "Auto-commit toggle must be a boolean.",
     ],
     [
+      "invalid model",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        model: "gpt-4",
+      },
+      "model",
+      "Invalid enum value. Expected 'gpt-5.5' | 'gpt-5.4' | 'gpt-5.4-mini' | 'gpt-5.4-nano' | 'gpt-5.3-codex', received 'gpt-4'",
+    ],
+    [
+      "invalid reasoning effort",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        reasoningEffort: "extreme",
+      },
+      "reasoningEffort",
+      "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh', received 'extreme'",
+    ],
+    [
       "verification command with shell operator",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -222,6 +242,8 @@ describe("run start endpoint", () => {
       runCount: 2,
       verificationCommand: "",
       autoCommit: false,
+      model: null,
+      reasoningEffort: null,
     });
   });
 
@@ -255,7 +277,65 @@ describe("run start endpoint", () => {
       runCount: 1,
       verificationCommand: "",
       autoCommit: true,
+      model: null,
+      reasoningEffort: null,
     });
+  });
+
+  it("accepts explicit model and reasoning effort selections", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
+    const app = await buildServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/repository/select",
+      payload: {
+        path: repositoryPath,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        model: "gpt-5.4-nano",
+        reasoningEffort: "low",
+      },
+    });
+    const expectedCodexCommand = getCodexExecSpawnCommand(
+      "Use goal.md as the source of truth.",
+      {
+        model: "gpt-5.4-nano",
+        reasoningEffort: "low",
+      },
+    );
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      status: "running",
+      repositoryPath: path.normalize(repositoryPath),
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommand: "",
+      autoCommit: false,
+      model: "gpt-5.4-nano",
+      reasoningEffort: "low",
+    });
+    expect(spawnProcess).toHaveBeenCalledWith(
+      expectedCodexCommand.command,
+      expectedCodexCommand.args,
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
   });
 
   it("transitions from idle to running when a run starts", async () => {
@@ -420,6 +500,8 @@ describe("run start endpoint", () => {
       runCount: 1,
       verificationCommand: expected,
       autoCommit: false,
+      model: null,
+      reasoningEffort: null,
     });
   });
 
@@ -1905,4 +1987,3 @@ describe("run start endpoint", () => {
     await reader.cancel();
   });
 });
-

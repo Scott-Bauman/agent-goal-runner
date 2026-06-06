@@ -17,6 +17,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/web/components/ui/card";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/web/components/ui/combobox";
 import { Input } from "@/web/components/ui/input";
 import { Textarea } from "@/web/components/ui/textarea";
 import {
@@ -28,6 +35,12 @@ import {
   isActiveRunnerStatus,
   type RunnerStatus,
 } from "@/web/runner/statuses";
+import {
+  CODEX_MODELS,
+  CODEX_REASONING_EFFORTS,
+  type CodexModel,
+  type CodexReasoningEffort,
+} from "@/web/runner/codexOptions";
 
 type RunControlFormState = {
   status: "idle" | "starting" | "stopping";
@@ -40,6 +53,26 @@ const DEFAULT_REPEAT_PROMPT = [
   "",
   "Complete the next valid unchecked item.",
 ].join("\n");
+const CLI_DEFAULT_OPTION = "CLI default";
+
+type ModelSelection = CodexModel | typeof CLI_DEFAULT_OPTION;
+type ReasoningEffortSelection = CodexReasoningEffort | typeof CLI_DEFAULT_OPTION;
+
+const MODEL_OPTIONS: ModelSelection[] = [CLI_DEFAULT_OPTION, ...CODEX_MODELS];
+const REASONING_EFFORT_OPTIONS: ReasoningEffortSelection[] = [
+  CLI_DEFAULT_OPTION,
+  ...CODEX_REASONING_EFFORTS,
+];
+
+function toRunModel(selection: ModelSelection): CodexModel | null {
+  return selection === CLI_DEFAULT_OPTION ? null : selection;
+}
+
+function toRunReasoningEffort(
+  selection: ReasoningEffortSelection,
+): CodexReasoningEffort | null {
+  return selection === CLI_DEFAULT_OPTION ? null : selection;
+}
 
 export function ControlsPanel({
   onRepositorySelected,
@@ -57,6 +90,9 @@ export function ControlsPanel({
   const [runCount, setRunCount] = useState("1");
   const [verificationCommand, setVerificationCommand] = useState("");
   const [autoCommit, setAutoCommit] = useState(false);
+  const [model, setModel] = useState<ModelSelection>(CLI_DEFAULT_OPTION);
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffortSelection>(CLI_DEFAULT_OPTION);
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
       status: "idle",
@@ -211,7 +247,9 @@ export function ControlsPanel({
       const response = await fetch("/api/run/start", {
         body: JSON.stringify({
           autoCommit,
+          model: toRunModel(model),
           prompt: repeatPrompt,
+          reasoningEffort: toRunReasoningEffort(reasoningEffort),
           runCount: parsedRunCount,
           verificationCommand,
         }),
@@ -424,6 +462,77 @@ export function ControlsPanel({
             }}
             value={repeatPrompt}
           />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <label
+              className="text-xs font-medium text-zinc-700"
+              htmlFor="codex-model"
+            >
+              Model
+            </label>
+            <Combobox<ModelSelection>
+              items={MODEL_OPTIONS}
+              onValueChange={(value) => {
+                if (value) {
+                  setModel(value);
+                }
+              }}
+              value={model}
+            >
+              <ComboboxInput
+                id="codex-model"
+                readOnly
+              />
+              <ComboboxContent>
+                <ComboboxList>
+                  {MODEL_OPTIONS.map((option) => (
+                    <ComboboxItem
+                      key={option}
+                      value={option}
+                    >
+                      {option}
+                    </ComboboxItem>
+                  ))}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label
+              className="text-xs font-medium text-zinc-700"
+              htmlFor="reasoning-effort"
+            >
+              Reasoning effort
+            </label>
+            <Combobox<ReasoningEffortSelection>
+              items={REASONING_EFFORT_OPTIONS}
+              onValueChange={(value) => {
+                if (value) {
+                  setReasoningEffort(value);
+                }
+              }}
+              value={reasoningEffort}
+            >
+              <ComboboxInput
+                id="reasoning-effort"
+                readOnly
+              />
+              <ComboboxContent>
+                <ComboboxList>
+                  {REASONING_EFFORT_OPTIONS.map((option) => (
+                    <ComboboxItem
+                      key={option}
+                      value={option}
+                    >
+                      {option}
+                    </ComboboxItem>
+                  ))}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
