@@ -34,7 +34,11 @@ import {
   getGoalDocumentActionLabels,
   getGoalDocumentAvailability,
 } from "@/web/goal/goalEditing";
-import type { GoalFileResponse, GoalFileState } from "@/web/goal/goalFile";
+import {
+  getGoalFileLoadStartState,
+  type GoalFileResponse,
+  type GoalFileState,
+} from "@/web/goal/goalFile";
 import { renderGoalMarkdown } from "@/web/markdown";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import type { RunnerStatus } from "@/web/runner/statuses";
@@ -118,14 +122,16 @@ export function GoalDocumentPanel({
   );
 
   const loadGoalFile = useCallback(async (signal?: AbortSignal) => {
-    setGoalFileState({
-      status: "loading",
-      error: null,
-      goalPath: null,
-      markdown: null,
-      repositoryPath: null,
-      revision: null,
-    });
+    if (!selectedRepositoryPath) {
+      return;
+    }
+
+    setGoalFileState((currentState) =>
+      getGoalFileLoadStartState({
+        currentState,
+        selectedRepositoryPath,
+      }),
+    );
 
     try {
       const response = await fetch("/api/goal", {
@@ -176,7 +182,7 @@ export function GoalDocumentPanel({
         revision: null,
       });
     }
-  }, []);
+  }, [selectedRepositoryPath]);
 
   useEffect(() => {
     if (!selectedRepositoryPath) {

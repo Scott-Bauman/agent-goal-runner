@@ -23,3 +23,32 @@ export type GoalFileState =
       repositoryPath: null;
       revision: null;
     };
+
+export function createLoadingGoalFileState(): GoalFileState {
+  return {
+    status: "loading",
+    error: null,
+    goalPath: null,
+    markdown: null,
+    repositoryPath: null,
+    revision: null,
+  };
+}
+
+export function getGoalFileLoadStartState({
+  currentState,
+  selectedRepositoryPath,
+}: {
+  currentState: GoalFileState;
+  selectedRepositoryPath: string;
+}): GoalFileState {
+  if (
+    currentState.status === "available" &&
+    currentState.markdown !== null &&
+    currentState.repositoryPath === selectedRepositoryPath
+  ) {
+    return currentState;
+  }
+
+  return createLoadingGoalFileState();
+}
