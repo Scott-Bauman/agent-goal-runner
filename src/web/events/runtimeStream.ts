@@ -56,15 +56,15 @@ export const connectionStatusConfig: Record<
   }
 > = {
   connecting: {
-    label: "Connecting",
+    label: "SSE Connecting",
     variant: "outline",
   },
   open: {
-    label: "Stream open",
+    label: "SSE Stream Open",
     variant: "secondary",
   },
   error: {
-    label: "Stream error",
+    label: "SSE Stream Error",
     variant: "destructive",
   },
 };

@@ -1,6 +1,7 @@
 import { Activity, Terminal } from "lucide-react";
 
 import { Badge } from "@/web/components/ui/badge";
+import StatusIndicator from "@/web/components/ui/status-indicator";
 import {
   Card,
   CardContent,
@@ -19,6 +20,15 @@ import {
   statusBadgeConfig,
   type RunnerStatus,
 } from "@/web/runner/statuses";
+
+const connectionIndicatorState: Record<
+  RuntimeStreamState["connectionStatus"],
+  "active" | "down" | "fixing"
+> = {
+  connecting: "fixing",
+  error: "down",
+  open: "active",
+};
 
 export function LogsSummaryPanel({
   runnerStatus,
@@ -57,9 +67,14 @@ export function LogsSummaryPanel({
             {progressLabel}
           </CardDescription>
           <Badge
-            className="h-6 w-fit shrink-0"
+            className="h-6 w-fit shrink-0 gap-1.5"
             variant={connectionConfig.variant}
           >
+            <StatusIndicator
+              className="gap-0"
+              size="sm"
+              state={connectionIndicatorState[runtimeStream.connectionStatus]}
+            />
             {connectionConfig.label}
           </Badge>
         </div>

@@ -75,15 +75,15 @@ describe("runtime stream helpers", () => {
   it("defines connection status badge labels and variants", () => {
     expect(connectionStatusConfig).toEqual({
       connecting: {
-        label: "Connecting",
+        label: "SSE Connecting",
         variant: "outline",
       },
       error: {
-        label: "Stream error",
+        label: "SSE Stream Error",
         variant: "destructive",
       },
       open: {
-        label: "Stream open",
+        label: "SSE Stream Open",
         variant: "secondary",
       },
     });
