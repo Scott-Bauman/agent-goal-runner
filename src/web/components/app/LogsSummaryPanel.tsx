@@ -12,10 +12,10 @@ import {
 import { RunnerStatusBadge } from "@/web/components/app/RunnerStatusBadge";
 import {
   connectionStatusConfig,
-  formatLogStream,
   formatProgress,
   type RuntimeStreamState,
 } from "@/web/events/runtimeStream";
+import { LogConsole } from "@/web/components/app/LogConsole";
 import {
   statusBadgeConfig,
   type RunnerStatus,
@@ -97,42 +97,7 @@ export function LogsSummaryPanel({
               Live logs
             </h2>
           </div>
-          <div
-            aria-live="polite"
-            className="min-h-0 flex-1 overflow-auto bg-zinc-950 px-4 py-3"
-          >
-            {runtimeStream.logs.length > 0 ? (
-              <ol className="grid gap-2">
-                {runtimeStream.logs.map((entry) => (
-                  <li
-                    className="grid min-w-0 gap-1 font-mono text-xs leading-5 text-zinc-100 sm:grid-cols-[4.5rem_minmax(0,1fr)]"
-                    key={entry.id}
-                  >
-                    <span
-                      className={
-                        entry.stream === "stderr"
-                          ? "font-semibold text-red-300"
-                          : entry.stream === "stdout"
-                            ? "font-semibold text-emerald-300"
-                            : "font-semibold text-sky-300"
-                      }
-                    >
-                      {formatLogStream(entry.stream)}
-                    </span>
-                    <span className="min-w-0 whitespace-pre-wrap break-words text-zinc-200">
-                      {entry.message}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="flex min-h-full items-center justify-center py-5">
-                <p className="max-w-sm text-center font-mono text-xs leading-5 text-zinc-400">
-                  Run output will stream here when a Agent loop starts
-                </p>
-              </div>
-            )}
-          </div>
+          <LogConsole logs={runtimeStream.logs} />
         </section>
 
         <section

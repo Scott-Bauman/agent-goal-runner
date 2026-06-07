@@ -97,9 +97,9 @@ The run loop must stop when any of these occurs:
 
 ## Implementation Plan
 
-No active implementation checklist is currently defined.
+### Live Logs Test
 
-When new work is requested, add only small unchecked items that are independently verifiable and inside the scope above.
+- [ ] Say hello to verify live log streaming.
 
 ## Verification
 
@@ -136,5 +136,3 @@ Only run visual browser verification when the user explicitly asks for it in the
 - Do not persist `GOAL_BLOCKED` in this file unless the user explicitly asks.
 - Add `GOAL_COMPLETE` only when every required checkbox is complete and final verification passes.
 - Do not add completion markers during ordinary intermediate runs.
-
-GOAL_COMPLETE
