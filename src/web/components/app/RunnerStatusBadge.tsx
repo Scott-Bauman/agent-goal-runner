@@ -3,14 +3,21 @@ import {
   statusBadgeConfig,
   type RunnerStatus,
 } from "@/web/runner/statuses";
+import { cn } from "@/web/lib/utils";
 
-export function RunnerStatusBadge({ status }: { status: RunnerStatus }) {
+export function RunnerStatusBadge({
+  className,
+  status,
+}: {
+  className?: string;
+  status: RunnerStatus;
+}) {
   const config = statusBadgeConfig[status];
 
   return (
     <Badge
       aria-label={`Runner status: ${config.label}`}
-      className="h-7 w-fit shrink-0"
+      className={cn("h-7 w-fit shrink-0", className)}
       role="status"
       variant={config.variant}
     >

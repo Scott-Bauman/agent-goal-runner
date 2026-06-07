@@ -12,7 +12,8 @@ export function TopBar({
   repositorySelection: RepositorySelectionState;
   status: RunnerStatus;
 }) {
-  const selectedRepositoryLabel = getRepositoryLabel(repositorySelection);
+  const selectedRepositoryFullLabel = getRepositoryLabel(repositorySelection);
+  const selectedRepositoryLabel = getRepositoryFolderLabel(repositorySelection);
 
   return (
     <header className="border-b border-zinc-200 bg-white">
@@ -25,14 +26,40 @@ export function TopBar({
             <span className="shrink-0 font-medium text-zinc-600">Repository</span>
             <span
               className="min-w-0 truncate font-mono text-zinc-700"
-              title={selectedRepositoryLabel}
+              title={selectedRepositoryFullLabel}
             >
               {selectedRepositoryLabel}
             </span>
           </div>
         </div>
-        <RunnerStatusBadge status={status} />
+        <div className="grid justify-items-center gap-1">
+          <span className="text-xs font-medium text-zinc-600">Status</span>
+          <RunnerStatusBadge
+            className="h-7 min-w-15 justify-center px-4 text-sm"
+            status={status}
+          />
+        </div>
       </div>
     </header>
   );
+}
+
+function getRepositoryFolderLabel(
+  repositorySelection: RepositorySelectionState,
+) {
+  if (
+    repositorySelection.status !== "ready" ||
+    repositorySelection.repositoryPath === null
+  ) {
+    return getRepositoryLabel(repositorySelection);
+  }
+
+  return getFolderName(repositorySelection.repositoryPath);
+}
+
+function getFolderName(repositoryPath: string) {
+  const trimmedPath = repositoryPath.replace(/[\\/]+$/, "");
+  const pathParts = trimmedPath.split(/[\\/]/);
+
+  return pathParts[pathParts.length - 1] || repositoryPath;
 }
