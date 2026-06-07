@@ -16,10 +16,8 @@ import {
   type RuntimeStreamState,
 } from "@/web/events/runtimeStream";
 import { LogConsole } from "@/web/components/app/LogConsole";
-import {
-  statusBadgeConfig,
-  type RunnerStatus,
-} from "@/web/runner/statuses";
+import { extractChangedFiles } from "@/web/components/app/logText";
+import type { RunnerStatus } from "@/web/runner/statuses";
 
 const connectionIndicatorState: Record<
   RuntimeStreamState["connectionStatus"],
@@ -41,6 +39,7 @@ export function LogsSummaryPanel({
     connectionStatusConfig[runtimeStream.connectionStatus];
   const latestSummary = runtimeStream.latestSummary;
   const progressLabel = formatProgress(runtimeStream.progress);
+  const changedFiles = extractChangedFiles(runtimeStream.logs);
 
   return (
     <Card
@@ -125,9 +124,27 @@ export function LogsSummaryPanel({
               </dd>
             </div>
             <div className="grid gap-1">
-              <dt className="font-medium text-zinc-500">Progress</dt>
+              <dt className="font-medium text-zinc-500">Run</dt>
               <dd className="text-sm font-medium text-zinc-800">
                 {progressLabel}
+              </dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="font-medium text-zinc-500">Changed files</dt>
+              <dd className="grid gap-1 leading-5 text-muted-foreground">
+                {changedFiles.length > 0 ? (
+                  changedFiles.slice(0, 6).map((filePath) => (
+                    <span
+                      className="truncate"
+                      key={filePath}
+                      title={filePath}
+                    >
+                      {filePath}
+                    </span>
+                  ))
+                ) : (
+                  "Not reported"
+                )}
               </dd>
             </div>
             <div className="grid gap-1">
@@ -137,14 +154,6 @@ export function LogsSummaryPanel({
                   "Run summaries will appear here after backend events are received."}
               </dd>
             </div>
-            {latestSummary ? (
-              <div className="grid gap-1">
-                <dt className="font-medium text-zinc-500">Event status</dt>
-                <dd className="text-sm font-medium text-zinc-800">
-                  {statusBadgeConfig[latestSummary.status].label}
-                </dd>
-              </div>
-            ) : null}
           </dl>
         </section>
       </CardContent>

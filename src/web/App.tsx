@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { OperationsWorkspace } from "@/web/components/app/OperationsWorkspace";
 import { TopBar } from "@/web/components/app/TopBar";
 import {
+  appendLogEntriesToTranscript,
+  appendProgressSeparatorToTranscript,
+  appendSummarySeparatorToTranscript,
   INITIAL_RUNTIME_STREAM_STATE,
   parseSseData,
   type GoalChangedEvent,
@@ -116,7 +119,11 @@ export function App() {
 
       setRuntimeStream((currentStream) => ({
         ...currentStream,
-        logs: logsEvent.entries,
+        logs: appendLogEntriesToTranscript(
+          currentStream.logs,
+          logsEvent.entries,
+          currentStream.progress,
+        ),
       }));
     }
 
@@ -133,6 +140,7 @@ export function App() {
 
       setRuntimeStream((currentStream) => ({
         ...currentStream,
+        logs: appendProgressSeparatorToTranscript(currentStream.logs, progress),
         progress,
       }));
     }
@@ -142,6 +150,11 @@ export function App() {
 
       setRuntimeStream((currentStream) => ({
         ...currentStream,
+        logs: appendSummarySeparatorToTranscript(
+          currentStream.logs,
+          summary,
+          currentStream.progress,
+        ),
         latestSummary: summary,
       }));
 
