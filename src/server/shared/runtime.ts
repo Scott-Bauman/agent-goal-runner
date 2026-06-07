@@ -1,4 +1,5 @@
 import type { GoalWatcherController } from "../goal/goalWatcher.js";
+import type { FolderDialogResult } from "../repository/folderDialog.js";
 import type { RunController } from "../runner/runController.js";
 import type { RuntimeStreamState } from "../sse/types.js";
 import type { SseHub } from "../sse/sseHub.js";
@@ -13,4 +14,5 @@ export type ServerRuntimeContext = {
   sseHub: SseHub;
   goalWatcher: GoalWatcherController;
   runController: RunController;
+  openRepositoryFolderDialog: () => Promise<FolderDialogResult>;
 };

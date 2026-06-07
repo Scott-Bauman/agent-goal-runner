@@ -5,15 +5,18 @@ import { vi } from "vitest";
 import "./chokidarMock";
 import { buildServer, type BuildServerOptions } from "../../../src/server/index";
 import { createMockRunProcess } from "./process";
+import { openRepositoryFolderDialogMock } from "./repositoryBrowse";
 
 let server: FastifyInstance | undefined;
 
 export async function createTestServer(
-  options: BuildServerOptions = {
-    spawnProcess: vi.fn(() => createMockRunProcess()),
-  },
+  options: BuildServerOptions = {},
 ): Promise<FastifyInstance> {
-  server = await buildServer(options);
+  server = await buildServer({
+    openRepositoryFolderDialog: openRepositoryFolderDialogMock,
+    spawnProcess: vi.fn(() => createMockRunProcess()),
+    ...options,
+  });
   return server;
 }
 

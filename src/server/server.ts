@@ -3,6 +3,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { spawn } from "node:child_process";
 
 import { GoalWatcherController } from "./goal/goalWatcher.js";
+import { openFolderDialog } from "./repository/folderDialog.js";
+import type { FolderDialogResult } from "./repository/folderDialog.js";
 import { registerEventsRoutes } from "./routes/eventsRoutes.js";
 import { registerGoalRoutes } from "./routes/goalRoutes.js";
 import { registerHealthRoutes } from "./routes/healthRoutes.js";
@@ -14,6 +16,7 @@ import type { RuntimeState, ServerRuntimeContext } from "./shared/runtime.js";
 import { createInitialStreamState, SseHub } from "./sse/sseHub.js";
 
 export type BuildServerOptions = {
+  openRepositoryFolderDialog?: () => Promise<FolderDialogResult>;
   spawnProcess?: ProcessSpawner;
 };
 
@@ -36,6 +39,8 @@ export async function buildServer(
     sseHub,
     goalWatcher,
     runController,
+    openRepositoryFolderDialog:
+      options.openRepositoryFolderDialog ?? openFolderDialog,
   };
 
   await server.register(cors, {

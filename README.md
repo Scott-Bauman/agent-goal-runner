@@ -12,7 +12,7 @@ The MVP has completed Phase 9 verification and polish. It has a Fastify backend,
 - shadcn/ui is configured with local aliases, Tailwind semantic tokens, and generated focused primitives for badges, buttons, cards, empty states, inputs, and textareas.
 - The top bar shows the app name, selected repository path state, and locally tracked runner status badge.
 - The main workspace has a left rendered `goal.md` document panel, a compact right-side controls panel, and a bottom logs plus latest-summary panel.
-- Repository path entry is available in the controls panel with selected-path display and frontend-ready validation errors.
+- Repository selection is available in the controls panel through a native folder picker with selected-path display and frontend-ready validation errors.
 - When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
 - The repeat prompt textarea is editable and prefilled with a goal-driven default prompt for future run starts.
 - The run count input is editable and uses the same 1 through 100 numeric bounds accepted by the backend start endpoint.
@@ -27,7 +27,8 @@ The MVP has completed Phase 9 verification and polish. It has a Fastify backend,
 - The logs header and latest-summary panel render current run progress from backend `progress` events.
 - The latest-summary panel renders the most recent run-loop message from backend `summary` events.
 - Vite proxies frontend `/api/*` requests to the local backend during development.
-- Repository selection is available through `POST /api/repository/select` with a JSON body containing an absolute local `path`.
+- Repository selection is available through `POST /api/repository/browse`, which opens a native folder picker on the backend host.
+- A successful browse returns `{ "repositoryPath": "...", "cancelled": false }`; user cancellation returns `{ "repositoryPath": null, "cancelled": true }` and leaves state unchanged.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.
 - The selected repository is kept only in server memory and can be read with `GET /api/repository/selection`.
 - The backend reads only the selected repository's `goal.md` through `GET /api/goal`.
@@ -94,7 +95,7 @@ npm run dev:web
 
 ## Run Loop API
 
-After selecting a repository with `POST /api/repository/select`, start a controlled Agent loop with:
+After selecting a repository with `POST /api/repository/browse`, start a controlled Agent loop with:
 
 ```sh
 curl -X POST http://127.0.0.1:4317/api/run/start \

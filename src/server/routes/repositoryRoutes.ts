@@ -1,11 +1,15 @@
 import type { FastifyInstance } from "fastify";
+import path from "node:path";
 
 import {
-  repositorySelectionSchema,
+  FolderDialogCommandError,
+  FolderDialogUnsupportedError,
+} from "../repository/folderDialog.js";
+import {
   validateRepositoryPath,
 } from "../repository/repositorySelection.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
-import { formatZodIssues, validationError } from "../shared/validation.js";
+import { validationError } from "../shared/validation.js";
 
 export function registerRepositoryRoutes(
   server: FastifyInstance,
@@ -15,21 +19,33 @@ export function registerRepositoryRoutes(
     repositoryPath: context.runtimeState.selectedRepositoryPath,
   }));
 
-  server.post("/api/repository/select", async (request, reply) => {
-    const parsedBody = repositorySelectionSchema.safeParse(request.body);
+  server.post("/api/repository/browse", async (_request, reply) => {
+    let dialogResult;
 
-    if (!parsedBody.success) {
-      return reply
-        .code(400)
-        .send(
-          validationError(
-            "Invalid repository selection request.",
-            formatZodIssues(parsedBody.error),
-          ),
-        );
+    try {
+      dialogResult = await context.openRepositoryFolderDialog();
+    } catch (error) {
+      if (
+        error instanceof FolderDialogUnsupportedError ||
+        error instanceof FolderDialogCommandError
+      ) {
+        return reply.code(500).send({
+          error: error.message,
+        });
+      }
+
+      throw error;
     }
 
-    const repositoryPathIssue = await validateRepositoryPath(parsedBody.data.path);
+    if (dialogResult.cancelled) {
+      return {
+        repositoryPath: null,
+        cancelled: true,
+      };
+    }
+
+    const repositoryPath = path.normalize(dialogResult.path);
+    const repositoryPathIssue = await validateRepositoryPath(repositoryPath);
 
     if (repositoryPathIssue) {
       return reply.code(400).send(
@@ -42,7 +58,7 @@ export function registerRepositoryRoutes(
       );
     }
 
-    context.runtimeState.selectedRepositoryPath = parsedBody.data.path;
+    context.runtimeState.selectedRepositoryPath = repositoryPath;
     await context.goalWatcher.replace(context.runtimeState.selectedRepositoryPath);
     context.sseHub.broadcast("status", {
       status: context.runtimeState.stream.runLoop.status,
@@ -51,6 +67,7 @@ export function registerRepositoryRoutes(
 
     return {
       repositoryPath: context.runtimeState.selectedRepositoryPath,
+      cancelled: false,
     };
   });
 }

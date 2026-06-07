@@ -2,9 +2,10 @@ import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 
-import { buildServer, getCodexExecSpawnCommand } from "../../../src/server/index";
+import { getCodexExecSpawnCommand } from "../../../src/server/index";
 import { createTestServer, listenOnRandomPort, trackTestServer } from "../helpers/fastify";
 import { createMockRunProcess } from "../helpers/process";
+import { browseRepository } from "../helpers/repositoryBrowse";
 import { createRepositoryPath } from "../helpers/tempRepository";
 import {
   parseSsePayloads,
@@ -149,13 +150,7 @@ describe("run start endpoint", () => {
       const repositoryPath = await createRepositoryPath();
       const app = await createTestServer();
 
-      await app.inject({
-        method: "POST",
-        url: "/api/repository/select",
-        payload: {
-          path: repositoryPath,
-        },
-      });
+      await browseRepository(app, repositoryPath);
 
       const response = await app.inject({
         method: "POST",
@@ -182,18 +177,12 @@ describe("run start endpoint", () => {
   it("rejects an invalid verification command before spawning a run", async () => {
     const repositoryPath = await createRepositoryPath();
     const spawnProcess = vi.fn(() => createMockRunProcess());
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -217,13 +206,7 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -251,13 +234,7 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -286,18 +263,12 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -341,19 +312,13 @@ describe("run start endpoint", () => {
   it("transitions from idle to running when a run starts", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess(456);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
     const origin = await listenOnRandomPort(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -391,7 +356,7 @@ describe("run start endpoint", () => {
     const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
@@ -405,13 +370,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -474,13 +433,7 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -509,18 +462,12 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -549,7 +496,7 @@ describe("run start endpoint", () => {
   it("fails the run when Codex cannot be started", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
@@ -563,13 +510,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -598,7 +539,7 @@ describe("run start endpoint", () => {
   it("streams Codex stdout and stderr to connected SSE clients", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
@@ -613,13 +554,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -666,18 +601,12 @@ describe("run start endpoint", () => {
   it("stops immediately and reports failure when Codex exits with a non-zero code", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     await app.inject({
       method: "POST",
@@ -731,7 +660,7 @@ describe("run start endpoint", () => {
     const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
@@ -746,13 +675,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -787,7 +710,7 @@ describe("run start endpoint", () => {
       .fn()
       .mockReturnValueOnce(runProcess)
       .mockReturnValueOnce(verificationProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -802,13 +725,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -872,7 +789,7 @@ describe("run start endpoint", () => {
       .mockReturnValueOnce(gitAddProcess)
       .mockReturnValueOnce(gitStatusProcess)
       .mockReturnValueOnce(gitCommitProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -887,13 +804,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1000,7 +911,7 @@ describe("run start endpoint", () => {
       .mockReturnValueOnce(gitAddProcess)
       .mockReturnValueOnce(gitStatusProcess)
       .mockReturnValueOnce(gitCommitProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1015,13 +926,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1100,7 +1005,7 @@ describe("run start endpoint", () => {
       .mockReturnValueOnce(runProcess)
       .mockReturnValueOnce(gitAddProcess)
       .mockReturnValueOnce(gitStatusProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1115,13 +1020,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1206,7 +1105,7 @@ describe("run start endpoint", () => {
       .mockReturnValueOnce(gitStatusProcess)
       .mockReturnValueOnce(gitCommitProcess)
       .mockReturnValueOnce(nextRunProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1221,13 +1120,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1274,7 +1167,7 @@ describe("run start endpoint", () => {
       .fn()
       .mockReturnValueOnce(runProcess)
       .mockReturnValueOnce(verificationProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1289,13 +1182,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1354,7 +1241,7 @@ describe("run start endpoint", () => {
       .mockReturnValueOnce(runProcess)
       .mockReturnValueOnce(verificationProcess)
       .mockReturnValueOnce(nextRunProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1369,13 +1256,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1410,18 +1291,12 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     await app.inject({
       method: "POST",
@@ -1449,7 +1324,7 @@ describe("run start endpoint", () => {
       .fn()
       .mockReturnValueOnce(firstRunProcess)
       .mockReturnValueOnce(secondRunProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1464,13 +1339,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1542,7 +1411,7 @@ describe("run start endpoint", () => {
     );
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1557,13 +1426,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1598,7 +1461,7 @@ describe("run start endpoint", () => {
     );
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1613,13 +1476,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1649,7 +1506,7 @@ describe("run start endpoint", () => {
   it("fails the run when goal.md cannot be re-read after a successful Codex run", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
@@ -1664,13 +1521,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1699,13 +1550,7 @@ describe("run start endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     await app.inject({
       method: "POST",
@@ -1741,7 +1586,7 @@ describe("run start endpoint", () => {
       .fn()
       .mockReturnValueOnce(firstRunProcess)
       .mockReturnValueOnce(secondRunProcess);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess,
     });
     trackTestServer(app);
@@ -1756,13 +1601,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({
@@ -1835,18 +1674,12 @@ describe("run start endpoint", () => {
   it("rejects caller-provided stop options", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     await app.inject({
       method: "POST",
@@ -1897,7 +1730,7 @@ describe("run start endpoint", () => {
   it("marks the run as stopping and terminates the active Codex process", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess(987);
-    const app = await buildServer({
+    const app = await createTestServer({
       spawnProcess: vi.fn(() => runProcess),
     });
     trackTestServer(app);
@@ -1912,13 +1745,7 @@ describe("run start endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     await app.inject({

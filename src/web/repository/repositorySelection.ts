@@ -1,4 +1,9 @@
-import type { ValidationIssue } from "@/web/api/responses";
+import { formatRepositorySelectionError } from "@/web/api/errors";
+import type {
+  ApiErrorResponse,
+  RepositoryBrowseResponse,
+  ValidationIssue,
+} from "@/web/api/responses";
 
 export type RepositorySelectionState =
   | {
@@ -20,6 +25,20 @@ export type RepositoryPathFormState = {
   issues: ValidationIssue[];
 };
 
+export type RepositoryBrowseResult =
+  | {
+      status: "selected";
+      repositoryPath: string;
+    }
+  | {
+      status: "cancelled";
+    }
+  | {
+      status: "error";
+      error: string;
+      issues: ValidationIssue[];
+    };
+
 export function getRepositoryLabel(
   repositorySelection: RepositorySelectionState,
 ) {
@@ -28,4 +47,42 @@ export function getRepositoryLabel(
     : repositorySelection.status === "error"
       ? "Repository unavailable"
       : (repositorySelection.repositoryPath ?? "No repository selected");
+}
+
+export function getRepositoryBrowseResult(
+  responseOk: boolean,
+  responseBody: RepositoryBrowseResponse | ApiErrorResponse,
+): RepositoryBrowseResult {
+  if (!responseOk) {
+    const formattedError = formatRepositorySelectionError(
+      responseBody as ApiErrorResponse,
+    );
+
+    return {
+      status: "error",
+      error: formattedError.error,
+      issues: formattedError.issues,
+    };
+  }
+
+  const browseResponse = responseBody as RepositoryBrowseResponse;
+
+  if (browseResponse.cancelled) {
+    return {
+      status: "cancelled",
+    };
+  }
+
+  if (!browseResponse.repositoryPath) {
+    return {
+      status: "error",
+      error: "Repository selection response did not include a path.",
+      issues: [],
+    };
+  }
+
+  return {
+    status: "selected",
+    repositoryPath: browseResponse.repositoryPath,
+  };
 }

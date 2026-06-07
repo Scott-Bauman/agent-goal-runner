@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createTestServer } from "../helpers/fastify";
+import { browseRepository } from "../helpers/repositoryBrowse";
 import {
   createEscapingGoalPath,
   createRepositoryPath,
@@ -31,13 +32,7 @@ describe("goal read endpoint", () => {
     await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "GET",
@@ -57,13 +52,7 @@ describe("goal read endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "GET",
@@ -87,13 +76,7 @@ describe("goal read endpoint", () => {
     await writeFile(path.join(otherPath, "goal.md"), "# Other Goal\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "GET",
@@ -119,13 +102,7 @@ describe("goal read endpoint", () => {
     await writeFile(path.join(repositoryPath, "refactor.md"), "# Refactor Plan\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "GET",
@@ -150,13 +127,7 @@ describe("goal read endpoint", () => {
     const goalPath = await createEscapingGoalPath(repositoryPath);
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "GET",
@@ -193,13 +164,7 @@ describe("goal creation endpoint", () => {
     const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -223,13 +188,7 @@ describe("goal creation endpoint", () => {
     const markdown = "# Manual Goal\n\n- [ ] Write the first step.\n";
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -254,13 +213,7 @@ describe("goal creation endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -287,13 +240,7 @@ describe("goal creation endpoint", () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const pathResponse = await app.inject({
       method: "POST",
@@ -341,13 +288,7 @@ describe("goal creation endpoint", () => {
     await writeFile(goalPath, "# Existing Goal\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -370,13 +311,7 @@ describe("goal creation endpoint", () => {
     const goalPath = await createEscapingGoalPath(repositoryPath);
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "POST",
@@ -418,13 +353,7 @@ describe("goal update endpoint", () => {
     await writeFile(goalPath, "# Old Goal\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     const readResponse = await app.inject({
       method: "GET",
       url: "/api/goal",
@@ -458,13 +387,7 @@ describe("goal update endpoint", () => {
     await writeFile(goalPath, "# Old Goal\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     const readResponse = await app.inject({
       method: "GET",
       url: "/api/goal",
@@ -497,13 +420,7 @@ describe("goal update endpoint", () => {
     const goalPath = path.join(path.normalize(repositoryPath), "goal.md");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "PUT",
@@ -529,13 +446,7 @@ describe("goal update endpoint", () => {
     await writeFile(path.join(repositoryPath, "goal.md"), "# Goal\n");
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const invalidBodyResponse = await app.inject({
       method: "PUT",
@@ -602,13 +513,7 @@ describe("goal update endpoint", () => {
     const goalPath = await createEscapingGoalPath(repositoryPath);
     const app = await createTestServer();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const response = await app.inject({
       method: "PUT",

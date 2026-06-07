@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getRepositoryLabel } from "../../../src/web/repository/repositorySelection";
+import {
+  getRepositoryBrowseResult,
+  getRepositoryLabel,
+} from "../../../src/web/repository/repositorySelection";
 
 describe("repository selection frontend helpers", () => {
   it("formats the loading repository label", () => {
@@ -37,5 +40,65 @@ describe("repository selection frontend helpers", () => {
         repositoryPath: null,
       }),
     ).toBe("No repository selected");
+  });
+
+  it("handles a successful repository browse response", () => {
+    expect(
+      getRepositoryBrowseResult(true, {
+        cancelled: false,
+        repositoryPath: "C:\\repo",
+      }),
+    ).toEqual({
+      status: "selected",
+      repositoryPath: "C:\\repo",
+    });
+  });
+
+  it("handles a cancelled repository browse response", () => {
+    expect(
+      getRepositoryBrowseResult(true, {
+        cancelled: true,
+        repositoryPath: null,
+      }),
+    ).toEqual({
+      status: "cancelled",
+    });
+  });
+
+  it("handles repository browse validation errors", () => {
+    expect(
+      getRepositoryBrowseResult(false, {
+        error: "Invalid repository selection request.",
+        code: "VALIDATION_ERROR",
+        issues: [
+          {
+            path: "path",
+            message: "Path must be a git repository.",
+          },
+        ],
+      }),
+    ).toEqual({
+      status: "error",
+      error: "Invalid repository selection request.",
+      issues: [
+        {
+          path: "path",
+          message: "Path must be a git repository.",
+        },
+      ],
+    });
+  });
+
+  it("handles malformed repository browse success responses", () => {
+    expect(
+      getRepositoryBrowseResult(true, {
+        cancelled: false,
+        repositoryPath: null,
+      }),
+    ).toEqual({
+      status: "error",
+      error: "Repository selection response did not include a path.",
+      issues: [],
+    });
   });
 });

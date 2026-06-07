@@ -1,10 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Check, FolderOpen, Play, Settings2, Square } from "lucide-react";
 
-import { formatApiError, formatRepositorySelectionError } from "@/web/api/errors";
+import { formatApiError } from "@/web/api/errors";
 import type {
   ApiErrorResponse,
-  RepositorySelectionResponse,
+  RepositoryBrowseResponse,
   RunStartResponse,
   RunStopResponse,
   ValidationIssue,
@@ -28,6 +28,7 @@ import { Input } from "@/web/components/ui/input";
 import { Textarea } from "@/web/components/ui/textarea";
 import {
   getRepositoryLabel,
+  getRepositoryBrowseResult,
   type RepositoryPathFormState,
   type RepositorySelectionState,
 } from "@/web/repository/repositorySelection";
@@ -85,7 +86,6 @@ export function ControlsPanel({
   repositorySelection: RepositorySelectionState;
   runnerStatus: RunnerStatus;
 }) {
-  const [repositoryPathInput, setRepositoryPathInput] = useState("");
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
   const [runCount, setRunCount] = useState("1");
   const [verificationCommand, setVerificationCommand] = useState("");
@@ -124,7 +124,7 @@ export function ControlsPanel({
   const runControlIssueMessages = runControlForm.issues.map((issue) =>
     issue.path === "request" ? issue.message : `${issue.path}: ${issue.message}`,
   );
-  const repositoryPathDescribedBy = hasRepositoryPathError
+  const repositoryBrowseDescribedBy = hasRepositoryPathError
     ? `${repositoryPathErrorId} ${repositoryPathIssuesId}`
     : undefined;
   const parsedRunCount = Number(runCount);
@@ -152,7 +152,6 @@ export function ControlsPanel({
       return;
     }
 
-    setRepositoryPathInput(repositorySelection.repositoryPath ?? "");
     setRunControlForm({
       status: "idle",
       error: null,
@@ -160,8 +159,7 @@ export function ControlsPanel({
     });
   }, [repositorySelection]);
 
-  async function handleRepositorySubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleRepositoryBrowse() {
     setRepositoryPathForm({
       status: "submitting",
       error: null,
@@ -169,46 +167,34 @@ export function ControlsPanel({
     });
 
     try {
-      const response = await fetch("/api/repository/select", {
-        body: JSON.stringify({
-          path: repositoryPathInput,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await fetch("/api/repository/browse", {
         method: "POST",
       });
       const responseBody = (await response.json()) as
-        | RepositorySelectionResponse
+        | RepositoryBrowseResponse
         | ApiErrorResponse;
 
-      if (!response.ok) {
-        const formattedError = formatRepositorySelectionError(
-          responseBody as ApiErrorResponse,
-        );
+      const browseResult = getRepositoryBrowseResult(response.ok, responseBody);
 
+      if (browseResult.status === "cancelled") {
         setRepositoryPathForm({
           status: "idle",
-          error: formattedError.error,
-          issues: formattedError.issues,
-        });
-        return;
-      }
-
-      const repositoryPath = (responseBody as RepositorySelectionResponse)
-        .repositoryPath;
-
-      if (!repositoryPath) {
-        setRepositoryPathForm({
-          status: "idle",
-          error: "Repository selection response did not include a path.",
+          error: null,
           issues: [],
         });
         return;
       }
 
-      onRepositorySelected(repositoryPath);
-      setRepositoryPathInput(repositoryPath);
+      if (browseResult.status === "error") {
+        setRepositoryPathForm({
+          status: "idle",
+          error: browseResult.error,
+          issues: browseResult.issues,
+        });
+        return;
+      }
+
+      onRepositorySelected(browseResult.repositoryPath);
       setRepositoryPathForm({
         status: "idle",
         error: null,
@@ -364,45 +350,31 @@ export function ControlsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            void handleRepositorySubmit(event);
-          }}
-        >
-          <label
+        <div className="flex flex-col gap-3">
+          <span
             className="text-xs font-medium text-zinc-700"
-            htmlFor="repository-path"
           >
             Repository
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              aria-describedby={repositoryPathDescribedBy}
-              aria-invalid={hasRepositoryPathError}
-              className="font-mono text-xs"
-              disabled={repositoryPathForm.status === "submitting"}
-              id="repository-path"
-              onChange={(event) => {
-                setRepositoryPathInput(event.target.value);
-              }}
-              placeholder="C:\\Users\\name\\repo"
-              title={repositoryPathInput}
-              value={repositoryPathInput}
+          </span>
+          <Button
+            aria-describedby={repositoryBrowseDescribedBy}
+            aria-invalid={hasRepositoryPathError}
+            disabled={repositoryPathForm.status === "submitting"}
+            onClick={() => {
+              void handleRepositoryBrowse();
+            }}
+            type="button"
+            variant="outline"
+          >
+            <FolderOpen
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
             />
-            <Button
-              disabled={repositoryPathForm.status === "submitting"}
-              type="submit"
-              variant="outline"
-            >
-              <FolderOpen
-                aria-hidden="true"
-                data-icon="inline-start"
-                strokeWidth={2}
-              />
-              Select
-            </Button>
-          </div>
+            {repositoryPathForm.status === "submitting"
+              ? "Choosing..."
+              : "Choose Folder"}
+          </Button>
           {hasRepositoryPathError ? (
             <div
               className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
@@ -444,7 +416,7 @@ export function ControlsPanel({
               </p>
             </div>
           </div>
-        </form>
+        </div>
 
         <div className="flex flex-col gap-2">
           <label

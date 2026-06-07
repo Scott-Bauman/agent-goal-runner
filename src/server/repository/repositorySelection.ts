@@ -1,21 +1,7 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
 
 import { isNodeErrorCode } from "../shared/nodeErrors.js";
-
-export const repositorySelectionSchema = z
-  .object({
-    path: z
-      .string()
-      .trim()
-      .min(1, "Path is required.")
-      .refine((value) => path.isAbsolute(value), {
-        message: "Path must be an absolute local filesystem path.",
-      })
-      .transform((value) => path.normalize(value)),
-  })
-  .strict();
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {

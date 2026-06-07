@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_STATUSES } from "../../../src/server/runner/statuses";
 import { emitLatestGoalWatcherEvent } from "../helpers/chokidarMock";
 import { createTestServer, listenOnRandomPort } from "../helpers/fastify";
+import { browseRepository } from "../helpers/repositoryBrowse";
 import { createRepositoryPath } from "../helpers/tempRepository";
 import {
   parseSsePayloads,
@@ -99,13 +100,7 @@ describe("events endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
 
     const updateChunk = await readSseChunk(reader);
     await reader.cancel();
@@ -138,13 +133,7 @@ describe("events endpoint", () => {
 
       await readSseChunk(reader);
 
-      await app.inject({
-        method: "POST",
-        url: "/api/repository/select",
-        payload: {
-          path: repositoryPath,
-        },
-      });
+      await browseRepository(app, repositoryPath);
       await readSseChunk(reader);
 
       emitLatestGoalWatcherEvent(
@@ -179,13 +168,7 @@ describe("events endpoint", () => {
 
     await readSseChunk(reader);
 
-    await app.inject({
-      method: "POST",
-      url: "/api/repository/select",
-      payload: {
-        path: repositoryPath,
-      },
-    });
+    await browseRepository(app, repositoryPath);
     await readSseChunk(reader);
 
     emitLatestGoalWatcherEvent(
@@ -202,4 +185,3 @@ describe("events endpoint", () => {
     expect(unexpectedChunk).toBe("timeout");
   });
 });
-

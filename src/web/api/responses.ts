@@ -5,6 +5,10 @@ export type RepositorySelectionResponse = {
   repositoryPath: string | null;
 };
 
+export type RepositoryBrowseResponse = RepositorySelectionResponse & {
+  cancelled: boolean;
+};
+
 export type ValidationIssue = {
   path: string;
   message: string;
