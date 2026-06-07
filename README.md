@@ -16,9 +16,9 @@ The MVP has completed Phase 9 verification and polish. It has a Fastify backend,
 - When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
 - The repeat prompt textarea is editable and prefilled with a goal-driven default prompt for future run starts.
 - The run count input is editable and uses the same 1 through 100 numeric bounds accepted by the backend start endpoint.
-- The optional verification command input is editable and accepts the same single-command style that the backend validates when run starts are connected.
+- The optional verification command list is editable and each entry accepts the same single-command style that the backend validates when run starts are connected.
 - The auto-commit switch can be toggled locally in the controls panel and is included in run submissions.
-- The Start button submits the repeat prompt, run count, optional verification command, and auto-commit flag to `POST /api/run/start`.
+- The Start button submits the repeat prompt, run count, optional verification commands, and auto-commit flag to `POST /api/run/start`.
 - The Start button is disabled until a repository is selected, the prompt is non-empty, the run count is from 1 through 100, no run is active, and no run-control request is pending.
 - The Stop button submits `POST /api/run/stop` and is enabled only while the frontend has a running status and no run-control request is pending.
 - The frontend connects to `GET /api/events` with EventSource and tracks the stream as connecting, open, or errored.
@@ -100,7 +100,7 @@ After selecting a repository with `POST /api/repository/browse`, start a control
 ```sh
 curl -X POST http://127.0.0.1:4317/api/run/start \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1,\"verificationCommand\":\"npm test\",\"autoCommit\":false}"
+  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1,\"verificationCommands\":[\"npm test\"],\"autoCommit\":false}"
 ```
 
 Request a stop for the active run with:

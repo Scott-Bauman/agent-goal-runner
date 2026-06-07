@@ -19,7 +19,7 @@ export type StartRunOptions = {
   repositoryPath: string;
   prompt: string;
   runCount: number;
-  verificationCommandToRun: ParsedVerificationCommand | null;
+  verificationCommandsToRun: ParsedVerificationCommand[];
   autoCommit: boolean;
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
@@ -123,7 +123,7 @@ export class RunController {
       repositoryPath,
       prompt,
       runCount,
-      verificationCommandToRun,
+      verificationCommandsToRun,
       autoCommit,
       model,
       reasoningEffort,
@@ -175,8 +175,8 @@ export class RunController {
         }
 
         if (code === 0) {
-          if (verificationCommandToRun) {
-            const verificationSucceeded = await this.runVerificationCommand(
+          if (verificationCommandsToRun.length > 0) {
+            const verificationSucceeded = await this.runVerificationCommands(
               options,
               runNumber,
             );
@@ -492,17 +492,42 @@ export class RunController {
     });
   }
 
-  private runVerificationCommand(
+  private async runVerificationCommands(
     options: StartRunOptions,
     runNumber: number,
   ): Promise<boolean> {
-    const verificationCommandToRun = options.verificationCommandToRun;
+    for (const [
+      commandIndex,
+      verificationCommand,
+    ] of options.verificationCommandsToRun.entries()) {
+      const commandSucceeded = await this.runVerificationCommand(
+        options,
+        runNumber,
+        verificationCommand,
+        commandIndex,
+      );
 
-    if (!verificationCommandToRun) {
-      return Promise.resolve(true);
+      if (!commandSucceeded) {
+        return false;
+      }
     }
 
+    return true;
+  }
+
+  private runVerificationCommand(
+    options: StartRunOptions,
+    runNumber: number,
+    verificationCommandToRun: ParsedVerificationCommand,
+    commandIndex: number,
+  ): Promise<boolean> {
     return new Promise((resolve) => {
+      const commandNumber = commandIndex + 1;
+      const commandTotal = options.verificationCommandsToRun.length;
+      const commandLabel =
+        commandTotal === 1
+          ? "verification"
+          : `verification command ${commandNumber} of ${commandTotal}`;
       const verificationProcess = this.spawnProcess(
         verificationCommandToRun.executable,
         verificationCommandToRun.args,
@@ -519,7 +544,7 @@ export class RunController {
         activeProcessId: verificationProcess.pid ?? null,
         latestSummary: {
           status: "running",
-          message: `Started verification after Codex run ${runNumber} of ${options.runCount}.`,
+          message: `Started ${commandLabel} after Codex run ${runNumber} of ${options.runCount}.`,
         },
       };
       this.publishRunStatus();
@@ -533,7 +558,7 @@ export class RunController {
       verificationProcess.on("error", () => {
         this.handleProcessSpawnError(
           verificationProcess,
-          `Failed to start verification after Codex run ${runNumber}; ensure the verification executable is installed and available on PATH.`,
+          `Failed to start ${commandLabel} after Codex run ${runNumber}; ensure the verification executable is installed and available on PATH.`,
         );
         resolve(false);
       });
@@ -569,11 +594,15 @@ export class RunController {
 
         this.failRun(
           code === null
-            ? `Verification after Codex run ${runNumber} exited without an exit code.`
-            : `Verification after Codex run ${runNumber} exited with code ${code}.`,
+            ? `${capitalize(commandLabel)} after Codex run ${runNumber} exited without an exit code.`
+            : `${capitalize(commandLabel)} after Codex run ${runNumber} exited with code ${code}.`,
         );
         resolve(false);
       });
     });
   }
+}
+
+function capitalize(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }

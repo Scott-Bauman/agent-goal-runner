@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Check, FolderOpen, Play, Settings2, Square } from "lucide-react";
+import {
+  Check,
+  FolderOpen,
+  Info,
+  Play,
+  Plus,
+  Settings2,
+  Square,
+  X,
+} from "lucide-react";
 
 import { formatApiError } from "@/web/api/errors";
 import type {
@@ -26,6 +35,12 @@ import {
 } from "@/web/components/ui/combobox";
 import { Input } from "@/web/components/ui/input";
 import { Textarea } from "@/web/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/web/components/ui/tooltip";
 import {
   getRepositoryLabel,
   getRepositoryBrowseResult,
@@ -88,7 +103,7 @@ export function ControlsPanel({
 }) {
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
   const [runCount, setRunCount] = useState("1");
-  const [verificationCommand, setVerificationCommand] = useState("");
+  const [verificationCommands, setVerificationCommands] = useState([""]);
   const [autoCommit, setAutoCommit] = useState(false);
   const [model, setModel] = useState<ModelSelection>(CLI_DEFAULT_OPTION);
   const [reasoningEffort, setReasoningEffort] =
@@ -237,7 +252,9 @@ export function ControlsPanel({
           prompt: repeatPrompt,
           reasoningEffort: toRunReasoningEffort(reasoningEffort),
           runCount: parsedRunCount,
-          verificationCommand,
+          verificationCommands: verificationCommands
+            .map((command) => command.trim())
+            .filter((command) => command.length > 0),
         }),
         headers: {
           "Content-Type": "application/json",
@@ -567,21 +584,99 @@ export function ControlsPanel({
         </div>
 
         <div className="flex flex-col gap-2">
-          <label
-            className="text-xs font-medium text-zinc-700"
-            htmlFor="verification-command"
-          >
-            Verification command
-          </label>
-          <Input
-            className="font-mono text-xs"
-            id="verification-command"
-            placeholder="npm test"
-            onChange={(event) => {
-              setVerificationCommand(event.target.value);
+          <div className="flex items-center gap-1.5">
+            <label
+              className="text-xs font-medium text-zinc-700"
+              htmlFor="verification-command-0"
+            >
+              Verification commands (Optional)
+            </label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label="About verification commands"
+                    className="size-6"
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Info
+                      aria-hidden="true"
+                      strokeWidth={2}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-64 leading-5">
+                  Runs after each successful Codex pass. All commands must pass
+                  before the next run or auto-commit.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className="flex flex-col gap-2">
+            {verificationCommands.map((command, index) => {
+              const commandId = `verification-command-${index}`;
+
+              return (
+                <div
+                  className="flex items-center gap-2"
+                  key={commandId}
+                >
+                  <Input
+                    className="font-mono text-xs"
+                    id={commandId}
+                    placeholder={index === 0 ? "npm test" : "npm run lint"}
+                    onChange={(event) => {
+                      const nextCommands = [...verificationCommands];
+                      nextCommands[index] = event.target.value;
+                      setVerificationCommands(nextCommands);
+                    }}
+                    value={command}
+                  />
+                  {verificationCommands.length > 1 ? (
+                    <Button
+                      aria-label={`Remove verification command ${index + 1}`}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setVerificationCommands((currentCommands) =>
+                          currentCommands.filter(
+                            (_currentCommand, commandIndex) =>
+                              commandIndex !== index,
+                          ),
+                        );
+                      }}
+                    >
+                      <X
+                        aria-hidden="true"
+                        strokeWidth={2}
+                      />
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <Button
+            aria-label="Add verification command"
+            className="self-start"
+            size="icon"
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setVerificationCommands((currentCommands) => [
+                ...currentCommands,
+                "",
+              ]);
             }}
-            value={verificationCommand}
-          />
+          >
+            <Plus
+              aria-hidden="true"
+              strokeWidth={2}
+            />
+          </Button>
         </div>
 
         <div className="mt-auto grid gap-3 pt-2 sm:grid-cols-2">

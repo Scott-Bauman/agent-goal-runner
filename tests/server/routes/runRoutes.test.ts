@@ -65,13 +65,23 @@ describe("run start endpoint", () => {
       "Run count must be at most 100.",
     ],
     [
+      "non-array verification commands",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommands: "npm test",
+      },
+      "verificationCommands",
+      "Verification commands must be an array.",
+    ],
+    [
       "non-string verification command",
       {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: ["npm", "test"],
+        verificationCommands: [["npm", "test"]],
       },
-      "verificationCommand",
+      "verificationCommands.0",
       "Verification command must be a string.",
     ],
     [
@@ -109,9 +119,9 @@ describe("run start endpoint", () => {
       {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "npm test && npm run build",
+        verificationCommands: ["npm test && npm run build"],
       },
-      "verificationCommand",
+      "verificationCommands.0",
       "Verification command must use a single executable plus arguments; shell operators are not supported.",
     ],
     [
@@ -119,9 +129,9 @@ describe("run start endpoint", () => {
       {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: 'npm test -- --testNamePattern "run loop',
+        verificationCommands: ['npm test -- --testNamePattern "run loop'],
       },
-      "verificationCommand",
+      "verificationCommands.0",
       "Verification command contains an unterminated quoted argument.",
     ],
     [
@@ -129,10 +139,20 @@ describe("run start endpoint", () => {
       {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "powershell -Command npm test",
+        verificationCommands: ["powershell -Command npm test"],
       },
-      "verificationCommand",
+      "verificationCommands.0",
       "Verification command must be a direct executable, not a shell.",
+    ],
+    [
+      "legacy verification command field",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommand: "npm test",
+      },
+      "request",
+      "Unrecognized key(s) in object: 'verificationCommand'",
     ],
     [
       "extra fields",
@@ -190,7 +210,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "npm test | tee test.log",
+        verificationCommands: ["npm test | tee test.log"],
       },
     });
 
@@ -223,7 +243,7 @@ describe("run start endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       prompt: "Use goal.md as the source of truth.",
       runCount: 2,
-      verificationCommand: "",
+      verificationCommands: [],
       autoCommit: false,
       model: null,
       reasoningEffort: null,
@@ -252,7 +272,7 @@ describe("run start endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       prompt: "Use goal.md as the source of truth.",
       runCount: 1,
-      verificationCommand: "",
+      verificationCommands: [],
       autoCommit: true,
       model: null,
       reasoningEffort: null,
@@ -294,7 +314,7 @@ describe("run start endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       prompt: "Use goal.md as the source of truth.",
       runCount: 1,
-      verificationCommand: "",
+      verificationCommands: [],
       autoCommit: false,
       model: "gpt-5.4-nano",
       reasoningEffort: "low",
@@ -418,18 +438,23 @@ describe("run start endpoint", () => {
   });
 
   it.each([
-    ["empty verification command", "   ", ""],
+    ["empty verification command", ["   "], []],
     [
       "single verification command with arguments",
-      "  npm test -- --runInBand  ",
-      "npm test -- --runInBand",
+      ["  npm test -- --runInBand  "],
+      ["npm test -- --runInBand"],
     ],
     [
       "quoted verification argument",
-      '  npm test -- --testNamePattern "run loop"  ',
-      'npm test -- --testNamePattern "run loop"',
+      ['  npm test -- --testNamePattern "run loop"  '],
+      ['npm test -- --testNamePattern "run loop"'],
     ],
-  ])("accepts an optional %s", async (_name, verificationCommand, expected) => {
+    [
+      "multiple verification commands",
+      ["  npm test  ", "", "  npm run lint  "],
+      ["npm test", "npm run lint"],
+    ],
+  ])("accepts optional %s", async (_name, verificationCommands, expected) => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();
 
@@ -441,7 +466,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand,
+        verificationCommands,
       },
     });
 
@@ -451,7 +476,7 @@ describe("run start endpoint", () => {
       repositoryPath: path.normalize(repositoryPath),
       prompt: "Use goal.md as the source of truth.",
       runCount: 1,
-      verificationCommand: expected,
+      verificationCommands: expected,
       autoCommit: false,
       model: null,
       reasoningEffort: null,
@@ -700,16 +725,18 @@ describe("run start endpoint", () => {
     ]);
   });
 
-  it("runs verification only after a successful Codex run in the selected repository", async () => {
+  it("runs verification commands only after a successful Codex run in the selected repository", async () => {
     const repositoryPath = await createRepositoryPath();
     const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
     const runProcess = createMockRunProcess(321);
-    const verificationProcess = createMockRunProcess(654);
+    const testVerificationProcess = createMockRunProcess(654);
+    const lintVerificationProcess = createMockRunProcess(987);
     const spawnProcess = vi
       .fn()
       .mockReturnValueOnce(runProcess)
-      .mockReturnValueOnce(verificationProcess);
+      .mockReturnValueOnce(testVerificationProcess)
+      .mockReturnValueOnce(lintVerificationProcess);
     const app = await createTestServer({
       spawnProcess,
     });
@@ -734,7 +761,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "npm test -- --runInBand",
+        verificationCommands: ["npm test -- --runInBand", "npm run lint"],
       },
     });
     await readUntilSsePayloads(reader, "summary");
@@ -757,11 +784,29 @@ describe("run start endpoint", () => {
     expect(verificationSummaryPayloads).toEqual([
       {
         status: "running",
-        message: "Started verification after Codex run 1 of 1.",
+        message: "Started verification command 1 of 2 after Codex run 1 of 1.",
       },
     ]);
 
-    verificationProcess.emit("close", 0, null);
+    testVerificationProcess.emit("close", 0, null);
+    const secondVerificationSummaryPayloads = await readUntilSsePayloads(
+      reader,
+      "summary",
+    );
+
+    expect(spawnProcess).toHaveBeenCalledTimes(3);
+    expect(spawnProcess).toHaveBeenNthCalledWith(3, "npm", ["run", "lint"], {
+      cwd: path.normalize(repositoryPath),
+      windowsHide: true,
+    });
+    expect(secondVerificationSummaryPayloads).toEqual([
+      {
+        status: "running",
+        message: "Started verification command 2 of 2 after Codex run 1 of 1.",
+      },
+    ]);
+
+    lintVerificationProcess.emit("close", 0, null);
     const completeSummaryPayloads = await readUntilSsePayloads(reader, "summary");
     await reader.cancel();
 
@@ -778,14 +823,16 @@ describe("run start endpoint", () => {
     const goalMarkdown = "# Selected Goal\n\n- [ ] Next step\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
     const runProcess = createMockRunProcess(321);
-    const verificationProcess = createMockRunProcess(654);
+    const testVerificationProcess = createMockRunProcess(654);
+    const lintVerificationProcess = createMockRunProcess(876);
     const gitAddProcess = createMockRunProcess(987);
     const gitStatusProcess = createMockRunProcess(765);
     const gitCommitProcess = createMockRunProcess(432);
     const spawnProcess = vi
       .fn()
       .mockReturnValueOnce(runProcess)
-      .mockReturnValueOnce(verificationProcess)
+      .mockReturnValueOnce(testVerificationProcess)
+      .mockReturnValueOnce(lintVerificationProcess)
       .mockReturnValueOnce(gitAddProcess)
       .mockReturnValueOnce(gitStatusProcess)
       .mockReturnValueOnce(gitCommitProcess);
@@ -813,7 +860,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "npm test",
+        verificationCommands: ["npm test", "npm run lint"],
         autoCommit: true,
       },
     });
@@ -824,11 +871,16 @@ describe("run start endpoint", () => {
 
     expect(spawnProcess).toHaveBeenCalledTimes(2);
 
-    verificationProcess.emit("close", 0, null);
-    const gitAddSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+    testVerificationProcess.emit("close", 0, null);
+    await readUntilSsePayloads(reader, "summary");
 
     expect(spawnProcess).toHaveBeenCalledTimes(3);
-    expect(spawnProcess).toHaveBeenNthCalledWith(3, "git", ["add", "-A"], {
+
+    lintVerificationProcess.emit("close", 0, null);
+    const gitAddSummaryPayloads = await readUntilSsePayloads(reader, "summary");
+
+    expect(spawnProcess).toHaveBeenCalledTimes(4);
+    expect(spawnProcess).toHaveBeenNthCalledWith(4, "git", ["add", "-A"], {
       cwd: path.normalize(repositoryPath),
       windowsHide: true,
     });
@@ -842,9 +894,9 @@ describe("run start endpoint", () => {
     gitAddProcess.emit("close", 0, null);
     const gitStatusSummaryPayloads = await readUntilSsePayloads(reader, "summary");
 
-    expect(spawnProcess).toHaveBeenCalledTimes(4);
+    expect(spawnProcess).toHaveBeenCalledTimes(5);
     expect(spawnProcess).toHaveBeenNthCalledWith(
-      4,
+      5,
       "git",
       ["status", "--porcelain"],
       {
@@ -863,9 +915,9 @@ describe("run start endpoint", () => {
     gitStatusProcess.emit("close", 0, null);
     const gitCommitSummaryPayloads = await readUntilSsePayloads(reader, "summary");
 
-    expect(spawnProcess).toHaveBeenCalledTimes(5);
+    expect(spawnProcess).toHaveBeenCalledTimes(6);
     expect(spawnProcess).toHaveBeenNthCalledWith(
-      5,
+      6,
       "git",
       [
         "commit",
@@ -1191,7 +1243,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "npm test",
+        verificationCommands: ["npm test"],
       },
     });
     await readUntilSsePayloads(reader, "summary");
@@ -1265,7 +1317,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 2,
-        verificationCommand: "npm test",
+        verificationCommands: ["npm test", "npm run lint"],
         autoCommit: true,
       },
     });
@@ -1282,7 +1334,7 @@ describe("run start endpoint", () => {
     expect(summaryPayloads).toEqual([
       {
         status: "failed",
-        message: "Verification after Codex run 1 exited with code 1.",
+        message: "Verification command 1 of 2 after Codex run 1 exited with code 1.",
       },
     ]);
   });
@@ -1304,7 +1356,7 @@ describe("run start endpoint", () => {
       payload: {
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
-        verificationCommand: "npm test",
+        verificationCommands: ["npm test"],
       },
     });
 

@@ -7,6 +7,7 @@ import {
 } from "../runner/codexOptions.js";
 import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
 import { parseVerificationCommand } from "../runner/verificationCommand.js";
+import type { ParsedVerificationCommand } from "../runner/verificationCommand.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
 import {
   emptyRequestSchema,
@@ -22,22 +23,34 @@ const runStartSchema = z
         invalid_type_error: "Auto-commit toggle must be a boolean.",
       })
       .default(false),
-    verificationCommand: z
-      .string({
-        invalid_type_error: "Verification command must be a string.",
-      })
-      .trim()
-      .default("")
-      .superRefine((value, context) => {
-        const parsedCommand = parseVerificationCommand(value);
+    verificationCommands: z
+      .array(
+        z.string({
+          invalid_type_error: "Verification command must be a string.",
+        }),
+        {
+          invalid_type_error: "Verification commands must be an array.",
+        },
+      )
+      .default([])
+      .superRefine((commands, context) => {
+        commands.forEach((command, index) => {
+          const parsedCommand = parseVerificationCommand(command.trim());
 
-        if (!parsedCommand.success) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: parsedCommand.error,
-          });
-        }
-      }),
+          if (!parsedCommand.success) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: parsedCommand.error,
+              path: [index],
+            });
+          }
+        });
+      })
+      .transform((commands) =>
+        commands
+          .map((command) => command.trim())
+          .filter((command) => command.length > 0),
+      ),
     runCount: z
       .number({
         invalid_type_error: "Run count must be a number.",
@@ -82,29 +95,37 @@ export function registerRunRoutes(
     const {
       prompt,
       runCount,
-      verificationCommand,
+      verificationCommands,
       autoCommit,
       model,
       reasoningEffort,
     } = parsedBody.data;
-    const verificationCommandParse = parseVerificationCommand(verificationCommand);
+    const verificationCommandsToRun: ParsedVerificationCommand[] = [];
 
-    if (!verificationCommandParse.success) {
-      return reply.code(400).send(
-        validationError("Invalid run start request.", [
-          {
-            path: "verificationCommand",
-            message: verificationCommandParse.error,
-          },
-        ]),
-      );
+    for (const verificationCommand of verificationCommands) {
+      const verificationCommandParse = parseVerificationCommand(verificationCommand);
+
+      if (!verificationCommandParse.success || !verificationCommandParse.parsed) {
+        return reply.code(400).send(
+          validationError("Invalid run start request.", [
+            {
+              path: "verificationCommands",
+              message: verificationCommandParse.success
+                ? "Verification command must include an executable."
+                : verificationCommandParse.error,
+            },
+          ]),
+        );
+      }
+
+      verificationCommandsToRun.push(verificationCommandParse.parsed);
     }
 
     context.runController.start({
       repositoryPath,
       prompt,
       runCount,
-      verificationCommandToRun: verificationCommandParse.parsed,
+      verificationCommandsToRun,
       autoCommit,
       model,
       reasoningEffort,
@@ -115,7 +136,7 @@ export function registerRunRoutes(
       repositoryPath,
       prompt,
       runCount,
-      verificationCommand,
+      verificationCommands,
       autoCommit,
       model,
       reasoningEffort,

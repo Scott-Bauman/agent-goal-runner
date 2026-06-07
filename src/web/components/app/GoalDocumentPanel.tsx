@@ -360,7 +360,7 @@ export function GoalDocumentPanel({
           prompt: buildAgentGoalPrompt(draftState.prompt),
           reasoningEffort: null,
           runCount: 1,
-          verificationCommand: "",
+          verificationCommands: [],
         }),
         headers: {
           "Content-Type": "application/json",
