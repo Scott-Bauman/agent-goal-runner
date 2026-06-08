@@ -387,6 +387,9 @@ export function GoalDocumentPanel({
           model: null,
           prompt: buildAgentGoalPrompt(draftState.prompt),
           reasoningEffort: null,
+          review: {
+            enabled: false,
+          },
           runCount: 1,
           verificationCommands: [],
         }),

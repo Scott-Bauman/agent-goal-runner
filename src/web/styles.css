@@ -296,4 +296,25 @@
     min-width: 0;
     margin: 0;
   }
+
+  .review-settings-panel {
+    min-width: 0;
+    overflow: hidden;
+    animation: review-settings-dropdown 180ms ease-out;
+    transform-origin: top;
+  }
+
+  @keyframes review-settings-dropdown {
+    from {
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-0.25rem);
+    }
+
+    to {
+      max-height: 42rem;
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }

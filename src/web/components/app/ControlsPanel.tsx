@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  BadgeCheck,
   BrainCircuit,
   FolderGit2,
   FolderOpen,
@@ -24,6 +25,13 @@ import type {
   RunStopResponse,
   ValidationIssue,
 } from "@/web/api/responses";
+import {
+  createDefaultReviewPrompt,
+  createReviewRunRequest,
+  getAutoCommitForReview,
+  isReviewSettingsVisible,
+  preferSkillReferenceSyntax,
+} from "@/web/components/app/controlsPanelReview";
 import { Button } from "@/web/components/ui/button";
 import {
   Combobox,
@@ -67,6 +75,10 @@ const DEFAULT_REPEAT_PROMPT = [
   "",
   "Complete the next valid unchecked item.",
 ].join("\n");
+const DEFAULT_REVIEW_INTERVAL_COMMITS = 3;
+const DEFAULT_REVIEW_PROMPT = createDefaultReviewPrompt(
+  DEFAULT_REVIEW_INTERVAL_COMMITS,
+);
 const CLI_DEFAULT_OPTION = "CLI default";
 
 type ModelSelection = CodexModel | typeof CLI_DEFAULT_OPTION;
@@ -114,6 +126,12 @@ export const RUN_SETUP_SECTIONS = [
     info: "When enabled, commits changes after each successful run, after verification commands pass when present.",
     title: "Commit",
   },
+  {
+    icon: BadgeCheck,
+    id: "run-setup-review",
+    info: "Runs a separate review pass after a set number of successful auto-commits.",
+    title: "Review",
+  },
 ] as const satisfies ReadonlyArray<{
   icon: LucideIcon;
   id: string;
@@ -128,6 +146,7 @@ const [
   RUN_SECTION,
   VERIFICATION_SECTION,
   COMMIT_SECTION,
+  REVIEW_SECTION,
 ] = RUN_SETUP_SECTIONS;
 
 function SetupArea({
@@ -198,13 +217,6 @@ function toRunReasoningEffort(
   return selection === CLI_DEFAULT_OPTION ? null : selection;
 }
 
-function preferSkillReferenceSyntax(prompt: string): string {
-  return prompt.replace(
-    /\b(?:use|invoke|load|apply)\s+(?:the\s+)?(?:skill\s+)?([A-Za-z0-9][A-Za-z0-9_-]*)\s+skill\b/gi,
-    (_match, skillName: string) => `Use $${skillName}`,
-  );
-}
-
 export function ControlsPanel({
   commandTargetId,
   onRepositorySelected,
@@ -224,6 +236,14 @@ export function ControlsPanel({
   const [autoCommit, setAutoCommit] = useState(false);
   const [model, setModel] = useState<ModelSelection>("gpt-5.4");
   const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffortSelection>("high");
+  const [reviewEnabled, setReviewEnabled] = useState(false);
+  const [reviewIntervalCommits, setReviewIntervalCommits] = useState(
+    String(DEFAULT_REVIEW_INTERVAL_COMMITS),
+  );
+  const [reviewPrompt, setReviewPrompt] = useState(DEFAULT_REVIEW_PROMPT);
+  const [reviewModel, setReviewModel] = useState<ModelSelection>("gpt-5.4");
+  const [reviewReasoningEffort, setReviewReasoningEffort] =
     useState<ReasoningEffortSelection>("high");
   const [commandTarget, setCommandTarget] = useState<HTMLElement | null>(null);
   const [repositoryPathForm, setRepositoryPathForm] =
@@ -264,13 +284,22 @@ export function ControlsPanel({
     Number.isInteger(parsedRunCount) &&
     parsedRunCount >= 1 &&
     parsedRunCount <= 100;
+  const parsedReviewIntervalCommits = Number(reviewIntervalCommits);
+  const isReviewIntervalValid =
+    !reviewEnabled ||
+    (Number.isInteger(parsedReviewIntervalCommits) &&
+      parsedReviewIntervalCommits >= 1 &&
+      parsedReviewIntervalCommits <= 100);
   const isPromptValid = repeatPrompt.trim().length > 0;
+  const isReviewPromptValid = !reviewEnabled || reviewPrompt.trim().length > 0;
   const isRunActive = isActiveRunnerStatus(runnerStatus);
   const isRunControlPending = runControlForm.status !== "idle";
   const canStartRun =
     selectedRepositoryPath !== null &&
     isPromptValid &&
     isRunCountValid &&
+    isReviewIntervalValid &&
+    isReviewPromptValid &&
     !isRunActive &&
     !isRunControlPending &&
     repositoryPathForm.status !== "submitting";
@@ -373,10 +402,17 @@ export function ControlsPanel({
     try {
       const response = await fetch("/api/run/start", {
         body: JSON.stringify({
-          autoCommit,
+          autoCommit: getAutoCommitForReview(reviewEnabled, autoCommit),
           model: toRunModel(model),
           prompt: preferSkillReferenceSyntax(repeatPrompt),
           reasoningEffort: toRunReasoningEffort(reasoningEffort),
+          review: createReviewRunRequest({
+            intervalCommits: parsedReviewIntervalCommits,
+            model: toRunModel(reviewModel),
+            prompt: reviewPrompt,
+            reasoningEffort: toRunReasoningEffort(reviewReasoningEffort),
+            reviewEnabled,
+          }),
           runCount: parsedRunCount,
           verificationCommands: verificationCommands
             .map((command) => command.trim())
@@ -520,7 +556,7 @@ export function ControlsPanel({
       <div className="sr-only">
         <h2 id="controls-panel-title">Run setup</h2>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1 py-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-x-hidden overflow-y-auto px-1 py-2">
         <SetupArea
           icon={REPOSITORY_SECTION.icon}
           id={REPOSITORY_SECTION.id}
@@ -719,12 +755,12 @@ export function ControlsPanel({
 
                 return (
                   <div
-                    className="flex items-center gap-2"
+                    className="flex min-w-0 items-center gap-2"
                     key={commandId}
                   >
                     <Input
                       aria-label={`Verification command ${index + 1}`}
-                      className="font-mono text-xs"
+                      className="min-w-0 font-mono text-xs"
                       id={commandId}
                       placeholder={index === 0 ? "npm test" : "npm run lint"}
                       onChange={(event) => {
@@ -798,7 +834,7 @@ export function ControlsPanel({
                 className="text-xs font-medium text-muted-foreground"
                 id="auto-commit-state"
               >
-                {autoCommit ? "Enabled" : "Off"}
+                {reviewEnabled ? "Required by review" : autoCommit ? "Enabled" : "Off"}
               </span>
               <button
                 aria-checked={autoCommit}
@@ -806,9 +842,12 @@ export function ControlsPanel({
                 aria-labelledby="auto-commit-label"
                 className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-zinc-950"
                 data-state={autoCommit ? "checked" : "unchecked"}
+                disabled={reviewEnabled}
                 id="auto-commit"
                 onClick={() => {
-                  setAutoCommit((currentAutoCommit) => !currentAutoCommit);
+                  if (!reviewEnabled) {
+                    setAutoCommit((currentAutoCommit) => !currentAutoCommit);
+                  }
                 }}
                 role="switch"
                 type="button"
@@ -820,6 +859,192 @@ export function ControlsPanel({
                 />
               </button>
             </div>
+          </div>
+        </SetupArea>
+
+        <SetupArea
+          icon={REVIEW_SECTION.icon}
+          id={REVIEW_SECTION.id}
+          info={REVIEW_SECTION.info}
+          title={REVIEW_SECTION.title}
+        >
+          <div className="flex flex-col gap-3">
+            <span
+              className="sr-only"
+              id="review-label"
+            >
+              Review
+            </span>
+            <div className="flex h-9 items-center justify-between gap-3 rounded-md border border-input bg-muted px-3">
+              <span
+                className="text-xs font-medium text-muted-foreground"
+                id="review-state"
+              >
+                {reviewEnabled ? "Enabled" : "Off"}
+              </span>
+              <button
+                aria-checked={reviewEnabled}
+                aria-describedby="review-state"
+                aria-labelledby="review-label"
+                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-zinc-950"
+                data-state={reviewEnabled ? "checked" : "unchecked"}
+                id="review-enabled"
+                onClick={() => {
+                  setReviewEnabled((currentReviewEnabled) => {
+                    const nextReviewEnabled = !currentReviewEnabled;
+
+                    if (nextReviewEnabled) {
+                      setAutoCommit(true);
+                    }
+
+                    return nextReviewEnabled;
+                  });
+                }}
+                role="switch"
+                type="button"
+              >
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform data-[state=checked]:translate-x-4"
+                  data-state={reviewEnabled ? "checked" : "unchecked"}
+                />
+              </button>
+            </div>
+
+            {isReviewSettingsVisible(reviewEnabled) ? (
+              <div className="review-settings-panel grid gap-3">
+                <div className="flex flex-col gap-2">
+                  <label
+                    className="text-xs font-medium text-zinc-700"
+                    htmlFor="review-interval-commits"
+                  >
+                    Review every
+                  </label>
+                  <Input
+                    aria-invalid={!isReviewIntervalValid}
+                    id="review-interval-commits"
+                    inputMode="numeric"
+                    max={100}
+                    min={1}
+                    onChange={(event) => {
+                      const nextIntervalCommits = event.target.value;
+                      const currentParsedIntervalCommits =
+                        Number(reviewIntervalCommits);
+                      const nextParsedIntervalCommits =
+                        Number(nextIntervalCommits);
+
+                      setReviewPrompt((currentReviewPrompt) => {
+                        const currentDefaultPrompt = createDefaultReviewPrompt(
+                          currentParsedIntervalCommits,
+                        );
+
+                        if (currentReviewPrompt !== currentDefaultPrompt) {
+                          return currentReviewPrompt;
+                        }
+
+                        return createDefaultReviewPrompt(
+                          nextParsedIntervalCommits,
+                        );
+                      });
+                      setReviewIntervalCommits(nextIntervalCommits);
+                    }}
+                    step={1}
+                    type="number"
+                    value={reviewIntervalCommits}
+                  />
+                </div>
+                <div className="grid gap-3">
+                  <div className="flex flex-col gap-2">
+                    <label
+                      className="text-xs font-medium text-zinc-700"
+                      htmlFor="review-model"
+                    >
+                      Review model
+                    </label>
+                    <Combobox<ModelSelection>
+                      items={MODEL_OPTIONS}
+                      onValueChange={(value) => {
+                        if (value) {
+                          setReviewModel(value);
+                        }
+                      }}
+                      value={reviewModel}
+                    >
+                      <ComboboxInput
+                        id="review-model"
+                        readOnly
+                      />
+                      <ComboboxContent>
+                        <ComboboxList>
+                          {MODEL_OPTIONS.map((option) => (
+                            <ComboboxItem
+                              key={option}
+                              value={option}
+                            >
+                              {option}
+                            </ComboboxItem>
+                          ))}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      className="text-xs font-medium text-zinc-700"
+                      htmlFor="review-reasoning-effort"
+                    >
+                      Review reasoning
+                    </label>
+                    <Combobox<ReasoningEffortSelection>
+                      items={REASONING_EFFORT_OPTIONS}
+                      onValueChange={(value) => {
+                        if (value) {
+                          setReviewReasoningEffort(value);
+                        }
+                      }}
+                      value={reviewReasoningEffort}
+                    >
+                      <ComboboxInput
+                        id="review-reasoning-effort"
+                        readOnly
+                      />
+                      <ComboboxContent>
+                        <ComboboxList>
+                          {REASONING_EFFORT_OPTIONS.map((option) => (
+                            <ComboboxItem
+                              key={option}
+                              value={option}
+                            >
+                              {option}
+                            </ComboboxItem>
+                          ))}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label
+                    className="text-xs font-medium text-zinc-700"
+                    htmlFor="review-prompt"
+                  >
+                    Review prompt
+                  </label>
+                  <Textarea
+                    aria-invalid={!isReviewPromptValid}
+                    className="min-h-28 resize-y leading-5"
+                    id="review-prompt"
+                    placeholder={createDefaultReviewPrompt(
+                      parsedReviewIntervalCommits,
+                    )}
+                    onChange={(event) => {
+                      setReviewPrompt(event.target.value);
+                    }}
+                    value={reviewPrompt}
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
         </SetupArea>
 

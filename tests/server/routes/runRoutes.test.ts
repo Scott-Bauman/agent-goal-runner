@@ -115,6 +115,83 @@ describe("run start endpoint", () => {
       "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh', received 'extreme'",
     ],
     [
+      "review without auto-commit",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: false,
+        review: {
+          enabled: true,
+          intervalCommits: 3,
+          prompt: "Review recent commits.",
+        },
+      },
+      "review",
+      "Review requires auto-commit to be enabled.",
+    ],
+    [
+      "empty review prompt",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+        review: {
+          enabled: true,
+          intervalCommits: 3,
+          prompt: "   ",
+        },
+      },
+      "review.prompt",
+      "Review prompt is required.",
+    ],
+    [
+      "zero review interval",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+        review: {
+          enabled: true,
+          intervalCommits: 0,
+          prompt: "Review recent commits.",
+        },
+      },
+      "review.intervalCommits",
+      "Review interval must be at least 1.",
+    ],
+    [
+      "invalid review model",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+        review: {
+          enabled: true,
+          intervalCommits: 3,
+          prompt: "Review recent commits.",
+          model: "gpt-4",
+        },
+      },
+      "review.model",
+      "Invalid enum value. Expected 'gpt-5.5' | 'gpt-5.4' | 'gpt-5.4-mini' | 'gpt-5.4-nano' | 'gpt-5.3-codex', received 'gpt-4'",
+    ],
+    [
+      "invalid review reasoning effort",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+        review: {
+          enabled: true,
+          intervalCommits: 3,
+          prompt: "Review recent commits.",
+          reasoningEffort: "extreme",
+        },
+      },
+      "review.reasoningEffort",
+      "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh', received 'extreme'",
+    ],
+    [
       "verification command with shell operator",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -247,6 +324,13 @@ describe("run start endpoint", () => {
       autoCommit: false,
       model: null,
       reasoningEffort: null,
+      review: {
+        enabled: false,
+        intervalCommits: 3,
+        prompt: "",
+        model: null,
+        reasoningEffort: null,
+      },
     });
   });
 
@@ -276,6 +360,49 @@ describe("run start endpoint", () => {
       autoCommit: true,
       model: null,
       reasoningEffort: null,
+      review: {
+        enabled: false,
+        intervalCommits: 3,
+        prompt: "",
+        model: null,
+        reasoningEffort: null,
+      },
+    });
+  });
+
+  it("accepts enabled review settings when auto-commit is enabled", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await createTestServer();
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+        review: {
+          enabled: true,
+          intervalCommits: 3,
+          prompt: "  Review recent commits.  ",
+          model: "gpt-5.4-mini",
+          reasoningEffort: "medium",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      autoCommit: true,
+      review: {
+        enabled: true,
+        intervalCommits: 3,
+        prompt: "Review recent commits.",
+        model: "gpt-5.4-mini",
+        reasoningEffort: "medium",
+      },
     });
   });
 
@@ -318,6 +445,13 @@ describe("run start endpoint", () => {
       autoCommit: false,
       model: "gpt-5.4-nano",
       reasoningEffort: "low",
+      review: {
+        enabled: false,
+        intervalCommits: 3,
+        prompt: "",
+        model: null,
+        reasoningEffort: null,
+      },
     });
     expect(spawnProcess).toHaveBeenCalledWith(
       expectedCodexCommand.command,
@@ -489,6 +623,13 @@ describe("run start endpoint", () => {
       autoCommit: false,
       model: null,
       reasoningEffort: null,
+      review: {
+        enabled: false,
+        intervalCommits: 3,
+        prompt: "",
+        model: null,
+        reasoningEffort: null,
+      },
     });
   });
 

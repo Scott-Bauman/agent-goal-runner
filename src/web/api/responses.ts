@@ -47,6 +47,13 @@ export type RunStartResponse = {
   status: RunnerStatus;
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
+  review: {
+    enabled: boolean;
+    intervalCommits: number;
+    prompt: string;
+    model: CodexModel | null;
+    reasoningEffort: CodexReasoningEffort | null;
+  };
 };
 
 export type RunStopResponse = {

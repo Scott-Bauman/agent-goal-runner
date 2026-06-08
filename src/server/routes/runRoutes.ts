@@ -5,6 +5,7 @@ import {
   CODEX_MODELS,
   CODEX_REASONING_EFFORTS,
 } from "../runner/codexOptions.js";
+import { DEFAULT_REVIEW_RUN_OPTIONS } from "../runner/runController.js";
 import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
 import { parseVerificationCommand } from "../runner/verificationCommand.js";
 import type { ParsedVerificationCommand } from "../runner/verificationCommand.js";
@@ -14,6 +15,35 @@ import {
   formatZodIssues,
   validationError,
 } from "../shared/validation.js";
+
+const disabledReviewSchema = z
+  .object({
+    enabled: z.literal(false),
+  })
+  .strict();
+
+const enabledReviewSchema = z
+  .object({
+    enabled: z.literal(true),
+    intervalCommits: z
+      .number({
+        invalid_type_error: "Review interval must be a number.",
+        required_error: "Review interval is required.",
+      })
+      .int("Review interval must be a whole number.")
+      .min(1, "Review interval must be at least 1.")
+      .max(100, "Review interval must be at most 100."),
+    prompt: z.string().trim().min(1, "Review prompt is required."),
+    model: z.enum(CODEX_MODELS).nullable().default(null),
+    reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
+  })
+  .strict();
+
+const reviewSchema = z
+  .discriminatedUnion("enabled", [enabledReviewSchema, disabledReviewSchema])
+  .default({
+    enabled: false,
+  });
 
 const runStartSchema = z
   .object({
@@ -61,8 +91,18 @@ const runStartSchema = z
       .max(100, "Run count must be at most 100."),
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
+    review: reviewSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((requestBody, context) => {
+    if (requestBody.review.enabled && !requestBody.autoCommit) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Review requires auto-commit to be enabled.",
+        path: ["review"],
+      });
+    }
+  });
 
 export function registerRunRoutes(
   server: FastifyInstance,
@@ -99,7 +139,9 @@ export function registerRunRoutes(
       autoCommit,
       model,
       reasoningEffort,
+      review: parsedReview,
     } = parsedBody.data;
+    const review = parsedReview.enabled ? parsedReview : DEFAULT_REVIEW_RUN_OPTIONS;
     const verificationCommandsToRun: ParsedVerificationCommand[] = [];
 
     for (const verificationCommand of verificationCommands) {
@@ -129,6 +171,7 @@ export function registerRunRoutes(
       autoCommit,
       model,
       reasoningEffort,
+      review,
     });
 
     return reply.code(202).send({
@@ -140,6 +183,7 @@ export function registerRunRoutes(
       autoCommit,
       model,
       reasoningEffort,
+      review,
     });
   });
 
