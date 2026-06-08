@@ -2,8 +2,10 @@ import { ArrowDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
+  LogEntry,
   RuntimeTranscriptEntry,
   RuntimeTranscriptLogEntry,
+  RuntimeTranscriptRunEventEntry,
   TranscriptEventKind,
 } from "@/web/events/runtimeStream";
 import { cn } from "@/web/lib/utils";
@@ -160,7 +162,11 @@ function LogBody({ segments }: { segments: MessageSegment[] }) {
 
 function LogHeader({ entry, log }: { entry: RuntimeTranscriptEntry; log: DisplayLog }) {
   const sourceLabel =
-    entry.type === "log" ? (entry as RuntimeTranscriptLogEntry).stream : entry.displayId;
+    entry.type === "log"
+      ? (entry as RuntimeTranscriptLogEntry).stream
+      : entry.type === "run-event"
+        ? formatRunEventLabel(entry as RuntimeTranscriptRunEventEntry)
+        : entry.displayId;
 
   return (
     <div className="flex min-w-0 items-center gap-2 text-[0.6875rem] leading-4">
@@ -173,6 +179,29 @@ function LogHeader({ entry, log }: { entry: RuntimeTranscriptEntry; log: Display
       <span className="min-w-0 truncate text-zinc-600">{sourceLabel}</span>
     </div>
   );
+}
+
+function formatRunEventLabel(entry: RuntimeTranscriptRunEventEntry): string {
+  switch (entry.eventKind) {
+    case "codex_session_started":
+      return "codex session";
+    case "command_failed":
+    case "command_started":
+    case "command_succeeded":
+      return entry.command ?? entry.eventKind.replaceAll("_", " ");
+    case "file_changed":
+    case "patch_applied":
+      return entry.files.length > 0
+        ? entry.files.slice(0, 2).join(", ")
+        : entry.eventKind.replaceAll("_", " ");
+    case "final_assistant_message":
+      return "final assistant";
+    case "run_completed":
+    case "run_started":
+    case "warning":
+    case "error":
+      return entry.eventKind.replaceAll("_", " ");
+  }
 }
 
 function LogBlock({ log }: { log: DisplayLog }) {
@@ -226,7 +255,38 @@ function LogConsoleIdleState() {
   );
 }
 
-export function LogConsole({ logs }: { logs: RuntimeTranscriptEntry[] }) {
+function RawLogsDebug({ rawLogs }: { rawLogs: LogEntry[] }) {
+  return (
+    <details className="mt-3 border-t border-zinc-800 pt-3 font-mono text-xs">
+      <summary className="cursor-pointer select-none text-[0.6875rem] font-semibold uppercase tracking-normal text-zinc-500">
+        Raw logs ({rawLogs.length})
+      </summary>
+      <ol className="mt-2 grid gap-2">
+        {rawLogs.map((entry) => (
+          <li
+            className="grid gap-1 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2"
+            key={entry.id}
+          >
+            <div className="text-[0.6875rem] font-semibold text-zinc-500">
+              #{entry.id} {entry.stream}
+            </div>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[0.75rem] leading-5 text-zinc-300">
+              {entry.message}
+            </pre>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+export function LogConsole({
+  logs,
+  rawLogs,
+}: {
+  logs: RuntimeTranscriptEntry[];
+  rawLogs: LogEntry[];
+}) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const [isFollowingLatest, setIsFollowingLatest] = useState(true);
@@ -292,13 +352,19 @@ export function LogConsole({ logs }: { logs: RuntimeTranscriptEntry[] }) {
         ref={scrollContainerRef}
       >
         {displayLogs.length > 0 ? (
-          <ol className="grid content-start gap-2">
-            {displayLogs.map((log) => (
-              <LogBlock key={log.entry.id} log={log} />
-            ))}
-          </ol>
+          <>
+            <ol className="grid content-start gap-2">
+              {displayLogs.map((log) => (
+                <LogBlock key={log.entry.id} log={log} />
+              ))}
+            </ol>
+            <RawLogsDebug rawLogs={rawLogs} />
+          </>
         ) : (
-          <LogConsoleIdleState />
+          <>
+            <LogConsoleIdleState />
+            {rawLogs.length > 0 ? <RawLogsDebug rawLogs={rawLogs} /> : null}
+          </>
         )}
       </div>
       {displayLogs.length > 0 && !isFollowingLatest ? (

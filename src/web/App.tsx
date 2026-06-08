@@ -4,14 +4,17 @@ import { OperationsWorkspace } from "@/web/components/app/OperationsWorkspace";
 import { TopBar } from "@/web/components/app/TopBar";
 import { SidebarProvider } from "@/web/components/ui/sidebar";
 import {
-  appendLogEntriesToTranscript,
   appendProgressSeparatorToTranscript,
+  appendRawLogEntries,
+  appendRunEventsToTranscript,
   appendSummarySeparatorToTranscript,
   INITIAL_RUNTIME_STREAM_STATE,
   parseSseData,
   type GoalChangedEvent,
   type LogsEvent,
+  type RunEventsEvent,
   type RunProgressEvent,
+  type RunSummaryDetails,
   type RunSummaryEvent,
   type RuntimeStreamState,
   type StatusEvent,
@@ -122,10 +125,22 @@ export function App() {
 
       setRuntimeStream((currentStream) => ({
         ...currentStream,
-        logs: appendLogEntriesToTranscript(
+        rawLogs: appendRawLogEntries(currentStream.rawLogs, logsEvent.entries),
+      }));
+    }
+
+    function handleRunEvents(event: MessageEvent<string>): void {
+      const runEventsEvent = parseSseData<RunEventsEvent>(event);
+
+      if (!runEventsEvent || !Array.isArray(runEventsEvent.entries)) {
+        return;
+      }
+
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        logs: appendRunEventsToTranscript(
           currentStream.logs,
-          logsEvent.entries,
-          currentStream.progress,
+          runEventsEvent.entries,
         ),
       }));
     }
@@ -166,6 +181,19 @@ export function App() {
       }
     }
 
+    function handleRunDetails(event: MessageEvent<string>): void {
+      const runDetails = parseSseData<RunSummaryDetails>(event);
+
+      if (!runDetails) {
+        return;
+      }
+
+      setRuntimeStream((currentStream) => ({
+        ...currentStream,
+        runDetails,
+      }));
+    }
+
     function handleGoalChanged(event: MessageEvent<string>): void {
       const goalChanged = parseSseData<GoalChangedEvent>(event);
 
@@ -186,16 +214,20 @@ export function App() {
 
     eventSource.addEventListener("status", handleStatus);
     eventSource.addEventListener("logs", handleLogs);
+    eventSource.addEventListener("runEvents", handleRunEvents);
     eventSource.addEventListener("progress", handleProgress);
     eventSource.addEventListener("summary", handleSummary);
+    eventSource.addEventListener("runDetails", handleRunDetails);
     eventSource.addEventListener("goalChanged", handleGoalChanged);
     eventSource.addEventListener("error", handleError);
 
     return () => {
       eventSource.removeEventListener("status", handleStatus);
       eventSource.removeEventListener("logs", handleLogs);
+      eventSource.removeEventListener("runEvents", handleRunEvents);
       eventSource.removeEventListener("progress", handleProgress);
       eventSource.removeEventListener("summary", handleSummary);
+      eventSource.removeEventListener("runDetails", handleRunDetails);
       eventSource.removeEventListener("goalChanged", handleGoalChanged);
       eventSource.removeEventListener("error", handleError);
       eventSource.close();

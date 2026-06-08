@@ -11,7 +11,6 @@ import {
   type RepositorySelectionState,
 } from "@/web/repository/repositorySelection";
 import type { RunnerStatus } from "@/web/runner/statuses";
-import { extractChangedFiles } from "@/web/components/app/logText";
 
 const connectionIndicatorState: Record<
   RuntimeStreamState["connectionStatus"],
@@ -37,7 +36,7 @@ export function TopBar({
   const selectedRepositoryLabel = getRepositoryFolderLabel(repositorySelection);
   const connectionConfig =
     connectionStatusConfig[runtimeStream.connectionStatus];
-  const changedFiles = extractChangedFiles(runtimeStream.logs);
+  const changedFiles = runtimeStream.runDetails.changedFiles;
   const changedFilesLabel =
     changedFiles.length > 0 ? changedFiles.slice(0, 2).join(", ") : "None";
   const latestSummaryLabel =

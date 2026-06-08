@@ -6,6 +6,7 @@ import type { SpawnCommand } from "../shared/process.js";
 
 export type CodexExecOptions = {
   model: CodexModel | null;
+  outputLastMessagePath?: string | null;
   reasoningEffort: CodexReasoningEffort | null;
 };
 
@@ -16,7 +17,11 @@ function getCodexExecArgs(
     reasoningEffort: null,
   },
 ): string[] {
-  const args = ["exec"];
+  const args = ["exec", "--json"];
+
+  if (options.outputLastMessagePath) {
+    args.push("--output-last-message", options.outputLastMessagePath);
+  }
 
   if (options.model) {
     args.push("--model", options.model);

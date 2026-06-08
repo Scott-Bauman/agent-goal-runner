@@ -1,12 +1,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  BrainCircuit,
   Check,
+  FolderGit2,
   FolderOpen,
+  GitCommitHorizontal,
   Info,
+  ListChecks,
+  MessageSquareText,
   Play,
   Plus,
+  Repeat2,
   Square,
+  type LucideIcon,
   X,
 } from "lucide-react";
 
@@ -73,13 +80,67 @@ const REASONING_EFFORT_OPTIONS: ReasoningEffortSelection[] = [
   ...CODEX_REASONING_EFFORTS,
 ];
 
+export const RUN_SETUP_SECTIONS = [
+  {
+    icon: FolderGit2,
+    id: "run-setup-repository",
+    title: "Repository",
+  },
+  {
+    icon: MessageSquareText,
+    id: "run-setup-prompt",
+    info: "The prompt sent to Codex for each run. Use goal.md guidance when you want Codex to continue project work.",
+    title: "Prompt",
+  },
+  {
+    icon: BrainCircuit,
+    id: "run-setup-model",
+    info: "Choose the Codex model and reasoning effort, or leave both on the CLI defaults.",
+    title: "Model",
+  },
+  {
+    icon: Repeat2,
+    id: "run-setup-runs",
+    info: "Set how many Codex passes to run for this request.",
+    title: "Run",
+  },
+  {
+    icon: ListChecks,
+    id: "run-setup-verification",
+    info: "Runs after each successful Codex pass. All commands must pass before the next run or auto-commit.",
+    title: "Verification",
+  },
+  {
+    icon: GitCommitHorizontal,
+    id: "run-setup-commit",
+    info: "When enabled, commits changes after each successful run, after verification commands pass when present.",
+    title: "Commit",
+  },
+] as const satisfies ReadonlyArray<{
+  icon: LucideIcon;
+  id: string;
+  info?: string;
+  title: string;
+}>;
+
+const [
+  REPOSITORY_SECTION,
+  PROMPT_SECTION,
+  MODEL_SECTION,
+  RUN_SECTION,
+  VERIFICATION_SECTION,
+  COMMIT_SECTION,
+] = RUN_SETUP_SECTIONS;
+
 function SetupArea({
   children,
+  icon: Icon,
   id,
   info,
   title,
 }: {
   children: ReactNode;
+  icon?: LucideIcon;
   id: string;
   info?: ReactNode;
   title: string;
@@ -90,6 +151,13 @@ function SetupArea({
       id={id}
     >
       <div className="flex items-center gap-1.5">
+        {Icon ? (
+          <Icon
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            strokeWidth={2}
+          />
+        ) : null}
         <h3 className="text-sm font-semibold leading-6 text-zinc-950">
           {title}
         </h3>
@@ -132,6 +200,13 @@ function toRunReasoningEffort(
   return selection === CLI_DEFAULT_OPTION ? null : selection;
 }
 
+function preferSkillReferenceSyntax(prompt: string): string {
+  return prompt.replace(
+    /\b(?:use|invoke|load|apply)\s+(?:the\s+)?(?:skill\s+)?([A-Za-z0-9][A-Za-z0-9_-]*)\s+skill\b/gi,
+    (_match, skillName: string) => `Use $${skillName}`,
+  );
+}
+
 export function ControlsPanel({
   commandTargetId,
   onRepositorySelected,
@@ -149,9 +224,9 @@ export function ControlsPanel({
   const [runCount, setRunCount] = useState("1");
   const [verificationCommands, setVerificationCommands] = useState([""]);
   const [autoCommit, setAutoCommit] = useState(false);
-  const [model, setModel] = useState<ModelSelection>(CLI_DEFAULT_OPTION);
+  const [model, setModel] = useState<ModelSelection>("gpt-5.4");
   const [reasoningEffort, setReasoningEffort] =
-    useState<ReasoningEffortSelection>(CLI_DEFAULT_OPTION);
+    useState<ReasoningEffortSelection>("high");
   const [commandTarget, setCommandTarget] = useState<HTMLElement | null>(null);
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
@@ -303,7 +378,7 @@ export function ControlsPanel({
         body: JSON.stringify({
           autoCommit,
           model: toRunModel(model),
-          prompt: repeatPrompt,
+          prompt: preferSkillReferenceSyntax(repeatPrompt),
           reasoningEffort: toRunReasoningEffort(reasoningEffort),
           runCount: parsedRunCount,
           verificationCommands: verificationCommands
@@ -450,8 +525,9 @@ export function ControlsPanel({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1 py-2">
         <SetupArea
-          id="run-setup-repository"
-          title="Repository"
+          icon={REPOSITORY_SECTION.icon}
+          id={REPOSITORY_SECTION.id}
+          title={REPOSITORY_SECTION.title}
         >
           <Button
             aria-describedby={repositoryBrowseDescribedBy}
@@ -516,9 +592,10 @@ export function ControlsPanel({
         </SetupArea>
 
         <SetupArea
-          id="run-setup-prompt"
-          info="The prompt sent to Codex for each run. Use goal.md guidance when you want Codex to continue project work."
-          title="Prompt"
+          icon={PROMPT_SECTION.icon}
+          id={PROMPT_SECTION.id}
+          info={PROMPT_SECTION.info}
+          title={PROMPT_SECTION.title}
         >
           <div className="flex flex-col gap-2">
             <label
@@ -540,14 +617,15 @@ export function ControlsPanel({
         </SetupArea>
 
         <SetupArea
-          id="run-setup-model"
-          info="Choose the Codex model and reasoning effort, or leave both on the CLI defaults."
-          title="Model"
+          icon={MODEL_SECTION.icon}
+          id={MODEL_SECTION.id}
+          info={MODEL_SECTION.info}
+          title={MODEL_SECTION.title}
         >
           <div className="grid gap-3">
             <div className="flex flex-col gap-2">
               <label
-                className="sr-only"
+                className="text-xs font-medium text-zinc-700"
                 htmlFor="codex-model"
               >
                 Model
@@ -617,9 +695,10 @@ export function ControlsPanel({
         </SetupArea>
 
         <SetupArea
-          id="run-setup-runs"
-          info="Set how many Codex passes to run for this request."
-          title="Run"
+          icon={RUN_SECTION.icon}
+          id={RUN_SECTION.id}
+          info={RUN_SECTION.info}
+          title={RUN_SECTION.title}
         >
           <div className="grid gap-3">
             <div className="flex flex-col gap-2">
@@ -647,9 +726,10 @@ export function ControlsPanel({
         </SetupArea>
 
         <SetupArea
-          id="run-setup-verification"
-          info="Runs after each successful Codex pass. All commands must pass before the next run or auto-commit."
-          title="Verification"
+          icon={VERIFICATION_SECTION.icon}
+          id={VERIFICATION_SECTION.id}
+          info={VERIFICATION_SECTION.info}
+          title={VERIFICATION_SECTION.title}
         >
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-2">
@@ -720,9 +800,10 @@ export function ControlsPanel({
         </SetupArea>
 
         <SetupArea
-          id="run-setup-commit"
-          info="When enabled, commits changes after each successful run, after verification commands pass when present."
-          title="Commit"
+          icon={COMMIT_SECTION.icon}
+          id={COMMIT_SECTION.id}
+          info={COMMIT_SECTION.info}
+          title={COMMIT_SECTION.title}
         >
           <div className="flex flex-col gap-2">
             <span

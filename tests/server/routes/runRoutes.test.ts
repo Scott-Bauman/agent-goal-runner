@@ -321,7 +321,16 @@ describe("run start endpoint", () => {
     });
     expect(spawnProcess).toHaveBeenCalledWith(
       expectedCodexCommand.command,
-      expectedCodexCommand.args,
+      expect.arrayContaining([
+        "exec",
+        "--json",
+        "--output-last-message",
+        "--model",
+        "gpt-5.4-nano",
+        "-c",
+        "model_reasoning_effort=low",
+        "Use goal.md as the source of truth.",
+      ]),
       {
         cwd: path.normalize(repositoryPath),
         windowsHide: true,
@@ -509,7 +518,12 @@ describe("run start endpoint", () => {
     expect(response.statusCode).toBe(202);
     expect(spawnProcess).toHaveBeenCalledWith(
       expectedCodexCommand.command,
-      expectedCodexCommand.args,
+      expect.arrayContaining([
+        "exec",
+        "--json",
+        "--output-last-message",
+        "Use goal.md as the source of truth.",
+      ]),
       {
         cwd: path.normalize(repositoryPath),
         windowsHide: true,
@@ -1414,7 +1428,12 @@ describe("run start endpoint", () => {
     expect(spawnProcess).toHaveBeenNthCalledWith(
       2,
       expectedCodexCommand.command,
-      expectedCodexCommand.args,
+      expect.arrayContaining([
+        "exec",
+        "--json",
+        "--output-last-message",
+        "Use goal.md as the source of truth.",
+      ]),
       {
         cwd: path.normalize(repositoryPath),
         windowsHide: true,

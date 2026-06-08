@@ -1,4 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import {
   detectGoalStopMarker,
@@ -10,6 +13,11 @@ import type { ProcessSpawner } from "../shared/process.js";
 import type { RuntimeState } from "../shared/runtime.js";
 import type { SseHub } from "../sse/sseHub.js";
 import { getCodexExecSpawnCommand } from "./codexCommand.js";
+import {
+  CodexJsonEventParser,
+  createSkillPreflightStatus,
+  preferSkillReferenceSyntax,
+} from "./codexJsonEvents.js";
 import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { ParsedVerificationCommand } from "./verificationCommand.js";
 
@@ -95,6 +103,16 @@ export class RunController {
         message,
       },
     };
+    this.updateRunDetails({
+      status: "failed",
+      stopReason: message,
+    });
+    this.appendRunEvent("error", message, {
+      stopReason: message,
+    });
+    this.appendRunEvent("run_completed", message, {
+      stopReason: message,
+    });
     this.publishRunStatus();
   }
 
@@ -118,6 +136,53 @@ export class RunController {
     this.sseHub.appendProcessLog(this.runtimeState.stream, stream, chunk);
   }
 
+  private appendRunEvent(
+    kind: Parameters<SseHub["appendRunEvent"]>[1]["kind"],
+    message: string,
+    extra: Omit<Parameters<SseHub["appendRunEvent"]>[1], "kind" | "message"> = {},
+  ): void {
+    this.sseHub.appendRunEvent(this.runtimeState.stream, {
+      ...extra,
+      kind,
+      message,
+    });
+  }
+
+  private updateRunDetails(
+    patch: Parameters<SseHub["updateRunDetails"]>[1],
+  ): void {
+    this.sseHub.updateRunDetails(this.runtimeState.stream, patch);
+  }
+
+  private createLastMessageOutputPath(runNumber: number): string {
+    const outputDirectory = path.join(tmpdir(), "agent-goal-runner-codex");
+    mkdirSync(outputDirectory, {
+      recursive: true,
+    });
+    return path.join(
+      outputDirectory,
+      `last-message-${Date.now()}-${runNumber}.txt`,
+    );
+  }
+
+  private appendFinalAssistantMessageFromFile(outputPath: string): void {
+    if (!existsSync(outputPath)) {
+      return;
+    }
+
+    const finalMessage = readFileSync(outputPath, "utf8").trim();
+
+    if (finalMessage.length === 0) {
+      return;
+    }
+
+    if (this.runtimeState.stream.runLoop.details.lastAssistantMessage === finalMessage) {
+      return;
+    }
+
+    this.appendRunEvent("final_assistant_message", finalMessage);
+  }
+
   private startCodexRun(options: StartRunOptions, runNumber: number): void {
     const {
       repositoryPath,
@@ -128,8 +193,17 @@ export class RunController {
       model,
       reasoningEffort,
     } = options;
-    const codexCommand = getCodexExecSpawnCommand(prompt, {
+    const codexPrompt = preferSkillReferenceSyntax(prompt);
+    const skillPreflight = createSkillPreflightStatus(
+      repositoryPath,
+      codexPrompt,
+      existsSync,
+    );
+    const outputLastMessagePath = this.createLastMessageOutputPath(runNumber);
+    const codexJsonParser = new CodexJsonEventParser();
+    const codexCommand = getCodexExecSpawnCommand(codexPrompt, {
       model,
+      outputLastMessagePath,
       reasoningEffort,
     });
     const childProcess = this.spawnProcess(codexCommand.command, codexCommand.args, {
@@ -139,6 +213,13 @@ export class RunController {
 
     childProcess.stdout.on("data", (chunk: Buffer | string) => {
       this.appendProcessLog("stdout", chunk);
+      const parsedChunk = codexJsonParser.push(chunk);
+
+      for (const event of parsedChunk.events) {
+        this.sseHub.appendRunEvent(this.runtimeState.stream, event);
+      }
+
+      this.updateRunDetails(parsedChunk.metadata);
     });
     childProcess.stderr.on("data", (chunk: Buffer | string) => {
       this.appendProcessLog("stderr", chunk);
@@ -159,7 +240,17 @@ export class RunController {
         this.activeRunProcess = null;
         this.activeRunProcessKind = null;
 
+        const parsedRemainder = codexJsonParser.flush();
+
+        for (const event of parsedRemainder.events) {
+          this.sseHub.appendRunEvent(this.runtimeState.stream, event);
+        }
+
+        this.updateRunDetails(parsedRemainder.metadata);
+        this.appendFinalAssistantMessageFromFile(outputLastMessagePath);
+
         if (this.runtimeState.stream.runLoop.stopRequested) {
+          const message = `Stopped after Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`;
           this.runtimeState.stream.runLoop = {
             ...this.runtimeState.stream.runLoop,
             status: "stopped",
@@ -167,9 +258,16 @@ export class RunController {
             activeProcessId: null,
             latestSummary: {
               status: "stopped",
-              message: `Stopped after Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`,
+              message,
             },
           };
+          this.updateRunDetails({
+            status: "stopped",
+            stopReason: message,
+          });
+          this.appendRunEvent("run_completed", message, {
+            stopReason: message,
+          });
           this.publishRunStatus();
           return;
         }
@@ -214,6 +312,7 @@ export class RunController {
           if (goalStopMarker) {
             const markerStatus =
               goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
+            const message = `Stopped after Codex run ${runNumber} of ${runCount} because refreshed goal.md contains ${goalStopMarker}.`;
 
             this.runtimeState.stream.runLoop = {
               ...this.runtimeState.stream.runLoop,
@@ -222,9 +321,16 @@ export class RunController {
               activeProcessId: null,
               latestSummary: {
                 status: markerStatus,
-                message: `Stopped after Codex run ${runNumber} of ${runCount} because refreshed goal.md contains ${goalStopMarker}.`,
+                message,
               },
             };
+            this.updateRunDetails({
+              status: markerStatus,
+              stopReason: message,
+            });
+            this.appendRunEvent("run_completed", message, {
+              stopReason: message,
+            });
             this.publishRunStatus();
             return;
           }
@@ -234,6 +340,7 @@ export class RunController {
             return;
           }
 
+          const message = `Completed Codex run ${runNumber} of ${runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`;
           this.runtimeState.stream.runLoop = {
             ...this.runtimeState.stream.runLoop,
             status: "complete",
@@ -241,9 +348,16 @@ export class RunController {
             activeProcessId: null,
             latestSummary: {
               status: "complete",
-              message: `Completed Codex run ${runNumber} of ${runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`,
+              message,
             },
           };
+          this.updateRunDetails({
+            status: "complete",
+            stopReason: message,
+          });
+          this.appendRunEvent("run_completed", message, {
+            stopReason: message,
+          });
           this.publishRunStatus();
           return;
         }
@@ -270,6 +384,20 @@ export class RunController {
         status: "running",
         message: `Started Codex run ${runNumber} of ${runCount}.`,
       },
+      details: {
+        status: "running",
+        currentRun: runNumber,
+        totalRuns: runCount,
+        model,
+        reasoningEffort,
+        tokenCount: null,
+        changedFiles: [],
+        warningCount: 0,
+        errorCount: 0,
+        stopReason: null,
+        lastAssistantMessage: null,
+        skillPreflight,
+      },
     };
     this.sseHub.broadcast("status", {
       status: this.runtimeState.stream.runLoop.status,
@@ -277,6 +405,15 @@ export class RunController {
     });
     this.sseHub.broadcast("progress", this.runtimeState.stream.runLoop.progress);
     this.sseHub.broadcast("summary", this.runtimeState.stream.runLoop.latestSummary);
+    this.sseHub.broadcast("runDetails", this.runtimeState.stream.runLoop.details);
+    this.appendRunEvent("run_started", `Started Codex run ${runNumber} of ${runCount}.`);
+
+    if (skillPreflight.missing.length > 0) {
+      this.appendRunEvent(
+        "warning",
+        `Skill preflight checked .agents/skills; missing ${skillPreflight.missing.map((skill) => `$${skill}`).join(", ")}.`,
+      );
+    }
   }
 
   private async runAutoCommit(
@@ -363,6 +500,13 @@ export class RunController {
         },
       };
       this.publishRunStatus();
+      this.appendRunEvent(
+        "command_started",
+        `Started auto-commit status check after Codex run ${runNumber} of ${options.runCount}.`,
+        {
+          command: "git status --porcelain",
+        },
+      );
 
       gitProcess.stdout.on("data", (chunk: Buffer | string) => {
         stdout += chunk.toString();
@@ -404,15 +548,27 @@ export class RunController {
         }
 
         if (code === 0) {
+          this.appendRunEvent(
+            "command_succeeded",
+            `Auto-commit status check after Codex run ${runNumber} succeeded.`,
+            {
+              command: "git status --porcelain",
+              exitCode: 0,
+            },
+          );
           resolve(stdout);
           return;
         }
 
-        this.failRun(
+        const message =
           code === null
             ? `Auto-commit status check after Codex run ${runNumber} exited without an exit code.`
-            : `Auto-commit status check after Codex run ${runNumber} exited with code ${code}.`,
-        );
+            : `Auto-commit status check after Codex run ${runNumber} exited with code ${code}.`;
+        this.appendRunEvent("command_failed", message, {
+          command: "git status --porcelain",
+          exitCode: code ?? undefined,
+        });
+        this.failRun(message);
         resolve(null);
       });
     });
@@ -442,6 +598,9 @@ export class RunController {
         },
       };
       this.publishRunStatus();
+      this.appendRunEvent("command_started", startMessage, {
+        command: ["git", ...args].join(" "),
+      });
 
       gitProcess.stdout.on("data", (chunk: Buffer | string) => {
         this.appendProcessLog("stdout", chunk);
@@ -482,11 +641,24 @@ export class RunController {
         }
 
         if (code === 0) {
+          this.appendRunEvent(
+            "command_succeeded",
+            startMessage.replace(/^Started /, "Completed "),
+            {
+              command: ["git", ...args].join(" "),
+              exitCode: 0,
+            },
+          );
           resolve(true);
           return;
         }
 
-        this.failRun(failureMessage(code));
+        const message = failureMessage(code);
+        this.appendRunEvent("command_failed", message, {
+          command: ["git", ...args].join(" "),
+          exitCode: code ?? undefined,
+        });
+        this.failRun(message);
         resolve(false);
       });
     });
@@ -548,6 +720,16 @@ export class RunController {
         },
       };
       this.publishRunStatus();
+      this.appendRunEvent(
+        "command_started",
+        `Started ${commandLabel} after Codex run ${runNumber} of ${options.runCount}.`,
+        {
+          command: [
+            verificationCommandToRun.executable,
+            ...verificationCommandToRun.args,
+          ].join(" "),
+        },
+      );
 
       verificationProcess.stdout.on("data", (chunk: Buffer | string) => {
         this.appendProcessLog("stdout", chunk);
@@ -588,15 +770,33 @@ export class RunController {
         }
 
         if (code === 0) {
+          this.appendRunEvent(
+            "command_succeeded",
+            `${capitalize(commandLabel)} after Codex run ${runNumber} succeeded.`,
+            {
+              command: [
+                verificationCommandToRun.executable,
+                ...verificationCommandToRun.args,
+              ].join(" "),
+              exitCode: 0,
+            },
+          );
           resolve(true);
           return;
         }
 
-        this.failRun(
+        const message =
           code === null
             ? `${capitalize(commandLabel)} after Codex run ${runNumber} exited without an exit code.`
-            : `${capitalize(commandLabel)} after Codex run ${runNumber} exited with code ${code}.`,
-        );
+            : `${capitalize(commandLabel)} after Codex run ${runNumber} exited with code ${code}.`;
+        this.appendRunEvent("command_failed", message, {
+          command: [
+            verificationCommandToRun.executable,
+            ...verificationCommandToRun.args,
+          ].join(" "),
+          exitCode: code ?? undefined,
+        });
+        this.failRun(message);
         resolve(false);
       });
     });

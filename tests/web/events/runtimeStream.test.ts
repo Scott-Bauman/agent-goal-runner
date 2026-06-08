@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   appendLogEntriesToTranscript,
   appendProgressSeparatorToTranscript,
+  appendRawLogEntries,
+  appendRunEventsToTranscript,
   appendSummarySeparatorToTranscript,
   connectionStatusConfig,
   formatLogStream,
@@ -24,9 +26,28 @@ describe("runtime stream helpers", () => {
       connectionStatus: "connecting",
       latestSummary: null,
       logs: [],
+      rawLogs: [],
       progress: {
         currentRun: 0,
         totalRuns: null,
+      },
+      runDetails: {
+        status: "idle",
+        currentRun: 0,
+        totalRuns: null,
+        model: null,
+        reasoningEffort: null,
+        tokenCount: null,
+        changedFiles: [],
+        warningCount: 0,
+        errorCount: 0,
+        stopReason: null,
+        lastAssistantMessage: null,
+        skillPreflight: {
+          checked: false,
+          found: [],
+          missing: [],
+        },
       },
     });
   });
@@ -124,6 +145,78 @@ describe("runtime stream helpers", () => {
       totalRuns: 2,
       type: "log",
     });
+  });
+
+  it("appends raw logs separately from structured transcript events", () => {
+    const logs = appendRawLogEntries(
+      [],
+      [{ id: 1, message: "raw stdout", stream: "stdout" }],
+    );
+
+    expect(appendRawLogEntries(logs, [])).toBe(logs);
+    expect(
+      appendRawLogEntries(logs, [
+        { id: 1, message: "raw stdout", stream: "stdout" },
+        { id: 2, message: "raw stderr", stream: "stderr" },
+      ]),
+    ).toEqual([
+      { id: 1, message: "raw stdout", stream: "stdout" },
+      { id: 2, message: "raw stderr", stream: "stderr" },
+    ]);
+  });
+
+  it("appends structured run events as the primary transcript rows", () => {
+    const transcript = appendRunEventsToTranscript([], [
+      {
+        command: "npm test",
+        id: 1,
+        kind: "command_started",
+        message: "Started verification.",
+        receivedAt: 100,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+      {
+        files: ["src/web/App.tsx"],
+        id: 2,
+        kind: "file_changed",
+        message: "Updated src/web/App.tsx",
+        receivedAt: 200,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+    ]);
+
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        command: "npm test",
+        eventKind: "command_started",
+        id: "event:1",
+        kind: "command",
+        sourceEventId: 1,
+        type: "run-event",
+      }),
+      expect.objectContaining({
+        eventKind: "file_changed",
+        files: ["src/web/App.tsx"],
+        id: "event:2",
+        kind: "edit",
+        sourceEventId: 2,
+        type: "run-event",
+      }),
+    ]);
+    expect(
+      appendRunEventsToTranscript(transcript, [
+        {
+          id: 1,
+          kind: "command_started",
+          message: "Started verification.",
+          receivedAt: 100,
+          runNumber: 1,
+          totalRuns: 1,
+        },
+      ]),
+    ).toBe(transcript);
   });
 
   it("dedupes duplicate snapshot log entries by stable backend id", () => {

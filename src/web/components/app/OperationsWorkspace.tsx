@@ -1,4 +1,7 @@
-import { ControlsPanel } from "@/web/components/app/ControlsPanel";
+import {
+  ControlsPanel,
+  RUN_SETUP_SECTIONS,
+} from "@/web/components/app/ControlsPanel";
 import { GoalDocumentPanel } from "@/web/components/app/GoalDocumentPanel";
 import { LogsSummaryPanel } from "@/web/components/app/LogsSummaryPanel";
 import {
@@ -8,12 +11,55 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from "@/web/components/ui/sidebar";
 import type { RuntimeStreamState } from "@/web/events/runtimeStream";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import type { RunnerStatus } from "@/web/runner/statuses";
+
+function CollapsedSetupNav() {
+  const { setOpen, state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  function handleSectionSelect(sectionId: string) {
+    setOpen(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({
+        block: "start",
+      });
+    });
+  }
+
+  return (
+    <SidebarGroup
+      aria-hidden={!isCollapsed}
+      className="h-0 overflow-hidden p-0 opacity-0 transition-[height,opacity,padding] duration-200 ease-linear group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:opacity-100"
+      inert={!isCollapsed}
+    >
+      <SidebarMenu>
+        {RUN_SETUP_SECTIONS.map((section) => (
+          <SidebarMenuItem key={section.id}>
+            <SidebarMenuButton
+              aria-label={section.title}
+              tooltip={section.title}
+              onClick={() => {
+                handleSectionSelect(section.id);
+              }}
+            >
+              <section.icon />
+              <span>{section.title}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
 
 export function OperationsWorkspace({
   commandActionsTargetId,
@@ -32,6 +78,9 @@ export function OperationsWorkspace({
   runnerStatus: RunnerStatus;
   runtimeStream: RuntimeStreamState;
 }) {
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
   return (
     <>
       <Sidebar
@@ -40,7 +89,7 @@ export function OperationsWorkspace({
       >
         <SidebarHeader className="h-14 justify-center border-b">
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 px-1 group-data-[collapsible=icon]:hidden">
+            <div className="w-28 min-w-0 overflow-hidden px-1 opacity-100 transition-[width,opacity,padding,transform] duration-200 ease-linear group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:opacity-0">
               <h2 className="truncate text-sm font-semibold text-sidebar-foreground">
                 Run setup
               </h2>
@@ -49,7 +98,12 @@ export function OperationsWorkspace({
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup className="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
+          <CollapsedSetupNav />
+          <SidebarGroup
+            aria-hidden={isCollapsed}
+            className="min-h-0 flex-1 transition-[opacity,transform] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0"
+            inert={isCollapsed}
+          >
             <SidebarGroupContent className="min-h-0 flex-1">
               <ControlsPanel
                 commandTargetId={commandActionsTargetId}

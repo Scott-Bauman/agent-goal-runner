@@ -57,7 +57,9 @@ describe("run controller orchestration", () => {
     expect(spawnProcess.mock.calls[0]?.[1]).toEqual(
       expect.arrayContaining(["--model", "gpt-5.4", "-c", "model_reasoning_effort=medium"]),
     );
-    expect(spawnProcess.mock.calls[1]?.[1]).toEqual(spawnProcess.mock.calls[0]?.[1]);
+    expect(spawnProcess.mock.calls[1]?.[1]).toEqual(
+      expect.arrayContaining(["--model", "gpt-5.4", "-c", "model_reasoning_effort=medium"]),
+    );
   });
 
   it("blocks the run loop when the refreshed goal contains GOAL_BLOCKED", async () => {

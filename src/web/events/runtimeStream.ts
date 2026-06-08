@@ -25,6 +25,36 @@ export type LogsEvent = {
   entries: LogEntry[];
 };
 
+export type RunEventKind =
+  | "run_started"
+  | "codex_session_started"
+  | "command_started"
+  | "command_succeeded"
+  | "command_failed"
+  | "file_changed"
+  | "patch_applied"
+  | "warning"
+  | "error"
+  | "final_assistant_message"
+  | "run_completed";
+
+export type RunEventEntry = {
+  command?: string;
+  exitCode?: number;
+  files?: string[];
+  id: number;
+  kind: RunEventKind;
+  message: string;
+  receivedAt: number;
+  runNumber: number;
+  stopReason?: string;
+  totalRuns: number | null;
+};
+
+export type RunEventsEvent = {
+  entries: RunEventEntry[];
+};
+
 export type TranscriptEventKind =
   | "agent"
   | "command"
@@ -44,6 +74,27 @@ export type RunSummaryEvent = {
   status: RunnerStatus;
   message: string;
 } | null;
+
+export type SkillPreflightStatus = {
+  checked: boolean;
+  found: string[];
+  missing: string[];
+};
+
+export type RunSummaryDetails = {
+  status: RunnerStatus;
+  currentRun: number;
+  totalRuns: number | null;
+  model: string | null;
+  reasoningEffort: string | null;
+  tokenCount: number | null;
+  changedFiles: string[];
+  warningCount: number;
+  errorCount: number;
+  stopReason: string | null;
+  lastAssistantMessage: string | null;
+  skillPreflight: SkillPreflightStatus;
+};
 
 type RuntimeTranscriptEntryBase = {
   displayId: string;
@@ -68,25 +119,57 @@ export type RuntimeTranscriptSeparatorEntry = RuntimeTranscriptEntryBase & {
   type: "separator";
 };
 
+export type RuntimeTranscriptRunEventEntry = RuntimeTranscriptEntryBase & {
+  command?: string;
+  eventKind: RunEventKind;
+  exitCode?: number;
+  files: string[];
+  message: string;
+  sourceEventId: number;
+  type: "run-event";
+};
+
 export type RuntimeTranscriptEntry =
   | RuntimeTranscriptLogEntry
+  | RuntimeTranscriptRunEventEntry
   | RuntimeTranscriptSeparatorEntry;
 
 export type RuntimeStreamState = {
   connectionStatus: "connecting" | "open" | "error";
   logs: RuntimeTranscriptEntry[];
+  rawLogs: LogEntry[];
   progress: RunProgressEvent;
   latestSummary: RunSummaryEvent;
+  runDetails: RunSummaryDetails;
 };
 
 export const INITIAL_RUNTIME_STREAM_STATE: RuntimeStreamState = {
   connectionStatus: "connecting",
   logs: [],
+  rawLogs: [],
   progress: {
     currentRun: 0,
     totalRuns: null,
   },
   latestSummary: null,
+  runDetails: {
+    status: "idle",
+    currentRun: 0,
+    totalRuns: null,
+    model: null,
+    reasoningEffort: null,
+    tokenCount: null,
+    changedFiles: [],
+    warningCount: 0,
+    errorCount: 0,
+    stopReason: null,
+    lastAssistantMessage: null,
+    skillPreflight: {
+      checked: false,
+      found: [],
+      missing: [],
+    },
+  },
 };
 
 export const connectionStatusConfig: Record<
@@ -208,6 +291,73 @@ function isTerminalSummary(summary: NonNullable<RunSummaryEvent>): boolean {
   );
 }
 
+export function appendRawLogEntries(
+  logs: LogEntry[],
+  entries: LogEntry[],
+): LogEntry[] {
+  if (entries.length === 0) {
+    return logs;
+  }
+
+  const seenLogIds = new Set(logs.map((entry) => entry.id));
+  const appendedEntries = entries.filter((entry) => {
+    if (seenLogIds.has(entry.id)) {
+      return false;
+    }
+
+    seenLogIds.add(entry.id);
+    return true;
+  });
+
+  return appendedEntries.length > 0 ? [...logs, ...appendedEntries] : logs;
+}
+
+export function appendRunEventsToTranscript(
+  transcript: RuntimeTranscriptEntry[],
+  entries: RunEventEntry[],
+): RuntimeTranscriptEntry[] {
+  if (entries.length === 0) {
+    return transcript;
+  }
+
+  const seenEventIds = new Set(
+    transcript
+      .filter(
+        (entry): entry is RuntimeTranscriptRunEventEntry =>
+          entry.type === "run-event",
+      )
+      .map((entry) => entry.sourceEventId),
+  );
+  const appendedEntries: RuntimeTranscriptRunEventEntry[] = [];
+
+  for (const entry of entries) {
+    if (seenEventIds.has(entry.id)) {
+      continue;
+    }
+
+    seenEventIds.add(entry.id);
+    appendedEntries.push({
+      command: entry.command,
+      displayId: `#${entry.id}`,
+      eventKind: entry.kind,
+      exitCode: entry.exitCode,
+      files: entry.files ?? [],
+      id: `event:${entry.id}`,
+      kind: transcriptKindForRunEvent(entry.kind),
+      message: entry.message,
+      receivedAt: entry.receivedAt,
+      runIndex: entry.runNumber,
+      sourceEventId: entry.id,
+      totalRuns: entry.totalRuns,
+      type: "run-event",
+    });
+  }
+
+  return appendedEntries.length > 0
+    ? [...transcript, ...appendedEntries]
+    : transcript;
+}
+
 export function appendLogEntriesToTranscript(
   transcript: RuntimeTranscriptEntry[],
   entries: LogEntry[],
@@ -248,6 +398,28 @@ export function appendLogEntriesToTranscript(
   return appendedEntries.length > 0
     ? [...transcript, ...appendedEntries]
     : transcript;
+}
+
+function transcriptKindForRunEvent(kind: RunEventKind): TranscriptEventKind {
+  switch (kind) {
+    case "command_started":
+      return "command";
+    case "command_succeeded":
+    case "run_completed":
+      return "done";
+    case "command_failed":
+    case "error":
+      return "error";
+    case "file_changed":
+    case "patch_applied":
+      return "edit";
+    case "warning":
+      return "warn";
+    case "codex_session_started":
+    case "final_assistant_message":
+    case "run_started":
+      return "agent";
+  }
 }
 
 export function appendProgressSeparatorToTranscript(
