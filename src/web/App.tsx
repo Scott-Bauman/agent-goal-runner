@@ -238,6 +238,7 @@ export function App() {
     <SidebarProvider className="h-dvh min-h-0 flex-col overflow-hidden bg-zinc-50 text-zinc-950">
       <TopBar
         actionSlotId={RUN_COMMAND_ACTIONS_ID}
+        connectionStatus={runtimeStream.connectionStatus}
         repositorySelection={repositorySelection}
         status={runnerStatus}
       />

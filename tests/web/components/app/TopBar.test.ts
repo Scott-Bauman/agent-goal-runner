@@ -5,6 +5,7 @@ import {
   shouldShowBranchSelector,
   getWorkingTreeStatusLabel,
 } from "../../../../src/web/components/app/topBarGit";
+import { getSseConnectionIndicatorState } from "../../../../src/web/components/app/TopBar";
 import { getRepositoryFolderLabel } from "../../../../src/web/repository/repositoryPath";
 
 describe("TopBar helpers", () => {
@@ -57,5 +58,11 @@ describe("TopBar helpers", () => {
     expect(getBranchMergeSuccessDescription("feature/git-ui", null)).toBe(
       'Merged "feature/git-ui" into "current branch".',
     );
+  });
+
+  it("maps SSE connection states to status indicator states", () => {
+    expect(getSseConnectionIndicatorState("connecting")).toBe("fixing");
+    expect(getSseConnectionIndicatorState("open")).toBe("active");
+    expect(getSseConnectionIndicatorState("error")).toBe("down");
   });
 });

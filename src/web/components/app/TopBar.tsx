@@ -34,6 +34,11 @@ import {
   ComboboxSeparator,
 } from "@/web/components/ui/combobox";
 import { Input } from "@/web/components/ui/input";
+import StatusIndicator from "@/web/components/ui/status-indicator";
+import {
+  connectionStatusConfig,
+  type RuntimeStreamState,
+} from "@/web/events/runtimeStream";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import { getRepositoryFolderLabel } from "@/web/repository/repositoryPath";
 import {
@@ -53,6 +58,8 @@ type BranchMergeAlert = {
   title: string;
   variant: "success" | "error";
 };
+type SseConnectionStatus = RuntimeStreamState["connectionStatus"];
+type SseConnectionIndicatorState = "active" | "down" | "fixing";
 
 const EMPTY_BRANCHES: RepositoryBranchesResponse = {
   currentBranch: null,
@@ -62,10 +69,12 @@ const EMPTY_BRANCHES: RepositoryBranchesResponse = {
 
 export function TopBar({
   actionSlotId,
+  connectionStatus,
   repositorySelection,
   status,
 }: {
   actionSlotId: string;
+  connectionStatus: SseConnectionStatus;
   repositorySelection: RepositorySelectionState;
   status: RunnerStatus;
 }) {
@@ -296,10 +305,11 @@ export function TopBar({
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b border-zinc-200 bg-white">
       <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4">
-        <div className="min-w-0 justify-self-start">
+        <div className="flex min-w-0 items-center gap-2 justify-self-start">
           <h1 className="truncate text-base font-semibold leading-6 text-zinc-950">
             Agent Goal Runner
           </h1>
+          <SseConnectionBadge connectionStatus={connectionStatus} />
         </div>
 
         <div className="flex min-w-0 items-center justify-center gap-3 justify-self-center">
@@ -337,6 +347,43 @@ export function TopBar({
         />
       </div>
     </header>
+  );
+}
+
+export function getSseConnectionIndicatorState(
+  connectionStatus: SseConnectionStatus,
+): SseConnectionIndicatorState {
+  switch (connectionStatus) {
+    case "open":
+      return "active";
+    case "error":
+      return "down";
+    case "connecting":
+      return "fixing";
+  }
+}
+
+function SseConnectionBadge({
+  connectionStatus,
+}: {
+  connectionStatus: SseConnectionStatus;
+}) {
+  const config = connectionStatusConfig[connectionStatus];
+
+  return (
+    <div
+      aria-label={`SSE connection: ${config.label}`}
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2 text-xs font-medium text-zinc-700"
+      role="status"
+      title={config.label}
+    >
+      <StatusIndicator
+        className="gap-0"
+        size="sm"
+        state={getSseConnectionIndicatorState(connectionStatus)}
+      />
+      <span className="whitespace-nowrap">SSE connection</span>
+    </div>
   );
 }
 
