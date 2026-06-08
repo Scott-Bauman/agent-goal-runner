@@ -157,6 +157,7 @@ describe("repository selection endpoint", () => {
     const spawnProcess = createGitSpawner([
       { stdout: "feature/top-bar\n" },
       { stdout: "main\nfeature/top-bar\n" },
+      {},
     ]);
     const app = await createTestServer({ spawnProcess });
 
@@ -171,6 +172,7 @@ describe("repository selection endpoint", () => {
     expect(response.json()).toEqual({
       currentBranch: "feature/top-bar",
       branches: ["feature/top-bar", "main"],
+      workingTreeStatus: "clean",
     });
     expect(spawnProcess.mock.calls.map(([command, args, options]) => ({
       command,
@@ -187,6 +189,11 @@ describe("repository selection endpoint", () => {
         args: ["branch", "--format=%(refname:short)"],
         cwd: path.normalize(repositoryPath),
       },
+      {
+        command: "git",
+        args: ["status", "--porcelain"],
+        cwd: path.normalize(repositoryPath),
+      },
     ]);
   });
 
@@ -196,8 +203,10 @@ describe("repository selection endpoint", () => {
       { stdout: "main\n" },
       { stdout: "main\nfeature/top-bar\n" },
       {},
+      {},
       { stdout: "feature/top-bar\n" },
       { stdout: "main\nfeature/top-bar\n" },
+      {},
     ]);
     const app = await createTestServer({ spawnProcess });
 
@@ -215,13 +224,16 @@ describe("repository selection endpoint", () => {
     expect(response.json()).toEqual({
       currentBranch: "feature/top-bar",
       branches: ["feature/top-bar", "main"],
+      workingTreeStatus: "clean",
     });
     expect(spawnProcess.mock.calls.map(([, args]) => args)).toEqual([
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
       ["switch", "feature/top-bar"],
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
     ]);
   });
 
@@ -232,6 +244,7 @@ describe("repository selection endpoint", () => {
       {},
       { stdout: "feature/new-work\n" },
       { stdout: "main\nfeature/new-work\n" },
+      {},
     ]);
     const app = await createTestServer({ spawnProcess });
 
@@ -249,13 +262,382 @@ describe("repository selection endpoint", () => {
     expect(response.json()).toEqual({
       currentBranch: "feature/new-work",
       branches: ["feature/new-work", "main"],
+      workingTreeStatus: "clean",
     });
     expect(spawnProcess.mock.calls.map(([, args]) => args)).toEqual([
       ["check-ref-format", "--branch", "feature/new-work"],
       ["switch", "-c", "feature/new-work"],
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
     ]);
+  });
+
+  it("reports changed working tree state while listing branches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      { stdout: " M goal.md\n" },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/branches",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currentBranch: "main",
+      branches: ["feature/top-bar", "main"],
+      workingTreeStatus: "changes",
+    });
+  });
+
+  it("merges an existing local branch into the current branch", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+      {},
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      { stdout: " M goal.md\n" },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/merge",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currentBranch: "main",
+      branches: ["feature/top-bar", "main"],
+      workingTreeStatus: "changes",
+    });
+    expect(spawnProcess.mock.calls.map(([, args]) => args)).toEqual([
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
+      ["merge", "--no-edit", "feature/top-bar"],
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
+    ]);
+  });
+
+  it("rejects branch merges without a selected repository", async () => {
+    const app = await createTestServer();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/merge",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No repository selected.",
+    });
+  });
+
+  it("rejects branch merges while a run is active", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/merge",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Cannot merge branches while a run is active.",
+    });
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects branch merge requests with a missing branch", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await createTestServer();
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/merge",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      error: "Invalid branch merge request.",
+      issues: [
+        {
+          path: "branch",
+          message: "Branch is required.",
+        },
+      ],
+    });
+  });
+
+  it("rejects branch merges of the current branch", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/merge",
+      payload: {
+        branch: "main",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      error: "Invalid branch merge request.",
+      issues: [
+        {
+          path: "branch",
+          message: "Branch must not be the current branch.",
+        },
+      ],
+    });
+  });
+
+  it("rejects branch merges of unknown local branches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/merge",
+      payload: {
+        branch: "missing",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      error: "Invalid branch merge request.",
+      issues: [
+        {
+          path: "branch",
+          message: "Branch must be an existing local branch.",
+        },
+      ],
+    });
+  });
+
+  it("deletes an existing local branch with safe delete", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+      {},
+      { stdout: "main\n" },
+      { stdout: "main\n" },
+      {},
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/repository/branches",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currentBranch: "main",
+      branches: ["main"],
+      workingTreeStatus: "clean",
+    });
+    expect(spawnProcess.mock.calls.map(([, args]) => args)).toEqual([
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
+      ["branch", "-d", "feature/top-bar"],
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+      ["status", "--porcelain"],
+    ]);
+  });
+
+  it("rejects branch deletions of the current branch", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/repository/branches",
+      payload: {
+        branch: "main",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      error: "Invalid branch deletion request.",
+      issues: [
+        {
+          path: "branch",
+          message: "Branch must not be the current branch.",
+        },
+      ],
+    });
+  });
+
+  it("rejects branch deletions while a run is active", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/repository/branches",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Cannot delete branches while a run is active.",
+    });
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects branch deletions of unknown local branches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/repository/branches",
+      payload: {
+        branch: "missing",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      error: "Invalid branch deletion request.",
+      issues: [
+        {
+          path: "branch",
+          message: "Branch must be an existing local branch.",
+        },
+      ],
+    });
+  });
+
+  it("surfaces safe-delete failures from git", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+      {
+        stderr: "error: The branch 'feature/top-bar' is not fully merged.\n",
+        exitCode: 1,
+      },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/repository/branches",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "error: The branch 'feature/top-bar' is not fully merged.",
+    });
   });
 
   it("returns branch name validation errors from git", async () => {

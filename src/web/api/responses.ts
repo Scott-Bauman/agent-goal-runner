@@ -12,6 +12,7 @@ export type RepositoryBrowseResponse = RepositorySelectionResponse & {
 export type RepositoryBranchesResponse = {
   currentBranch: string | null;
   branches: string[];
+  workingTreeStatus: "clean" | "changes" | "unknown";
 };
 
 export type RepositoryBranchSwitchRequest = {
@@ -20,6 +21,14 @@ export type RepositoryBranchSwitchRequest = {
 
 export type RepositoryBranchCreateRequest = {
   name: string;
+};
+
+export type RepositoryBranchMergeRequest = {
+  branch: string;
+};
+
+export type RepositoryBranchDeleteRequest = {
+  branch: string;
 };
 
 export type ValidationIssue = {

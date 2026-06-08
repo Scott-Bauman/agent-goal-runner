@@ -1,13 +1,29 @@
 import { useEffect, useState } from "react";
-import { GitBranchIcon, PlusIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  CheckCircle2Icon,
+  GitBranchIcon,
+  GitMergeIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react";
 
 import { getApiErrorMessage } from "@/web/api/errors";
 import type {
   ApiErrorResponse,
   RepositoryBranchCreateRequest,
+  RepositoryBranchDeleteRequest,
+  RepositoryBranchMergeRequest,
   RepositoryBranchesResponse,
   RepositoryBranchSwitchRequest,
 } from "@/web/api/responses";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/web/components/ui/alert";
 import { Button } from "@/web/components/ui/button";
 import {
   Combobox,
@@ -21,16 +37,27 @@ import { Input } from "@/web/components/ui/input";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import { getRepositoryFolderLabel } from "@/web/repository/repositoryPath";
 import {
+  getBranchMergeSuccessDescription,
+  getWorkingTreeStatusLabel,
+  shouldShowBranchSelector,
+} from "./topBarGit";
+import {
   isActiveRunnerStatus,
   type RunnerStatus,
 } from "@/web/runner/statuses";
 
 type BranchLoadStatus = "idle" | "loading" | "ready";
-type BranchOperation = "idle" | "switching" | "creating";
+type BranchOperation = "idle" | "switching" | "creating" | "merging" | "deleting";
+type BranchMergeAlert = {
+  description: string;
+  title: string;
+  variant: "success" | "error";
+};
 
 const EMPTY_BRANCHES: RepositoryBranchesResponse = {
   currentBranch: null,
   branches: [],
+  workingTreeStatus: "unknown",
 };
 
 export function TopBar({
@@ -55,6 +82,8 @@ export function TopBar({
   const [branchState, setBranchState] =
     useState<RepositoryBranchesResponse>(EMPTY_BRANCHES);
   const [branchError, setBranchError] = useState<string | null>(null);
+  const [branchMergeAlert, setBranchMergeAlert] =
+    useState<BranchMergeAlert | null>(null);
   const [newBranchName, setNewBranchName] = useState("");
   const isRunActive = isActiveRunnerStatus(status);
 
@@ -64,6 +93,7 @@ export function TopBar({
       setBranchOperation("idle");
       setBranchState(EMPTY_BRANCHES);
       setBranchError(null);
+      setBranchMergeAlert(null);
       setNewBranchName("");
       return;
     }
@@ -73,6 +103,7 @@ export function TopBar({
     async function loadBranches() {
       setBranchLoadStatus("loading");
       setBranchError(null);
+      setBranchMergeAlert(null);
 
       try {
         const branches = await fetchRepositoryBranches(abortController.signal);
@@ -113,6 +144,7 @@ export function TopBar({
 
     setBranchOperation("switching");
     setBranchError(null);
+    setBranchMergeAlert(null);
 
     try {
       const branches = await postBranchRequest<RepositoryBranchSwitchRequest>(
@@ -140,6 +172,7 @@ export function TopBar({
 
     setBranchOperation("creating");
     setBranchError(null);
+    setBranchMergeAlert(null);
 
     try {
       const branches = await postBranchRequest<RepositoryBranchCreateRequest>(
@@ -153,6 +186,107 @@ export function TopBar({
     } catch (error) {
       setBranchError(
         error instanceof Error ? error.message : "Failed to create branch.",
+      );
+    } finally {
+      setBranchOperation("idle");
+    }
+  }
+
+  async function handleBranchRefresh(): Promise<void> {
+    if (branchOperation !== "idle") {
+      return;
+    }
+
+    setBranchLoadStatus("loading");
+    setBranchError(null);
+    setBranchMergeAlert(null);
+
+    try {
+      const branches = await fetchRepositoryBranches();
+
+      setBranchState(branches);
+    } catch (error) {
+      setBranchError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load repository branches.",
+      );
+    } finally {
+      setBranchLoadStatus("ready");
+    }
+  }
+
+  async function handleBranchMerge(branch: string): Promise<void> {
+    if (
+      branch === branchState.currentBranch ||
+      branchOperation !== "idle" ||
+      isRunActive
+    ) {
+      return;
+    }
+
+    setBranchOperation("merging");
+    setBranchError(null);
+    setBranchMergeAlert(null);
+
+    try {
+      const branches = await postBranchRequest<RepositoryBranchMergeRequest>(
+        "/api/repository/branches/merge",
+        { branch },
+        "Failed to merge branch.",
+      );
+
+      setBranchState(branches);
+      setBranchMergeAlert({
+        description: getBranchMergeSuccessDescription(
+          branch,
+          branches.currentBranch,
+        ),
+        title: "Merge successful",
+        variant: "success",
+      });
+    } catch (error) {
+      setBranchMergeAlert({
+        description:
+          error instanceof Error ? error.message : "Failed to merge branch.",
+        title: "Merge failed",
+        variant: "error",
+      });
+    } finally {
+      setBranchOperation("idle");
+    }
+  }
+
+  async function handleBranchDelete(branch: string): Promise<void> {
+    if (
+      branch === branchState.currentBranch ||
+      branchOperation !== "idle" ||
+      isRunActive
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete local branch "${branch}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBranchOperation("deleting");
+    setBranchError(null);
+    setBranchMergeAlert(null);
+
+    try {
+      const branches = await deleteBranchRequest<RepositoryBranchDeleteRequest>(
+        "/api/repository/branches",
+        { branch },
+        "Failed to delete branch.",
+      );
+
+      setBranchState(branches);
+    } catch (error) {
+      setBranchError(
+        error instanceof Error ? error.message : "Failed to delete branch.",
       );
     } finally {
       setBranchOperation("idle");
@@ -179,12 +313,19 @@ export function TopBar({
             <BranchSelector
               branchError={branchError}
               branchLoadStatus={branchLoadStatus}
+              branchMergeAlert={branchMergeAlert}
               branchOperation={branchOperation}
               branchState={branchState}
               disabled={isRunActive}
               newBranchName={newBranchName}
               onBranchCreate={handleBranchCreate}
+              onBranchDelete={handleBranchDelete}
+              onBranchMerge={handleBranchMerge}
+              onBranchMergeAlertDismiss={() => {
+                setBranchMergeAlert(null);
+              }}
               onBranchNameChange={setNewBranchName}
+              onBranchRefresh={handleBranchRefresh}
               onBranchSwitch={handleBranchSwitch}
             />
           ) : null}
@@ -199,34 +340,35 @@ export function TopBar({
   );
 }
 
-export function shouldShowBranchSelector(
-  repositorySelection: RepositorySelectionState,
-): boolean {
-  return (
-    repositorySelection.status === "ready" &&
-    repositorySelection.repositoryPath !== null
-  );
-}
-
 function BranchSelector({
   branchError,
   branchLoadStatus,
+  branchMergeAlert,
   branchOperation,
   branchState,
   disabled,
   newBranchName,
   onBranchCreate,
+  onBranchDelete,
+  onBranchMerge,
+  onBranchMergeAlertDismiss,
   onBranchNameChange,
+  onBranchRefresh,
   onBranchSwitch,
 }: {
   branchError: string | null;
   branchLoadStatus: BranchLoadStatus;
+  branchMergeAlert: BranchMergeAlert | null;
   branchOperation: BranchOperation;
   branchState: RepositoryBranchesResponse;
   disabled: boolean;
   newBranchName: string;
   onBranchCreate: () => Promise<void>;
+  onBranchDelete: (branch: string) => Promise<void>;
+  onBranchMerge: (branch: string) => Promise<void>;
+  onBranchMergeAlertDismiss: () => void;
   onBranchNameChange: (branchName: string) => void;
+  onBranchRefresh: () => Promise<void>;
   onBranchSwitch: (branch: string | null) => Promise<void>;
 }) {
   const isBusy = branchLoadStatus === "loading" || branchOperation !== "idle";
@@ -236,66 +378,93 @@ function BranchSelector({
     branchLoadStatus === "loading"
       ? "Loading..."
       : (branchState.currentBranch ?? "Detached HEAD");
+  const workingTreeLabel = getWorkingTreeStatusLabel(
+    branchState.workingTreeStatus,
+  );
 
   return (
-    <div className="flex min-w-0 flex-col items-start gap-1">
-      <Combobox<string>
-        items={branchState.branches}
-        onValueChange={(value) => {
-          void onBranchSwitch(value);
-        }}
-        value={selectedBranch}
-      >
-        <ComboboxInput
-          aria-label="Git branch"
-          className="w-48"
-          disabled={isDisabled}
-          readOnly
-          value={selectedBranchLabel}
+    <div className="relative flex min-w-0 flex-col items-start gap-1">
+      <div className="flex items-center gap-2">
+        <Combobox<string>
+          items={branchState.branches}
+          onValueChange={(value) => {
+            void onBranchSwitch(value);
+          }}
+          value={selectedBranch}
         >
-          <GitBranchIcon className="pointer-events-none ml-2 size-4 text-zinc-500" />
-        </ComboboxInput>
-        <ComboboxContent className="w-64">
-          <ComboboxList>
-            {branchState.branches.map((branch) => (
-              <ComboboxItem
-                key={branch}
-                value={branch}
-              >
-                {branch}
-              </ComboboxItem>
-            ))}
-          </ComboboxList>
-          <ComboboxSeparator />
-          <form
-            className="flex gap-2 p-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onBranchCreate();
-            }}
+          <ComboboxInput
+            aria-label="Git branch"
+            className="w-48"
+            disabled={isDisabled}
+            readOnly
+            value={selectedBranchLabel}
           >
-            <Input
-              aria-label="New branch name"
-              className="h-8 min-w-0 text-sm"
-              disabled={isDisabled}
-              onChange={(event) => {
-                onBranchNameChange(event.target.value);
+            <GitBranchIcon className="pointer-events-none ml-2 size-4 text-zinc-500" />
+          </ComboboxInput>
+          <ComboboxContent className="w-72">
+            <ComboboxList>
+              {branchState.branches.map((branch) => (
+                <BranchItem
+                  branch={branch}
+                  currentBranch={branchState.currentBranch}
+                  disabled={isDisabled}
+                  key={branch}
+                  onBranchDelete={onBranchDelete}
+                  onBranchMerge={onBranchMerge}
+                />
+              ))}
+            </ComboboxList>
+            <ComboboxSeparator />
+            <form
+              className="flex gap-2 p-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onBranchCreate();
               }}
-              placeholder="new-branch"
-              value={newBranchName}
-            />
-            <Button
-              disabled={isDisabled || newBranchName.trim().length === 0}
-              size="sm"
-              type="submit"
-              variant="outline"
             >
-              <PlusIcon className="size-4" />
-              Add
-            </Button>
-          </form>
-        </ComboboxContent>
-      </Combobox>
+              <Input
+                aria-label="New branch name"
+                className="h-8 min-w-0 text-sm"
+                disabled={isDisabled}
+                onChange={(event) => {
+                  onBranchNameChange(event.target.value);
+                }}
+                placeholder="new-branch"
+                value={newBranchName}
+              />
+              <Button
+                disabled={isDisabled || newBranchName.trim().length === 0}
+                size="sm"
+                type="submit"
+                variant="outline"
+              >
+                <PlusIcon className="size-4" />
+                Add
+              </Button>
+            </form>
+          </ComboboxContent>
+        </Combobox>
+        <Button
+          aria-label="Refresh Git branches"
+          className="size-8"
+          disabled={isDisabled}
+          onClick={() => {
+            void onBranchRefresh();
+          }}
+          size="icon"
+          title="Refresh Git branches"
+          type="button"
+          variant="outline"
+        >
+          <RefreshCwIcon className="size-4" />
+        </Button>
+        <span
+          className="whitespace-nowrap text-xs font-medium text-zinc-500"
+          title={`Working tree: ${workingTreeLabel}`}
+        >
+          {workingTreeLabel}
+        </span>
+      </div>
       {branchError ? (
         <p
           className="max-w-64 truncate text-xs font-medium text-red-600"
@@ -304,7 +473,116 @@ function BranchSelector({
           {branchError}
         </p>
       ) : null}
+      {branchMergeAlert ? (
+        <BranchMergeFeedbackAlert
+          alert={branchMergeAlert}
+          onDismiss={onBranchMergeAlertDismiss}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function BranchMergeFeedbackAlert({
+  alert,
+  onDismiss,
+}: {
+  alert: BranchMergeAlert;
+  onDismiss: () => void;
+}) {
+  const Icon = alert.variant === "success" ? CheckCircle2Icon : AlertCircleIcon;
+
+  return (
+    <Alert
+      className="absolute left-1/2 top-full z-40 mt-2 w-96 max-w-[calc(100vw-2rem)] -translate-x-1/2 pr-12 shadow-lg"
+      variant={alert.variant === "error" ? "destructive" : "default"}
+    >
+      <Button
+        aria-label="Dismiss merge alert"
+        className="absolute right-2 top-2 size-7"
+        onClick={onDismiss}
+        size="icon"
+        title="Dismiss merge alert"
+        type="button"
+        variant="ghost"
+      >
+        <XIcon data-icon="inline-start" />
+      </Button>
+      <Icon />
+      <div>
+        <AlertTitle>{alert.title}</AlertTitle>
+        <AlertDescription>{alert.description}</AlertDescription>
+      </div>
+    </Alert>
+  );
+}
+
+function BranchItem({
+  branch,
+  currentBranch,
+  disabled,
+  onBranchDelete,
+  onBranchMerge,
+}: {
+  branch: string;
+  currentBranch: string | null;
+  disabled: boolean;
+  onBranchDelete: (branch: string) => Promise<void>;
+  onBranchMerge: (branch: string) => Promise<void>;
+}) {
+  const isCurrentBranch = branch === currentBranch;
+
+  return (
+    <ComboboxItem
+      className={isCurrentBranch ? undefined : "pr-20"}
+      value={branch}
+    >
+      <span className="min-w-0 flex-1 truncate">{branch}</span>
+      {isCurrentBranch ? null : (
+        <span className="absolute right-1 flex items-center gap-1">
+          <Button
+            aria-label={`Merge ${branch} into current branch`}
+            className="size-7"
+            disabled={disabled}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void onBranchMerge(branch);
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            size="icon"
+            title={`Merge ${branch} into current branch`}
+            type="button"
+            variant="ghost"
+          >
+            <GitMergeIcon className="size-4" />
+          </Button>
+          <Button
+            aria-label={`Delete ${branch}`}
+            className="size-7 text-red-600 hover:text-red-700"
+            disabled={disabled}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void onBranchDelete(branch);
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            size="icon"
+            title={`Delete ${branch}`}
+            type="button"
+            variant="ghost"
+          >
+            <Trash2Icon className="size-4" />
+          </Button>
+        </span>
+      )}
+    </ComboboxItem>
   );
 }
 
@@ -320,6 +598,31 @@ async function fetchRepositoryBranches(
       getApiErrorMessage(
         (await response.json().catch(() => ({}))) as ApiErrorResponse,
         "Failed to load repository branches.",
+      ),
+    );
+  }
+
+  return (await response.json()) as RepositoryBranchesResponse;
+}
+
+async function deleteBranchRequest<TBody>(
+  url: string,
+  body: TBody,
+  fallbackError: string,
+): Promise<RepositoryBranchesResponse> {
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      getApiErrorMessage(
+        (await response.json().catch(() => ({}))) as ApiErrorResponse,
+        fallbackError,
       ),
     );
   }

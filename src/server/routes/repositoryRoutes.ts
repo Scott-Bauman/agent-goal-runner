@@ -4,8 +4,10 @@ import { z } from "zod";
 
 import {
   createRepositoryBranch,
+  deleteRepositoryBranch,
   getGitErrorMessage,
   getRepositoryBranches,
+  mergeRepositoryBranch,
   switchRepositoryBranch,
   validateRepositoryBranchName,
 } from "../repository/gitBranches.js";
@@ -185,6 +187,148 @@ export function registerRepositoryRoutes(
     } catch (error) {
       return reply.code(409).send({
         error: getGitErrorMessage(error, "Failed to create branch."),
+      });
+    }
+  });
+
+  server.post("/api/repository/branches/merge", async (request, reply) => {
+    const parsedBody = branchSwitchSchema.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(
+          validationError(
+            "Invalid branch merge request.",
+            formatZodIssues(parsedBody.error),
+          ),
+        );
+    }
+
+    if (!context.runtimeState.selectedRepositoryPath) {
+      return reply.code(409).send({
+        error: "No repository selected.",
+      });
+    }
+
+    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
+      return reply.code(409).send({
+        error: "Cannot merge branches while a run is active.",
+      });
+    }
+
+    const repositoryPath = context.runtimeState.selectedRepositoryPath;
+
+    try {
+      const branches = await getRepositoryBranches(
+        context.spawnProcess,
+        repositoryPath,
+      );
+
+      if (!branches.currentBranch) {
+        return reply.code(409).send({
+          error: "Cannot merge branches while HEAD is detached.",
+        });
+      }
+
+      if (!branches.branches.includes(parsedBody.data.branch)) {
+        return reply.code(400).send(
+          validationError("Invalid branch merge request.", [
+            {
+              path: "branch",
+              message: "Branch must be an existing local branch.",
+            },
+          ]),
+        );
+      }
+
+      if (parsedBody.data.branch === branches.currentBranch) {
+        return reply.code(400).send(
+          validationError("Invalid branch merge request.", [
+            {
+              path: "branch",
+              message: "Branch must not be the current branch.",
+            },
+          ]),
+        );
+      }
+
+      return await mergeRepositoryBranch(
+        context.spawnProcess,
+        repositoryPath,
+        parsedBody.data.branch,
+      );
+    } catch (error) {
+      return reply.code(409).send({
+        error: getGitErrorMessage(error, "Failed to merge branch."),
+      });
+    }
+  });
+
+  server.delete("/api/repository/branches", async (request, reply) => {
+    const parsedBody = branchSwitchSchema.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(
+          validationError(
+            "Invalid branch deletion request.",
+            formatZodIssues(parsedBody.error),
+          ),
+        );
+    }
+
+    if (!context.runtimeState.selectedRepositoryPath) {
+      return reply.code(409).send({
+        error: "No repository selected.",
+      });
+    }
+
+    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
+      return reply.code(409).send({
+        error: "Cannot delete branches while a run is active.",
+      });
+    }
+
+    const repositoryPath = context.runtimeState.selectedRepositoryPath;
+
+    try {
+      const branches = await getRepositoryBranches(
+        context.spawnProcess,
+        repositoryPath,
+      );
+
+      if (!branches.branches.includes(parsedBody.data.branch)) {
+        return reply.code(400).send(
+          validationError("Invalid branch deletion request.", [
+            {
+              path: "branch",
+              message: "Branch must be an existing local branch.",
+            },
+          ]),
+        );
+      }
+
+      if (parsedBody.data.branch === branches.currentBranch) {
+        return reply.code(400).send(
+          validationError("Invalid branch deletion request.", [
+            {
+              path: "branch",
+              message: "Branch must not be the current branch.",
+            },
+          ]),
+        );
+      }
+
+      return await deleteRepositoryBranch(
+        context.spawnProcess,
+        repositoryPath,
+        parsedBody.data.branch,
+      );
+    } catch (error) {
+      return reply.code(409).send({
+        error: getGitErrorMessage(error, "Failed to delete branch."),
       });
     }
   });

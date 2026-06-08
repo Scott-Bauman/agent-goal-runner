@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   AlertCircle,
   Bot,
   Edit3,
   FilePlus2,
   FileText,
+  ListChecks,
   Save,
   X,
 } from "lucide-react";
@@ -39,7 +46,11 @@ import {
   type GoalFileResponse,
   type GoalFileState,
 } from "@/web/goal/goalFile";
-import { renderGoalMarkdown } from "@/web/markdown";
+import {
+  extractGoalImplementationSteps,
+  renderGoalMarkdown,
+  type GoalImplementationStep,
+} from "@/web/markdown";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import type { RunnerStatus } from "@/web/runner/statuses";
 
@@ -60,6 +71,8 @@ type GoalDraftState =
       prompt: string;
       status: "editing" | "starting";
     };
+
+type GoalViewMode = "document" | "steps";
 
 function toAvailableGoalState(goalFile: GoalFileResponse): GoalFileState {
   return {
@@ -94,6 +107,7 @@ export function GoalDocumentPanel({
   const [draftState, setDraftState] = useState<GoalDraftState>({
     mode: "none",
   });
+  const [goalViewMode, setGoalViewMode] = useState<GoalViewMode>("document");
   const selectedRepositoryPath =
     repositorySelection.status === "ready"
       ? repositorySelection.repositoryPath
@@ -118,6 +132,13 @@ export function GoalDocumentPanel({
       goalFileState.status === "available" && goalFileState.markdown !== null
         ? renderGoalMarkdown(goalFileState.markdown)
         : null,
+    [goalFileState.markdown, goalFileState.status],
+  );
+  const implementationSteps = useMemo(
+    () =>
+      goalFileState.status === "available" && goalFileState.markdown !== null
+        ? extractGoalImplementationSteps(goalFileState.markdown)
+        : [],
     [goalFileState.markdown, goalFileState.status],
   );
 
@@ -197,6 +218,7 @@ export function GoalDocumentPanel({
       setDraftState({
         mode: "none",
       });
+      setGoalViewMode("document");
       return;
     }
 
@@ -208,6 +230,12 @@ export function GoalDocumentPanel({
       abortController.abort();
     };
   }, [goalRefreshToken, loadGoalFile, selectedRepositoryPath]);
+
+  useEffect(() => {
+    if (isDraftActive || goalFileState.status !== "available") {
+      setGoalViewMode("document");
+    }
+  }, [goalFileState.status, isDraftActive]);
 
   function handleManualStart() {
     if (!goalAvailability.canRunGoalAction) {
@@ -402,7 +430,42 @@ export function GoalDocumentPanel({
     }
 
     return (
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {goalFileState.status === "available" ? (
+          <Button
+            aria-label={
+              goalViewMode === "steps"
+                ? "Show rendered document"
+                : "Show implementation steps"
+            }
+            aria-pressed={goalViewMode === "steps"}
+            onClick={() => {
+              setGoalViewMode((currentMode) =>
+                currentMode === "document" ? "steps" : "document",
+              );
+            }}
+            size="sm"
+            type="button"
+            variant={goalViewMode === "steps" ? "secondary" : "outline"}
+          >
+            {goalViewMode === "steps" ? (
+              <FileText
+                aria-hidden="true"
+                data-icon="inline-start"
+                strokeWidth={2}
+              />
+            ) : (
+              <ListChecks
+                aria-hidden="true"
+                data-icon="inline-start"
+                strokeWidth={2}
+              />
+            )}
+            {goalViewMode === "steps"
+              ? "Rendered document"
+              : "Implementation steps"}
+          </Button>
+        ) : null}
         <Button
           disabled={!goalAvailability.canRunGoalAction}
           onClick={handleManualStart}
@@ -455,6 +518,39 @@ export function GoalDocumentPanel({
       >
         {error}
       </p>
+    );
+  }
+
+  function renderImplementationStepsView(steps: GoalImplementationStep[]) {
+    if (steps.length === 0) {
+      return (
+        <p className="max-w-sm text-center text-sm leading-6 text-muted-foreground">
+          No implementation steps found.
+        </p>
+      );
+    }
+
+    return (
+      <div className="goal-steps-view min-h-full w-full">
+        {steps.map((step) => (
+          <div
+            className="goal-step-box"
+            data-status={step.status}
+            key={step.id}
+            style={
+              {
+                "--goal-step-indent": `${step.depth}rem`,
+              } as CSSProperties
+            }
+          >
+            <span
+              aria-hidden="true"
+              className="goal-step-status-dot"
+            />
+            <p>{step.text}</p>
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -670,6 +766,10 @@ export function GoalDocumentPanel({
     }
 
     if (goalFileState.status === "available") {
+      if (goalViewMode === "steps") {
+        return renderImplementationStepsView(implementationSteps);
+      }
+
       return (
         <div
           className="goal-markdown min-h-full w-full break-words"

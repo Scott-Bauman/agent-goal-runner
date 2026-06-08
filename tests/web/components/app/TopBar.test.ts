@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldShowBranchSelector } from "../../../../src/web/components/app/TopBar";
+import {
+  getBranchMergeSuccessDescription,
+  shouldShowBranchSelector,
+  getWorkingTreeStatusLabel,
+} from "../../../../src/web/components/app/topBarGit";
 import { getRepositoryFolderLabel } from "../../../../src/web/repository/repositoryPath";
 
 describe("TopBar helpers", () => {
@@ -38,5 +42,20 @@ describe("TopBar helpers", () => {
         repositoryPath: "C:\\Users\\Scott\\agent-goal-runner",
       }),
     ).toBe(true);
+  });
+
+  it("formats working tree status labels", () => {
+    expect(getWorkingTreeStatusLabel("clean")).toBe("Clean");
+    expect(getWorkingTreeStatusLabel("changes")).toBe("Changes");
+    expect(getWorkingTreeStatusLabel("unknown")).toBe("Unknown");
+  });
+
+  it("formats successful merge feedback", () => {
+    expect(getBranchMergeSuccessDescription("feature/git-ui", "main")).toBe(
+      'Merged "feature/git-ui" into "main".',
+    );
+    expect(getBranchMergeSuccessDescription("feature/git-ui", null)).toBe(
+      'Merged "feature/git-ui" into "current branch".',
+    );
   });
 });

@@ -3,6 +3,7 @@ import type { ProcessSpawner } from "../shared/process.js";
 export type RepositoryBranches = {
   currentBranch: string | null;
   branches: string[];
+  workingTreeStatus: GitWorkingTreeStatus;
 };
 
 export type GitCommandResult = {
@@ -10,6 +11,8 @@ export type GitCommandResult = {
   stderr: string;
   exitCode: number | null;
 };
+
+export type GitWorkingTreeStatus = "clean" | "changes" | "unknown";
 
 export class GitCommandError extends Error {
   constructor(
@@ -25,13 +28,15 @@ export async function getRepositoryBranches(
   spawnProcess: ProcessSpawner,
   repositoryPath: string,
 ): Promise<RepositoryBranches> {
-  const [currentBranchResult, branchesResult] = await Promise.all([
-    runGitCommand(spawnProcess, repositoryPath, ["branch", "--show-current"]),
-    runGitCommand(spawnProcess, repositoryPath, [
-      "branch",
-      "--format=%(refname:short)",
-    ]),
-  ]);
+  const [currentBranchResult, branchesResult, workingTreeStatus] =
+    await Promise.all([
+      runGitCommand(spawnProcess, repositoryPath, ["branch", "--show-current"]),
+      runGitCommand(spawnProcess, repositoryPath, [
+        "branch",
+        "--format=%(refname:short)",
+      ]),
+      getRepositoryWorkingTreeStatus(spawnProcess, repositoryPath),
+    ]);
 
   const currentBranch = currentBranchResult.stdout.trim() || null;
   const branches = Array.from(
@@ -46,6 +51,7 @@ export async function getRepositoryBranches(
   return {
     currentBranch,
     branches,
+    workingTreeStatus,
   };
 }
 
@@ -65,6 +71,30 @@ export async function createRepositoryBranch(
   branchName: string,
 ): Promise<RepositoryBranches> {
   await runGitCommand(spawnProcess, repositoryPath, ["switch", "-c", branchName]);
+
+  return getRepositoryBranches(spawnProcess, repositoryPath);
+}
+
+export async function mergeRepositoryBranch(
+  spawnProcess: ProcessSpawner,
+  repositoryPath: string,
+  branch: string,
+): Promise<RepositoryBranches> {
+  await runGitCommand(spawnProcess, repositoryPath, [
+    "merge",
+    "--no-edit",
+    branch,
+  ]);
+
+  return getRepositoryBranches(spawnProcess, repositoryPath);
+}
+
+export async function deleteRepositoryBranch(
+  spawnProcess: ProcessSpawner,
+  repositoryPath: string,
+  branch: string,
+): Promise<RepositoryBranches> {
+  await runGitCommand(spawnProcess, repositoryPath, ["branch", "-d", branch]);
 
   return getRepositoryBranches(spawnProcess, repositoryPath);
 }
@@ -90,6 +120,22 @@ export function getGitErrorMessage(error: unknown, fallback: string): string {
   const stdout = error.result?.stdout.trim();
 
   return stderr || stdout || error.message || fallback;
+}
+
+async function getRepositoryWorkingTreeStatus(
+  spawnProcess: ProcessSpawner,
+  repositoryPath: string,
+): Promise<GitWorkingTreeStatus> {
+  try {
+    const result = await runGitCommand(spawnProcess, repositoryPath, [
+      "status",
+      "--porcelain",
+    ]);
+
+    return result.stdout.trim().length > 0 ? "changes" : "clean";
+  } catch {
+    return "unknown";
+  }
 }
 
 async function runGitCommand(
