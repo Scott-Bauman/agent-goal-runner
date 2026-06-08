@@ -101,6 +101,13 @@ function isNearBottom(element: HTMLDivElement): boolean {
   );
 }
 
+function shouldDisplayTranscriptEntry(entry: RuntimeTranscriptEntry): boolean {
+  return (
+    entry.type !== "run-event" ||
+    entry.eventKind !== "final_assistant_message"
+  );
+}
+
 function LogText({ text }: { text: string }) {
   return (
     <>
@@ -295,7 +302,7 @@ export function LogConsole({
 
   const displayLogs = useMemo<DisplayLog[]>(
     () =>
-      visibleLogs.map((entry) => {
+      visibleLogs.filter(shouldDisplayTranscriptEntry).map((entry) => {
         const style = eventStyle[entry.kind];
 
         return {

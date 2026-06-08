@@ -41,7 +41,11 @@ describe("frontend runner status helpers", () => {
     );
     expect(statusBadgeConfig.running).toEqual({
       label: "Running",
-      variant: "default",
+      variant: "secondary",
+    });
+    expect(statusBadgeConfig.complete).toEqual({
+      label: "Complete",
+      variant: "success",
     });
     expect(statusBadgeConfig.blocked).toEqual({
       label: "Blocked",

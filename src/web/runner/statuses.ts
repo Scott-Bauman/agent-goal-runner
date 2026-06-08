@@ -24,7 +24,7 @@ export const statusBadgeConfig: Record<
   },
   running: {
     label: "Running",
-    variant: "default",
+    variant: "secondary",
   },
   stopping: {
     label: "Stopping",
@@ -32,7 +32,7 @@ export const statusBadgeConfig: Record<
   },
   complete: {
     label: "Complete",
-    variant: "default",
+    variant: "success",
   },
   blocked: {
     label: "Blocked",

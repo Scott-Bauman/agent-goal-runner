@@ -20,20 +20,6 @@ function formatNullable(value: string | number | null): string {
   return value === null ? "Unknown" : String(value);
 }
 
-function formatSkillPreflight(details: RunSummaryDetails): string {
-  if (!details.skillPreflight.checked) {
-    return "Not checked";
-  }
-
-  if (details.skillPreflight.missing.length > 0) {
-    return `Missing ${details.skillPreflight.missing.map((skill) => `$${skill}`).join(", ")}`;
-  }
-
-  return details.skillPreflight.found.length > 0
-    ? `Found ${details.skillPreflight.found.map((skill) => `$${skill}`).join(", ")}`
-    : "No skill references";
-}
-
 function SummaryItem({
   label,
   title,
@@ -59,11 +45,6 @@ function SummaryItem({
 }
 
 function RunSummary({ details }: { details: RunSummaryDetails }) {
-  const changedFiles =
-    details.changedFiles.length > 0
-      ? details.changedFiles.slice(0, 3).join(", ")
-      : "None";
-
   return (
     <div className="border-b bg-zinc-50 px-4 py-3">
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -90,42 +71,7 @@ function RunSummary({ details }: { details: RunSummaryDetails }) {
           label="Reasoning"
           value={formatNullable(details.reasoningEffort)}
         />
-        <SummaryItem
-          label="Tokens"
-          value={formatNullable(details.tokenCount)}
-        />
-        <SummaryItem
-          label="Changed"
-          title={details.changedFiles.join(", ") || "None"}
-          value={changedFiles}
-        />
-        <SummaryItem
-          label="Warnings"
-          value={String(details.warningCount)}
-        />
-        <SummaryItem
-          label="Errors"
-          value={String(details.errorCount)}
-        />
-        <SummaryItem
-          label="Stop"
-          value={details.stopReason ?? "None"}
-        />
-        <SummaryItem
-          label="Skill"
-          value={formatSkillPreflight(details)}
-        />
       </dl>
-      {details.lastAssistantMessage ? (
-        <div className="mt-3 rounded-md border border-zinc-200 bg-white px-3 py-2">
-          <p className="text-[0.6875rem] font-medium uppercase tracking-normal text-zinc-500">
-            Final assistant
-          </p>
-          <p className="mt-1 max-h-16 overflow-hidden whitespace-pre-wrap text-xs leading-5 text-zinc-800">
-            {details.lastAssistantMessage}
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -155,7 +101,7 @@ export function LogsSummaryPanel({
             id="logs-summary-title"
             className="truncate text-sm"
           >
-            Codex output
+            Agent Output
           </CardTitle>
         </div>
         <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
