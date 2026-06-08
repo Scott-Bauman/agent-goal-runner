@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { OperationsWorkspace } from "@/web/components/app/OperationsWorkspace";
 import { TopBar } from "@/web/components/app/TopBar";
+import { SidebarProvider } from "@/web/components/ui/sidebar";
 import {
   appendLogEntriesToTranscript,
   appendProgressSeparatorToTranscript,
@@ -21,6 +22,8 @@ import {
   isRunnerStatus,
   type RunnerStatus,
 } from "@/web/runner/statuses";
+
+const RUN_COMMAND_ACTIONS_ID = "run-command-actions";
 
 export function App() {
   const [repositorySelection, setRepositorySelection] =
@@ -200,10 +203,16 @@ export function App() {
   }, []);
 
   return (
-    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-zinc-50 text-zinc-950">
-      <TopBar repositorySelection={repositorySelection} status={runnerStatus} />
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 px-4 py-4 sm:px-6 sm:py-6">
+    <SidebarProvider className="h-dvh min-h-0 flex-col overflow-hidden bg-zinc-50 text-zinc-950">
+      <TopBar
+        actionSlotId={RUN_COMMAND_ACTIONS_ID}
+        repositorySelection={repositorySelection}
+        runtimeStream={runtimeStream}
+        status={runnerStatus}
+      />
+      <div className="flex min-h-0 w-full flex-1">
         <OperationsWorkspace
+          commandActionsTargetId={RUN_COMMAND_ACTIONS_ID}
           goalRefreshToken={goalRefreshToken}
           onRepositorySelected={(repositoryPath) => {
             setRepositorySelection({
@@ -217,6 +226,6 @@ export function App() {
           runtimeStream={runtimeStream}
         />
       </div>
-    </main>
+    </SidebarProvider>
   );
 }
