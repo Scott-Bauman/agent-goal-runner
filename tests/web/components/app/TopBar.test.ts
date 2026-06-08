@@ -6,6 +6,10 @@ import {
   getWorkingTreeStatusLabel,
 } from "../../../../src/web/components/app/topBarGit";
 import { getSseConnectionIndicatorState } from "../../../../src/web/components/app/TopBar";
+import {
+  getNextThemeMode,
+  getThemeToggleLabel,
+} from "../../../../src/web/components/app/topBarTheme";
 import { getRepositoryFolderLabel } from "../../../../src/web/repository/repositoryPath";
 
 describe("TopBar helpers", () => {
@@ -64,5 +68,12 @@ describe("TopBar helpers", () => {
     expect(getSseConnectionIndicatorState("connecting")).toBe("fixing");
     expect(getSseConnectionIndicatorState("open")).toBe("active");
     expect(getSseConnectionIndicatorState("error")).toBe("down");
+  });
+
+  it("maps theme toggle state to the next mode and accessible label", () => {
+    expect(getNextThemeMode("light")).toBe("dark");
+    expect(getThemeToggleLabel("light")).toBe("Switch to dark mode");
+    expect(getNextThemeMode("dark")).toBe("light");
+    expect(getThemeToggleLabel("dark")).toBe("Switch to light mode");
   });
 });

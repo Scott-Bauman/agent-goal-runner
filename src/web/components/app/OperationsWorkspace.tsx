@@ -118,7 +118,7 @@ export function OperationsWorkspace({
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="min-h-0 overflow-hidden bg-zinc-50">
+      <SidebarInset className="min-h-0 overflow-hidden bg-muted/30">
         <div className="grid h-full min-h-0 w-full grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
           <div className="min-h-0 min-w-0 overflow-hidden">
             <GoalDocumentPanel

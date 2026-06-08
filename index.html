@@ -7,6 +7,31 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (() => {
+        const storageKey = "agent-goal-runner-theme";
+        let storedTheme = null;
+
+        try {
+          storedTheme = window.localStorage.getItem(storageKey);
+        } catch {
+          storedTheme = null;
+        }
+
+        const prefersDark = window.matchMedia?.(
+          "(prefers-color-scheme: dark)",
+        ).matches ?? false;
+        const theme =
+          storedTheme === "dark" || storedTheme === "light"
+            ? storedTheme
+            : prefersDark
+              ? "dark"
+              : "light";
+
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <script type="module" src="/src/web/main.tsx"></script>
   </body>
 </html>

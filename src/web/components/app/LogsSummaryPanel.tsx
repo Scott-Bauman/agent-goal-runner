@@ -31,11 +31,11 @@ function SummaryItem({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[0.6875rem] font-medium uppercase tracking-normal text-zinc-500">
+      <dt className="text-[0.6875rem] font-medium uppercase tracking-normal text-muted-foreground">
         {label}
       </dt>
       <dd
-        className="mt-1 truncate text-xs font-semibold text-zinc-900"
+        className="mt-1 truncate text-xs font-semibold text-foreground"
         title={title ?? value}
       >
         {value}
@@ -46,10 +46,10 @@ function SummaryItem({
 
 function RunSummary({ details }: { details: RunSummaryDetails }) {
   return (
-    <div className="border-b bg-zinc-50 px-4 py-3">
+    <div className="border-b bg-muted/40 px-4 py-3">
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="min-w-0">
-          <dt className="text-[0.6875rem] font-medium uppercase tracking-normal text-zinc-500">
+          <dt className="text-[0.6875rem] font-medium uppercase tracking-normal text-muted-foreground">
             Status
           </dt>
           <dd className="mt-1">

@@ -164,7 +164,7 @@ function SetupArea({
 }) {
   return (
     <div
-      className="flex scroll-mt-3 flex-col gap-3 border-b border-zinc-200/80 pb-5 last:border-b-0 last:pb-0"
+      className="flex scroll-mt-3 flex-col gap-3 border-b border-border/80 pb-5 last:border-b-0 last:pb-0"
       id={id}
     >
       <div className="flex items-center gap-1.5">
@@ -175,7 +175,7 @@ function SetupArea({
             strokeWidth={2}
           />
         ) : null}
-        <h3 className="text-sm font-semibold leading-6 text-zinc-950">
+        <h3 className="text-sm font-semibold leading-6 text-foreground">
           {title}
         </h3>
         {info ? (
@@ -642,7 +642,7 @@ export function ControlsPanel({
           <div className="grid gap-3">
             <div className="flex flex-col gap-2">
               <label
-                className="text-xs font-medium text-zinc-700"
+                className="text-xs font-medium text-foreground"
                 htmlFor="codex-model"
               >
                 Model
@@ -676,7 +676,7 @@ export function ControlsPanel({
             </div>
             <div className="flex flex-col gap-2">
               <label
-                className="text-xs font-medium text-zinc-700"
+                className="text-xs font-medium text-foreground"
                 htmlFor="reasoning-effort"
               >
                 Reasoning effort
@@ -840,7 +840,7 @@ export function ControlsPanel({
                 aria-checked={autoCommit}
                 aria-describedby="auto-commit-state"
                 aria-labelledby="auto-commit-label"
-                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-zinc-950"
+                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-primary"
                 data-state={autoCommit ? "checked" : "unchecked"}
                 disabled={reviewEnabled}
                 id="auto-commit"
@@ -886,7 +886,7 @@ export function ControlsPanel({
                 aria-checked={reviewEnabled}
                 aria-describedby="review-state"
                 aria-labelledby="review-label"
-                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-zinc-950"
+                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-primary"
                 data-state={reviewEnabled ? "checked" : "unchecked"}
                 id="review-enabled"
                 onClick={() => {
@@ -915,7 +915,7 @@ export function ControlsPanel({
               <div className="review-settings-panel grid gap-3">
                 <div className="flex flex-col gap-2">
                   <label
-                    className="text-xs font-medium text-zinc-700"
+                    className="text-xs font-medium text-foreground"
                     htmlFor="review-interval-commits"
                   >
                     Review every
@@ -956,7 +956,7 @@ export function ControlsPanel({
                 <div className="grid gap-3">
                   <div className="flex flex-col gap-2">
                     <label
-                      className="text-xs font-medium text-zinc-700"
+                      className="text-xs font-medium text-foreground"
                       htmlFor="review-model"
                     >
                       Review model
@@ -990,7 +990,7 @@ export function ControlsPanel({
                   </div>
                   <div className="flex flex-col gap-2">
                     <label
-                      className="text-xs font-medium text-zinc-700"
+                      className="text-xs font-medium text-foreground"
                       htmlFor="review-reasoning-effort"
                     >
                       Review reasoning
@@ -1025,7 +1025,7 @@ export function ControlsPanel({
                 </div>
                 <div className="flex flex-col gap-2">
                   <label
-                    className="text-xs font-medium text-zinc-700"
+                    className="text-xs font-medium text-foreground"
                     htmlFor="review-prompt"
                   >
                     Review prompt

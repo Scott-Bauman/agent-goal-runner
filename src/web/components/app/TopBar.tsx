@@ -4,8 +4,10 @@ import {
   CheckCircle2Icon,
   GitBranchIcon,
   GitMergeIcon,
+  MoonIcon,
   PlusIcon,
   RefreshCwIcon,
+  SunIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -50,6 +52,13 @@ import {
   isActiveRunnerStatus,
   type RunnerStatus,
 } from "@/web/runner/statuses";
+import {
+  getInitialThemeMode,
+  getNextThemeMode,
+  getThemeToggleLabel,
+  persistThemeMode,
+  type ThemeMode,
+} from "./topBarTheme";
 
 type BranchLoadStatus = "idle" | "loading" | "ready";
 type BranchOperation = "idle" | "switching" | "creating" | "merging" | "deleting";
@@ -94,7 +103,12 @@ export function TopBar({
   const [branchMergeAlert, setBranchMergeAlert] =
     useState<BranchMergeAlert | null>(null);
   const [newBranchName, setNewBranchName] = useState("");
+  const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode);
   const isRunActive = isActiveRunnerStatus(status);
+
+  useEffect(() => {
+    persistThemeMode(theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!selectedRepositoryPath) {
@@ -303,18 +317,24 @@ export function TopBar({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b border-zinc-200 bg-white">
-      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b border-border bg-background/95 shadow-sm shadow-black/[0.03] backdrop-blur dark:bg-background/90 dark:shadow-black/30">
+      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4">
         <div className="flex min-w-0 items-center gap-2 justify-self-start">
-          <h1 className="truncate text-base font-semibold leading-6 text-zinc-950">
+          <h1 className="truncate text-base font-semibold leading-6 text-foreground">
             Agent Goal Runner
           </h1>
           <SseConnectionBadge connectionStatus={connectionStatus} />
+          <ThemeToggleButton
+            onToggle={() => {
+              setTheme((currentTheme) => getNextThemeMode(currentTheme));
+            }}
+            theme={theme}
+          />
         </div>
 
         <div className="flex min-w-0 items-center justify-center gap-3 justify-self-center">
           <span
-            className="max-w-[18rem] truncate text-base font-semibold leading-6 text-zinc-950"
+            className="max-w-[18rem] truncate text-base font-semibold leading-6 text-foreground"
             title={selectedRepositoryLabel}
           >
             {selectedRepositoryLabel}
@@ -373,7 +393,7 @@ function SseConnectionBadge({
   return (
     <div
       aria-label={`SSE connection: ${config.label}`}
-      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2 text-xs font-medium text-zinc-700"
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted px-2 text-xs font-medium text-muted-foreground"
       role="status"
       title={config.label}
     >
@@ -384,6 +404,35 @@ function SseConnectionBadge({
       />
       <span className="whitespace-nowrap">SSE connection</span>
     </div>
+  );
+}
+
+function ThemeToggleButton({
+  onToggle,
+  theme,
+}: {
+  onToggle: () => void;
+  theme: ThemeMode;
+}) {
+  const Icon = theme === "dark" ? SunIcon : MoonIcon;
+  const label = getThemeToggleLabel(theme);
+
+  return (
+    <Button
+      aria-label={label}
+      aria-pressed={theme === "dark"}
+      className="size-7 border-border bg-background/80 text-muted-foreground shadow-none hover:bg-accent hover:text-foreground dark:bg-muted/60 dark:hover:bg-accent"
+      onClick={onToggle}
+      size="icon"
+      title={label}
+      type="button"
+      variant="outline"
+    >
+      <Icon
+        aria-hidden="true"
+        className="size-4"
+      />
+    </Button>
   );
 }
 
@@ -446,7 +495,7 @@ function BranchSelector({
             readOnly
             value={selectedBranchLabel}
           >
-            <GitBranchIcon className="pointer-events-none ml-2 size-4 text-zinc-500" />
+            <GitBranchIcon className="pointer-events-none ml-2 size-4 text-muted-foreground" />
           </ComboboxInput>
           <ComboboxContent className="w-72">
             <ComboboxList>
@@ -506,7 +555,7 @@ function BranchSelector({
           <RefreshCwIcon className="size-4" />
         </Button>
         <span
-          className="whitespace-nowrap text-xs font-medium text-zinc-500"
+          className="whitespace-nowrap text-xs font-medium text-muted-foreground"
           title={`Working tree: ${workingTreeLabel}`}
         >
           {workingTreeLabel}
@@ -514,7 +563,7 @@ function BranchSelector({
       </div>
       {branchError ? (
         <p
-          className="max-w-64 truncate text-xs font-medium text-red-600"
+          className="max-w-64 truncate text-xs font-medium text-destructive"
           title={branchError}
         >
           {branchError}
@@ -609,7 +658,7 @@ function BranchItem({
           </Button>
           <Button
             aria-label={`Delete ${branch}`}
-            className="size-7 text-red-600 hover:text-red-700"
+            className="size-7 text-destructive hover:text-destructive"
             disabled={disabled}
             onClick={(event) => {
               event.preventDefault();
