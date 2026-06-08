@@ -3,12 +3,14 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { FolderDialogUnsupportedError } from "../../../src/server/repository/folderDialog";
+import type { ProcessSpawner } from "../../../src/server/shared/process";
 import { chokidarMocks, getLatestWatchOptions } from "../helpers/chokidarMock";
 import {
   closeTestServer,
   createTestServer,
   listenOnRandomPort,
 } from "../helpers/fastify";
+import { createMockRunProcess } from "../helpers/process";
 import {
   browseRepository,
   queueRepositoryBrowseResult,
@@ -21,6 +23,36 @@ import {
 import { useServerTestLifecycle } from "../helpers/lifecycle";
 
 useServerTestLifecycle();
+
+type GitCommandResult = {
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+};
+
+function createGitSpawner(results: GitCommandResult[]) {
+  const queuedResults = [...results];
+  const spawnProcess = vi.fn<ProcessSpawner>(() => {
+    const childProcess = createMockRunProcess();
+    const result = queuedResults.shift() ?? {};
+
+    queueMicrotask(() => {
+      if (result.stdout) {
+        childProcess.stdout.write(result.stdout);
+      }
+
+      if (result.stderr) {
+        childProcess.stderr.write(result.stderr);
+      }
+
+      childProcess.emit("close", result.exitCode ?? 0, null);
+    });
+
+    return childProcess;
+  });
+
+  return spawnProcess;
+}
 
 describe("repository selection endpoint", () => {
   it("returns no selected repository before selection", async () => {
@@ -103,6 +135,186 @@ describe("repository selection endpoint", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       repositoryPath: path.normalize(repositoryPath),
+    });
+  });
+
+  it("requires a selected repository before listing branches", async () => {
+    const app = await createTestServer();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/branches",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "No repository selected.",
+    });
+  });
+
+  it("lists local repository branches with the current branch", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "feature/top-bar\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/branches",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currentBranch: "feature/top-bar",
+      branches: ["feature/top-bar", "main"],
+    });
+    expect(spawnProcess.mock.calls.map(([command, args, options]) => ({
+      command,
+      args,
+      cwd: options.cwd,
+    }))).toEqual([
+      {
+        command: "git",
+        args: ["branch", "--show-current"],
+        cwd: path.normalize(repositoryPath),
+      },
+      {
+        command: "git",
+        args: ["branch", "--format=%(refname:short)"],
+        cwd: path.normalize(repositoryPath),
+      },
+    ]);
+  });
+
+  it("switches to an existing local branch and returns refreshed branch state", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+      {},
+      { stdout: "feature/top-bar\n" },
+      { stdout: "main\nfeature/top-bar\n" },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/switch",
+      payload: {
+        branch: "feature/top-bar",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currentBranch: "feature/top-bar",
+      branches: ["feature/top-bar", "main"],
+    });
+    expect(spawnProcess.mock.calls.map(([, args]) => args)).toEqual([
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+      ["switch", "feature/top-bar"],
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+    ]);
+  });
+
+  it("creates a new branch from the current HEAD and returns refreshed branch state", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      {},
+      {},
+      { stdout: "feature/new-work\n" },
+      { stdout: "main\nfeature/new-work\n" },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches",
+      payload: {
+        name: "feature/new-work",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currentBranch: "feature/new-work",
+      branches: ["feature/new-work", "main"],
+    });
+    expect(spawnProcess.mock.calls.map(([, args]) => args)).toEqual([
+      ["check-ref-format", "--branch", "feature/new-work"],
+      ["switch", "-c", "feature/new-work"],
+      ["branch", "--show-current"],
+      ["branch", "--format=%(refname:short)"],
+    ]);
+  });
+
+  it("returns branch name validation errors from git", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      {
+        stderr: "fatal: 'bad name' is not a valid branch name\n",
+        exitCode: 128,
+      },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches",
+      payload: {
+        name: "bad name",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: "VALIDATION_ERROR",
+      error: "Invalid branch creation request.",
+      issues: [
+        {
+          path: "name",
+          message: "fatal: 'bad name' is not a valid branch name",
+        },
+      ],
+    });
+  });
+
+  it("surfaces git failures while listing branches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      {
+        stderr: "fatal: not a git repository\n",
+        exitCode: 128,
+      },
+      {
+        stderr: "fatal: not a git repository\n",
+        exitCode: 128,
+      },
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/branches",
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      error: "fatal: not a git repository",
     });
   });
 

@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
+    "start": "node dist/server/index.js",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "build": "npm run build:server && npm run build:web",
+    "build": "npm run build:web && npm run build:server",
     "build:server": "tsc -p tsconfig.server.json",
     "build:web": "vite build"
   },

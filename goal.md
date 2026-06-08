@@ -99,8 +99,7 @@ The run loop must stop when any of these occurs:
 
 ### Live Logs Test
 
-- [x] Add the words "say hello" as the next step in this implementation plan. Do not modify any code except for this file.
-- [ ] say hello
+- [ ] Add the words "say hello" as the next step in this implementation plan. Do not modify any code except for this file.
 
 ## Verification
 

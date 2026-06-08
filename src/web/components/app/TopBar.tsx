@@ -1,110 +1,197 @@
-import { RunnerStatusBadge } from "@/web/components/app/RunnerStatusBadge";
-import { Badge } from "@/web/components/ui/badge";
-import StatusIndicator from "@/web/components/ui/status-indicator";
-import {
-  connectionStatusConfig,
-  formatProgress,
-  type RuntimeStreamState,
-} from "@/web/events/runtimeStream";
-import {
-  getRepositoryLabel,
-  type RepositorySelectionState,
-} from "@/web/repository/repositorySelection";
-import type { RunnerStatus } from "@/web/runner/statuses";
+import { useEffect, useState } from "react";
+import { GitBranchIcon, PlusIcon } from "lucide-react";
 
-const connectionIndicatorState: Record<
-  RuntimeStreamState["connectionStatus"],
-  "active" | "down" | "fixing"
-> = {
-  connecting: "fixing",
-  error: "down",
-  open: "active",
+import { getApiErrorMessage } from "@/web/api/errors";
+import type {
+  ApiErrorResponse,
+  RepositoryBranchCreateRequest,
+  RepositoryBranchesResponse,
+  RepositoryBranchSwitchRequest,
+} from "@/web/api/responses";
+import { Button } from "@/web/components/ui/button";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxSeparator,
+} from "@/web/components/ui/combobox";
+import { Input } from "@/web/components/ui/input";
+import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
+import { getRepositoryFolderLabel } from "@/web/repository/repositoryPath";
+import {
+  isActiveRunnerStatus,
+  type RunnerStatus,
+} from "@/web/runner/statuses";
+
+type BranchLoadStatus = "idle" | "loading" | "ready";
+type BranchOperation = "idle" | "switching" | "creating";
+
+const EMPTY_BRANCHES: RepositoryBranchesResponse = {
+  currentBranch: null,
+  branches: [],
 };
 
 export function TopBar({
   actionSlotId,
   repositorySelection,
-  runtimeStream,
   status,
 }: {
   actionSlotId: string;
   repositorySelection: RepositorySelectionState;
-  runtimeStream: RuntimeStreamState;
   status: RunnerStatus;
 }) {
-  const selectedRepositoryFullLabel = getRepositoryLabel(repositorySelection);
   const selectedRepositoryLabel = getRepositoryFolderLabel(repositorySelection);
-  const connectionConfig =
-    connectionStatusConfig[runtimeStream.connectionStatus];
-  const changedFiles = runtimeStream.runDetails.changedFiles;
-  const changedFilesLabel =
-    changedFiles.length > 0 ? changedFiles.slice(0, 2).join(", ") : "None";
-  const latestSummaryLabel =
-    runtimeStream.latestSummary?.message ?? "No run summary yet";
-  const progressLabel = formatProgress(runtimeStream.progress);
+  const showBranchSelector = shouldShowBranchSelector(repositorySelection);
+  const selectedRepositoryPath =
+    repositorySelection.status === "ready"
+      ? repositorySelection.repositoryPath
+      : null;
+  const [branchLoadStatus, setBranchLoadStatus] =
+    useState<BranchLoadStatus>("idle");
+  const [branchOperation, setBranchOperation] =
+    useState<BranchOperation>("idle");
+  const [branchState, setBranchState] =
+    useState<RepositoryBranchesResponse>(EMPTY_BRANCHES);
+  const [branchError, setBranchError] = useState<string | null>(null);
+  const [newBranchName, setNewBranchName] = useState("");
+  const isRunActive = isActiveRunnerStatus(status);
+
+  useEffect(() => {
+    if (!selectedRepositoryPath) {
+      setBranchLoadStatus("idle");
+      setBranchOperation("idle");
+      setBranchState(EMPTY_BRANCHES);
+      setBranchError(null);
+      setNewBranchName("");
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    async function loadBranches() {
+      setBranchLoadStatus("loading");
+      setBranchError(null);
+
+      try {
+        const branches = await fetchRepositoryBranches(abortController.signal);
+
+        setBranchState(branches);
+        setBranchLoadStatus("ready");
+      } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        setBranchState(EMPTY_BRANCHES);
+        setBranchLoadStatus("ready");
+        setBranchError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load repository branches.",
+        );
+      }
+    }
+
+    void loadBranches();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedRepositoryPath]);
+
+  async function handleBranchSwitch(branch: string | null): Promise<void> {
+    if (
+      !branch ||
+      branch === branchState.currentBranch ||
+      branchOperation !== "idle" ||
+      isRunActive
+    ) {
+      return;
+    }
+
+    setBranchOperation("switching");
+    setBranchError(null);
+
+    try {
+      const branches = await postBranchRequest<RepositoryBranchSwitchRequest>(
+        "/api/repository/branches/switch",
+        { branch },
+        "Failed to switch branches.",
+      );
+
+      setBranchState(branches);
+    } catch (error) {
+      setBranchError(
+        error instanceof Error ? error.message : "Failed to switch branches.",
+      );
+    } finally {
+      setBranchOperation("idle");
+    }
+  }
+
+  async function handleBranchCreate(): Promise<void> {
+    const trimmedBranchName = newBranchName.trim();
+
+    if (!trimmedBranchName || branchOperation !== "idle" || isRunActive) {
+      return;
+    }
+
+    setBranchOperation("creating");
+    setBranchError(null);
+
+    try {
+      const branches = await postBranchRequest<RepositoryBranchCreateRequest>(
+        "/api/repository/branches",
+        { name: trimmedBranchName },
+        "Failed to create branch.",
+      );
+
+      setBranchState(branches);
+      setNewBranchName("");
+    } catch (error) {
+      setBranchError(
+        error instanceof Error ? error.message : "Failed to create branch.",
+      );
+    } finally {
+      setBranchOperation("idle");
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b border-zinc-200 bg-white">
-      <div className="flex min-w-0 flex-1 items-center gap-4 px-4">
-        <div className="min-w-0 shrink-0 sm:w-80">
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4">
+        <div className="min-w-0 justify-self-start">
           <h1 className="truncate text-base font-semibold leading-6 text-zinc-950">
             Agent Goal Runner
           </h1>
-          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-zinc-500">
-            <span className="shrink-0 font-semibold text-zinc-700">
-              {selectedRepositoryLabel}
-            </span>
-            <span
-              className="hidden min-w-0 truncate font-mono text-zinc-500 sm:block"
-              title={selectedRepositoryFullLabel}
-            >
-              {selectedRepositoryFullLabel}
-            </span>
-          </div>
         </div>
 
-        <div className="hidden min-w-0 flex-1 items-center justify-end gap-3 lg:flex">
-          <dl className="grid max-w-xl grid-cols-3 gap-3 rounded-lg border bg-zinc-50 px-3 py-2 text-xs">
-            <div className="min-w-0">
-              <dt className="font-medium text-zinc-500">Status</dt>
-              <dd className="mt-0.5">
-                <RunnerStatusBadge status={status} />
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="font-medium text-zinc-500">Progress</dt>
-              <dd
-                className="mt-1 truncate font-semibold text-zinc-800"
-                title={latestSummaryLabel}
-              >
-                {progressLabel}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="font-medium text-zinc-500">Changed</dt>
-              <dd
-                className="mt-1 truncate font-semibold text-zinc-800"
-                title={changedFilesLabel}
-              >
-                {changedFilesLabel}
-              </dd>
-            </div>
-          </dl>
-          <Badge
-            className="h-8 w-fit shrink-0 gap-1.5 rounded-full px-3"
-            variant={connectionConfig.variant}
+        <div className="flex min-w-0 items-center justify-center gap-3 justify-self-center">
+          <span
+            className="max-w-[18rem] truncate text-base font-semibold leading-6 text-zinc-950"
+            title={selectedRepositoryLabel}
           >
-            <StatusIndicator
-              className="gap-0"
-              size="sm"
-              state={connectionIndicatorState[runtimeStream.connectionStatus]}
+            {selectedRepositoryLabel}
+          </span>
+          {showBranchSelector ? (
+            <BranchSelector
+              branchError={branchError}
+              branchLoadStatus={branchLoadStatus}
+              branchOperation={branchOperation}
+              branchState={branchState}
+              disabled={isRunActive}
+              newBranchName={newBranchName}
+              onBranchCreate={handleBranchCreate}
+              onBranchNameChange={setNewBranchName}
+              onBranchSwitch={handleBranchSwitch}
             />
-            {connectionConfig.label}
-          </Badge>
+          ) : null}
         </div>
 
         <div
-          className="ml-auto flex min-w-0 shrink-0 items-center gap-2"
+          className="flex min-w-0 shrink-0 items-center justify-end gap-2 justify-self-end"
           id={actionSlotId}
         />
       </div>
@@ -112,22 +199,155 @@ export function TopBar({
   );
 }
 
-function getRepositoryFolderLabel(
+export function shouldShowBranchSelector(
   repositorySelection: RepositorySelectionState,
-) {
-  if (
-    repositorySelection.status !== "ready" ||
-    repositorySelection.repositoryPath === null
-  ) {
-    return getRepositoryLabel(repositorySelection);
-  }
-
-  return getFolderName(repositorySelection.repositoryPath);
+): boolean {
+  return (
+    repositorySelection.status === "ready" &&
+    repositorySelection.repositoryPath !== null
+  );
 }
 
-function getFolderName(repositoryPath: string) {
-  const trimmedPath = repositoryPath.replace(/[\\/]+$/, "");
-  const pathParts = trimmedPath.split(/[\\/]/);
+function BranchSelector({
+  branchError,
+  branchLoadStatus,
+  branchOperation,
+  branchState,
+  disabled,
+  newBranchName,
+  onBranchCreate,
+  onBranchNameChange,
+  onBranchSwitch,
+}: {
+  branchError: string | null;
+  branchLoadStatus: BranchLoadStatus;
+  branchOperation: BranchOperation;
+  branchState: RepositoryBranchesResponse;
+  disabled: boolean;
+  newBranchName: string;
+  onBranchCreate: () => Promise<void>;
+  onBranchNameChange: (branchName: string) => void;
+  onBranchSwitch: (branch: string | null) => Promise<void>;
+}) {
+  const isBusy = branchLoadStatus === "loading" || branchOperation !== "idle";
+  const isDisabled = disabled || isBusy;
+  const selectedBranch = branchState.currentBranch ?? "";
+  const selectedBranchLabel =
+    branchLoadStatus === "loading"
+      ? "Loading..."
+      : (branchState.currentBranch ?? "Detached HEAD");
 
-  return pathParts[pathParts.length - 1] || repositoryPath;
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <Combobox<string>
+        items={branchState.branches}
+        onValueChange={(value) => {
+          void onBranchSwitch(value);
+        }}
+        value={selectedBranch}
+      >
+        <ComboboxInput
+          aria-label="Git branch"
+          className="w-48"
+          disabled={isDisabled}
+          readOnly
+          value={selectedBranchLabel}
+        >
+          <GitBranchIcon className="pointer-events-none ml-2 size-4 text-zinc-500" />
+        </ComboboxInput>
+        <ComboboxContent className="w-64">
+          <ComboboxList>
+            {branchState.branches.map((branch) => (
+              <ComboboxItem
+                key={branch}
+                value={branch}
+              >
+                {branch}
+              </ComboboxItem>
+            ))}
+          </ComboboxList>
+          <ComboboxSeparator />
+          <form
+            className="flex gap-2 p-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onBranchCreate();
+            }}
+          >
+            <Input
+              aria-label="New branch name"
+              className="h-8 min-w-0 text-sm"
+              disabled={isDisabled}
+              onChange={(event) => {
+                onBranchNameChange(event.target.value);
+              }}
+              placeholder="new-branch"
+              value={newBranchName}
+            />
+            <Button
+              disabled={isDisabled || newBranchName.trim().length === 0}
+              size="sm"
+              type="submit"
+              variant="outline"
+            >
+              <PlusIcon className="size-4" />
+              Add
+            </Button>
+          </form>
+        </ComboboxContent>
+      </Combobox>
+      {branchError ? (
+        <p
+          className="max-w-64 truncate text-xs font-medium text-red-600"
+          title={branchError}
+        >
+          {branchError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+async function fetchRepositoryBranches(
+  signal?: AbortSignal,
+): Promise<RepositoryBranchesResponse> {
+  const response = await fetch("/api/repository/branches", {
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      getApiErrorMessage(
+        (await response.json().catch(() => ({}))) as ApiErrorResponse,
+        "Failed to load repository branches.",
+      ),
+    );
+  }
+
+  return (await response.json()) as RepositoryBranchesResponse;
+}
+
+async function postBranchRequest<TBody>(
+  url: string,
+  body: TBody,
+  fallbackError: string,
+): Promise<RepositoryBranchesResponse> {
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      getApiErrorMessage(
+        (await response.json().catch(() => ({}))) as ApiErrorResponse,
+        fallbackError,
+      ),
+    );
+  }
+
+  return (await response.json()) as RepositoryBranchesResponse;
 }

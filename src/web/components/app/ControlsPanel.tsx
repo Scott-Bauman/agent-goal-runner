@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   BrainCircuit,
-  Check,
   FolderGit2,
   FolderOpen,
   GitCommitHorizontal,
@@ -42,7 +41,6 @@ import {
   TooltipTrigger,
 } from "@/web/components/ui/tooltip";
 import {
-  getRepositoryLabel,
   getRepositoryBrowseResult,
   type RepositoryPathFormState,
   type RepositorySelectionState,
@@ -239,7 +237,6 @@ export function ControlsPanel({
     error: null,
     issues: [],
   });
-  const selectedRepositoryLabel = getRepositoryLabel(repositorySelection);
   const selectedRepositoryPath =
     repositorySelection.status === "ready"
       ? repositorySelection.repositoryPath
@@ -573,22 +570,6 @@ export function ControlsPanel({
               ) : null}
             </div>
           ) : null}
-          <div className="flex min-w-0 items-start gap-2 rounded-md border bg-muted px-3 py-2">
-            <Check
-              aria-hidden="true"
-              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-              strokeWidth={2}
-            />
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-zinc-700">Selected path</p>
-              <p
-                className="truncate font-mono text-xs leading-5 text-muted-foreground"
-                title={selectedRepositoryLabel}
-              >
-                {selectedRepositoryLabel}
-              </p>
-            </div>
-          </div>
         </SetupArea>
 
         <SetupArea

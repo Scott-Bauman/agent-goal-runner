@@ -239,7 +239,6 @@ export function App() {
       <TopBar
         actionSlotId={RUN_COMMAND_ACTIONS_ID}
         repositorySelection={repositorySelection}
-        runtimeStream={runtimeStream}
         status={runnerStatus}
       />
       <div className="flex min-h-0 w-full flex-1">

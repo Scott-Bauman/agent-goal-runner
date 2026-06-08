@@ -41,6 +41,7 @@ export async function buildServer(
     runController,
     openRepositoryFolderDialog:
       options.openRepositoryFolderDialog ?? openFolderDialog,
+    spawnProcess,
   };
 
   await server.register(cors, {

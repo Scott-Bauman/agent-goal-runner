@@ -9,6 +9,19 @@ export type RepositoryBrowseResponse = RepositorySelectionResponse & {
   cancelled: boolean;
 };
 
+export type RepositoryBranchesResponse = {
+  currentBranch: string | null;
+  branches: string[];
+};
+
+export type RepositoryBranchSwitchRequest = {
+  branch: string;
+};
+
+export type RepositoryBranchCreateRequest = {
+  name: string;
+};
+
 export type ValidationIssue = {
   path: string;
   message: string;
