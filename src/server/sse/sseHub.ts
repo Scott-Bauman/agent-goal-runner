@@ -8,6 +8,12 @@ import type {
   SseEventMap,
 } from "./types.js";
 
+export const MAX_RETAINED_LOG_ENTRIES = 500;
+export const MAX_RETAINED_RUN_EVENTS = 500;
+export const MAX_SSE_MESSAGE_BYTES = 64 * 1024;
+
+const TRUNCATED_MESSAGE_SUFFIX = "\n...[truncated]";
+
 function createInitialRunDetails(): RunSummaryDetails {
   return {
     status: "idle",
@@ -76,6 +82,34 @@ export function createSseSnapshot(
   ].join("");
 }
 
+function truncateMessage(message: string): string {
+  if (Buffer.byteLength(message, "utf8") <= MAX_SSE_MESSAGE_BYTES) {
+    return message;
+  }
+
+  const suffixBytes = Buffer.byteLength(TRUNCATED_MESSAGE_SUFFIX, "utf8");
+  const availableBytes = Math.max(0, MAX_SSE_MESSAGE_BYTES - suffixBytes);
+  let truncated = Buffer.from(message, "utf8")
+    .subarray(0, availableBytes)
+    .toString("utf8");
+
+  while (
+    truncated.length > 0 &&
+    Buffer.byteLength(`${truncated}${TRUNCATED_MESSAGE_SUFFIX}`, "utf8") >
+      MAX_SSE_MESSAGE_BYTES
+  ) {
+    truncated = truncated.slice(0, -1);
+  }
+
+  return `${truncated}${TRUNCATED_MESSAGE_SUFFIX}`;
+}
+
+function retainLatestEntries<T>(entries: T[], maximum: number): void {
+  if (entries.length > maximum) {
+    entries.splice(0, entries.length - maximum);
+  }
+}
+
 export class SseHub {
   private readonly clients = new Map<number, SseClient>();
   private nextClientId = 1;
@@ -120,7 +154,9 @@ export class SseHub {
     stream: LogEntry["stream"],
     chunk: Buffer | string,
   ): void {
-    const message = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    const message = truncateMessage(
+      typeof chunk === "string" ? chunk : chunk.toString("utf8"),
+    );
 
     if (message.length === 0) {
       return;
@@ -133,6 +169,7 @@ export class SseHub {
     };
     this.nextLogId += 1;
     streamState.logs.push(entry);
+    retainLatestEntries(streamState.logs, MAX_RETAINED_LOG_ENTRIES);
     this.broadcast("logs", {
       entries: [entry],
     });
@@ -144,6 +181,13 @@ export class SseHub {
   ): RunEvent {
     const entry: RunEvent = {
       ...payload,
+      command:
+        payload.command === undefined ? undefined : truncateMessage(payload.command),
+      message: truncateMessage(payload.message),
+      stopReason:
+        payload.stopReason === undefined
+          ? undefined
+          : truncateMessage(payload.stopReason),
       id: this.nextRunEventId,
       receivedAt: Date.now(),
       runNumber: streamState.runLoop.progress.currentRun,
@@ -151,6 +195,7 @@ export class SseHub {
     };
     this.nextRunEventId += 1;
     streamState.runEvents.push(entry);
+    retainLatestEntries(streamState.runEvents, MAX_RETAINED_RUN_EVENTS);
     streamState.runLoop.details = updateRunDetailsFromEvent(
       streamState.runLoop.details,
       entry,

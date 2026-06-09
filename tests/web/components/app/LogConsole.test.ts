@@ -44,7 +44,7 @@ describe("log console helpers", () => {
   it("shortens Windows absolute paths for primary display", () => {
     expect(
       shortenLogPath(
-        "C:\\Users\\Scott Bauman\\OneDrive\\Documents\\Coding_Projects\\agent-goal-runner\\src\\web\\App.tsx",
+        "C:\\repo\\agent-goal-runner\\src\\web\\App.tsx",
       ),
     ).toBe("src/web/App.tsx");
   });

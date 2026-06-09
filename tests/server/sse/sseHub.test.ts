@@ -4,6 +4,9 @@ import {
   createInitialStreamState,
   createSseSnapshot,
   formatSseEvent,
+  MAX_RETAINED_LOG_ENTRIES,
+  MAX_RETAINED_RUN_EVENTS,
+  MAX_SSE_MESSAGE_BYTES,
   SseHub,
 } from "../../../src/server/sse/sseHub";
 
@@ -144,6 +147,28 @@ describe("SSE hub", () => {
     );
   });
 
+  it("retains only the latest process logs and truncates oversized log chunks", () => {
+    const hub = new SseHub();
+    const streamState = createInitialStreamState();
+
+    for (let index = 0; index < MAX_RETAINED_LOG_ENTRIES + 2; index += 1) {
+      hub.appendProcessLog(streamState, "stdout", `line ${index}`);
+    }
+
+    hub.appendProcessLog(streamState, "stderr", "x".repeat(MAX_SSE_MESSAGE_BYTES + 100));
+
+    expect(streamState.logs).toHaveLength(MAX_RETAINED_LOG_ENTRIES);
+    expect(streamState.logs[0].id).toBe(4);
+    expect(streamState.logs.at(-1)).toMatchObject({
+      id: MAX_RETAINED_LOG_ENTRIES + 3,
+      stream: "stderr",
+    });
+    expect(Buffer.byteLength(streamState.logs.at(-1)?.message ?? "", "utf8")).toBeLessThanOrEqual(
+      MAX_SSE_MESSAGE_BYTES,
+    );
+    expect(streamState.logs.at(-1)?.message).toContain("...[truncated]");
+  });
+
   it("appends run events with progress context and broadcasts detail updates", () => {
     const hub = new SseHub();
     const streamState = createInitialStreamState();
@@ -182,6 +207,39 @@ describe("SSE hub", () => {
       2,
       'event: runDetails\ndata: {"status":"idle","currentRun":0,"totalRuns":null,"model":null,"reasoningEffort":null,"tokenCount":null,"changedFiles":["src/a.ts","src/b.ts"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":false,"found":[],"locations":[],"missing":[]}}\n\n',
     );
+  });
+
+  it("retains only the latest run events and truncates oversized event fields", () => {
+    const hub = new SseHub();
+    const streamState = createInitialStreamState();
+
+    for (let index = 0; index < MAX_RETAINED_RUN_EVENTS + 2; index += 1) {
+      hub.appendRunEvent(streamState, {
+        kind: "command_started",
+        message: `Started command ${index}.`,
+      });
+    }
+
+    const event = hub.appendRunEvent(streamState, {
+      command: "c".repeat(MAX_SSE_MESSAGE_BYTES + 100),
+      kind: "command_failed",
+      message: "m".repeat(MAX_SSE_MESSAGE_BYTES + 100),
+      stopReason: "s".repeat(MAX_SSE_MESSAGE_BYTES + 100),
+    });
+
+    expect(streamState.runEvents).toHaveLength(MAX_RETAINED_RUN_EVENTS);
+    expect(streamState.runEvents[0].id).toBe(4);
+    expect(streamState.runEvents.at(-1)).toBe(event);
+    expect(Buffer.byteLength(event.message, "utf8")).toBeLessThanOrEqual(
+      MAX_SSE_MESSAGE_BYTES,
+    );
+    expect(Buffer.byteLength(event.command ?? "", "utf8")).toBeLessThanOrEqual(
+      MAX_SSE_MESSAGE_BYTES,
+    );
+    expect(Buffer.byteLength(event.stopReason ?? "", "utf8")).toBeLessThanOrEqual(
+      MAX_SSE_MESSAGE_BYTES,
+    );
+    expect(event.message).toContain("...[truncated]");
   });
 
   it("derives run detail counters and terminal metadata from run events", () => {

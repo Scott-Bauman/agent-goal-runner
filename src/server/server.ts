@@ -39,6 +39,10 @@ const DEFAULT_WEB_STATIC_ROOT_PATH = path.resolve(
 );
 const DEFAULT_WEB_STATIC_ROOT_IS_REQUIRED =
   path.basename(path.dirname(DEFAULT_WEB_STATIC_ROOT_PATH)) === "dist";
+const ALLOWED_DEV_ORIGINS = new Set([
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+]);
 
 function resolveWebStaticRootPath(
   configuredPath: BuildServerOptions["webStaticRootPath"],
@@ -98,6 +102,78 @@ async function registerWebStaticRoutes(
   });
 }
 
+function getHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+
+    if (url.pathname !== "/" || url.search || url.hash) {
+      return null;
+    }
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHost(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(`http://${value}`).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isApiRequestPath(url: string): boolean {
+  return url === "/api" || url.startsWith("/api/") || url.startsWith("/api?");
+}
+
+function isAllowedRequestOrigin(
+  originHeader: string | undefined,
+  hostHeader: string | undefined,
+): boolean {
+  if (!originHeader) {
+    return true;
+  }
+
+  const origin = normalizeOrigin(originHeader);
+
+  if (!origin) {
+    return false;
+  }
+
+  if (ALLOWED_DEV_ORIGINS.has(origin)) {
+    return true;
+  }
+
+  const requestHost = normalizeHost(hostHeader);
+  const originHost = new URL(origin).host.toLowerCase();
+
+  return requestHost !== null && originHost === requestHost;
+}
+
+function isAllowedCorsOrigin(originHeader: string | undefined): boolean {
+  if (!originHeader) {
+    return true;
+  }
+
+  const origin = normalizeOrigin(originHeader);
+
+  return origin !== null && ALLOWED_DEV_ORIGINS.has(origin);
+}
+
 export async function buildServer(
   options: BuildServerOptions = {},
 ): Promise<FastifyInstance> {
@@ -128,8 +204,26 @@ export async function buildServer(
     spawnProcess,
   };
 
+  server.addHook("onRequest", async (request, reply) => {
+    if (
+      !isApiRequestPath(request.url) ||
+      isAllowedRequestOrigin(
+        getHeaderValue(request.headers.origin),
+        getHeaderValue(request.headers.host),
+      )
+    ) {
+      return;
+    }
+
+    await reply.code(403).send({
+      error: "Forbidden origin.",
+    });
+  });
+
   await server.register(cors, {
-    origin: true,
+    origin: (origin, callback) => {
+      callback(null, isAllowedCorsOrigin(origin));
+    },
   });
 
   server.addHook("onClose", async () => {

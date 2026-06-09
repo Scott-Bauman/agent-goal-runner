@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist/",
+    "src/",
+    "scripts/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
     "start": "npm run start:server",
@@ -62,6 +70,9 @@
     "typescript-eslint": "^8.39.1",
     "vite": "^6.3.5",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "shell-quote": "1.8.4"
   },
   "engines": {
     "node": ">=20"

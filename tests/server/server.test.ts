@@ -109,4 +109,105 @@ describe("buildServer", () => {
       statusCode: 404,
     });
   });
+
+  it("rejects hostile browser origins before API routes run", async () => {
+    const app = await createTestServer();
+
+    const [readResponse, runStartResponse, eventsResponse, preflightResponse] =
+      await Promise.all([
+        app.inject({
+          headers: {
+            origin: "https://evil.example",
+          },
+          method: "GET",
+          url: "/api/repository/selection",
+        }),
+        app.inject({
+          headers: {
+            origin: "https://evil.example",
+          },
+          method: "POST",
+          payload: {
+            prompt: "Use goal.md as the source of truth.",
+            runCount: 1,
+          },
+          url: "/api/run/start",
+        }),
+        app.inject({
+          headers: {
+            origin: "https://evil.example",
+          },
+          method: "GET",
+          url: "/api/events",
+        }),
+        app.inject({
+          headers: {
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+            origin: "https://evil.example",
+          },
+          method: "OPTIONS",
+          url: "/api/run/start",
+        }),
+      ]);
+
+    expect(readResponse.statusCode).toBe(403);
+    expect(readResponse.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(readResponse.json()).toEqual({
+      error: "Forbidden origin.",
+    });
+    expect(runStartResponse.statusCode).toBe(403);
+    expect(runStartResponse.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(runStartResponse.json()).toEqual({
+      error: "Forbidden origin.",
+    });
+    expect(eventsResponse.statusCode).toBe(403);
+    expect(eventsResponse.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(eventsResponse.json()).toEqual({
+      error: "Forbidden origin.",
+    });
+    expect(preflightResponse.statusCode).toBe(403);
+    expect(preflightResponse.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(preflightResponse.json()).toEqual({
+      error: "Forbidden origin.",
+    });
+  });
+
+  it("allows same-origin API requests and the Vite dev frontend origin", async () => {
+    const app = await createTestServer();
+
+    const [sameOriginResponse, devPreflightResponse] = await Promise.all([
+      app.inject({
+        headers: {
+          host: "127.0.0.1:4317",
+          origin: "http://127.0.0.1:4317",
+        },
+        method: "POST",
+        payload: {
+          prompt: "Use goal.md as the source of truth.",
+          runCount: 1,
+        },
+        url: "/api/run/start",
+      }),
+      app.inject({
+        headers: {
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type",
+          host: "127.0.0.1:4317",
+          origin: "http://127.0.0.1:5173",
+        },
+        method: "OPTIONS",
+        url: "/api/run/start",
+      }),
+    ]);
+
+    expect(sameOriginResponse.statusCode).toBe(409);
+    expect(sameOriginResponse.json()).toEqual({
+      error: "No repository selected.",
+    });
+    expect(devPreflightResponse.statusCode).toBe(204);
+    expect(devPreflightResponse.headers["access-control-allow-origin"]).toBe(
+      "http://127.0.0.1:5173",
+    );
+  });
 });
