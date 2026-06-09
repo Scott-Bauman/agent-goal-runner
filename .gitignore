@@ -31,3 +31,4 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/tailwind.css-data.json
 .fallow/
+.codex-runner-logs/
