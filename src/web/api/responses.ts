@@ -1,6 +1,6 @@
 import type { RunnerStatus } from "@/web/runner/statuses";
 import type { AgentProvider } from "@/web/runner/agentProviders";
-import type { ClaudeEffort, ClaudeModel } from "@/web/runner/claudeOptions";
+import type { ClaudeModel } from "@/web/runner/claudeOptions";
 import type { CodexModel, CodexReasoningEffort } from "@/web/runner/codexOptions";
 
 export type RepositorySelectionResponse = {
@@ -51,7 +51,6 @@ export type RunStartResponse = {
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel: ClaudeModel | null;
-  claudeEffort: ClaudeEffort | null;
   review: {
     enabled: boolean;
     provider: AgentProvider;
@@ -60,7 +59,6 @@ export type RunStartResponse = {
     model: CodexModel | null;
     reasoningEffort: CodexReasoningEffort | null;
     claudeModel: ClaudeModel | null;
-    claudeEffort: ClaudeEffort | null;
   };
 };
 

@@ -5,7 +5,7 @@ import type { RunSummaryDetails } from "../sse/types.js";
 import type { ProcessSpawner } from "../shared/process.js";
 import type { RunEventPayload } from "../sse/types.js";
 import { getClaudePrintSpawnCommand } from "./claudeCommand.js";
-import type { ClaudeEffort, ClaudeModel } from "./claudeOptions.js";
+import type { ClaudeModel } from "./claudeOptions.js";
 import { getCodexExecSpawnCommand } from "./codexCommand.js";
 import { CodexJsonEventParser } from "./codexJsonEvents.js";
 import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
@@ -20,7 +20,6 @@ export type AgentRunSettings =
     }
   | {
       provider: "claude";
-      effort: ClaudeEffort | null;
       model: ClaudeModel | null;
     };
 
@@ -118,7 +117,6 @@ const claudeRunner: AgentRunner = {
 
     let stdout = "";
     const claudeCommand = getClaudePrintSpawnCommand(prompt, {
-      effort: settings.effort,
       model: settings.model,
     });
     const childProcess = spawnProcess(claudeCommand.command, claudeCommand.args, {

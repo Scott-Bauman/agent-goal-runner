@@ -22,7 +22,7 @@ import {
   type AgentRunSettings,
   type StartedAgentRun,
 } from "./agentRunner.js";
-import type { ClaudeEffort, ClaudeModel } from "./claudeOptions.js";
+import type { ClaudeModel } from "./claudeOptions.js";
 import {
   createSkillPreflightStatus,
   preferSkillReferenceSyntax,
@@ -60,7 +60,6 @@ export type ReviewRunOptions = {
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel: ClaudeModel | null;
-  claudeEffort: ClaudeEffort | null;
 };
 
 export const DEFAULT_REVIEW_RUN_OPTIONS: ReviewRunOptions = {
@@ -71,7 +70,6 @@ export const DEFAULT_REVIEW_RUN_OPTIONS: ReviewRunOptions = {
   model: null,
   reasoningEffort: null,
   claudeModel: null,
-  claudeEffort: null,
 };
 
 export function createReviewPromptPrefix(intervalCommits: number): string {
@@ -101,7 +99,6 @@ export type StartRunOptions = {
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel: ClaudeModel | null;
-  claudeEffort: ClaudeEffort | null;
   review: ReviewRunOptions;
 };
 
@@ -251,7 +248,6 @@ export class RunController {
     if (options.provider === "claude") {
       return {
         provider: "claude",
-        effort: options.claudeEffort,
         model: options.claudeModel,
       };
     }
@@ -271,7 +267,6 @@ export class RunController {
     if (review.provider === "claude") {
       return {
         provider: "claude",
-        effort: review.claudeEffort,
         model: review.claudeModel,
       };
     }
@@ -291,7 +286,7 @@ export class RunController {
     if (options.provider === "claude") {
       return {
         model: options.claudeModel,
-        reasoningEffort: options.claudeEffort,
+        reasoningEffort: null,
       };
     }
 
@@ -308,7 +303,7 @@ export class RunController {
     if (review.provider === "claude") {
       return {
         model: review.claudeModel,
-        reasoningEffort: review.claudeEffort,
+        reasoningEffort: null,
       };
     }
 

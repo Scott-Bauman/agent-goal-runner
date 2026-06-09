@@ -1,16 +1,17 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import type { SpawnCommand } from "../shared/process.js";
-import type { ClaudeEffort, ClaudeModel } from "./claudeOptions.js";
+import type { ClaudeModel } from "./claudeOptions.js";
 
 export type ClaudePrintOptions = {
   model: ClaudeModel | null;
-  effort: ClaudeEffort | null;
 };
 
 export function getClaudePrintSpawnCommand(
   prompt: string,
   options: ClaudePrintOptions = {
     model: null,
-    effort: null,
   },
 ): SpawnCommand {
   const args = ["-p", prompt];
@@ -19,12 +20,74 @@ export function getClaudePrintSpawnCommand(
     args.push("--model", options.model);
   }
 
-  if (options.effort) {
-    args.push("--effort", options.effort);
+  return resolveClaudeCommand(args);
+}
+
+function resolveClaudeCommand(args: string[]): SpawnCommand {
+  if (process.platform !== "win32") {
+    return {
+      command: "claude",
+      args,
+    };
+  }
+
+  for (const pathEntry of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!pathEntry) {
+      continue;
+    }
+
+    const claudePackageDirectory = path.join(
+      pathEntry,
+      "node_modules",
+      "@anthropic-ai",
+      "claude-code",
+    );
+    const claudeEntrypoint = getPackageBinEntrypoint(
+      claudePackageDirectory,
+      "claude",
+    );
+
+    if (claudeEntrypoint) {
+      return {
+        command: process.execPath,
+        args: [claudeEntrypoint, ...args],
+      };
+    }
   }
 
   return {
     command: "claude",
     args,
   };
+}
+
+function getPackageBinEntrypoint(
+  packageDirectory: string,
+  binName: string,
+): string | null {
+  const packageJsonPath = path.join(packageDirectory, "package.json");
+
+  if (!existsSync(packageJsonPath)) {
+    return null;
+  }
+
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      bin?: Record<string, string> | string;
+    };
+    const binPath =
+      typeof packageJson.bin === "string"
+        ? packageJson.bin
+        : packageJson.bin?.[binName];
+
+    if (!binPath) {
+      return null;
+    }
+
+    const entrypoint = path.resolve(packageDirectory, binPath);
+
+    return existsSync(entrypoint) ? entrypoint : null;
+  } catch {
+    return null;
+  }
 }

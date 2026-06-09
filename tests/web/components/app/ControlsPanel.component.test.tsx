@@ -149,7 +149,6 @@ describe("ControlsPanel", () => {
       prompt: "Use goal.md as the source of truth.\n\nComplete the next valid unchecked item.",
       reasoningEffort: "high",
       claudeModel: null,
-      claudeEffort: null,
       review: {
         enabled: false,
       },

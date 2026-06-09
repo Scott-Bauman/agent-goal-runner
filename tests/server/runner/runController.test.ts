@@ -154,8 +154,7 @@ describe("run controller orchestration", () => {
       autoCommit: false,
       model: null,
       reasoningEffort: null,
-      claudeModel: "claude-sonnet-4-6",
-      claudeEffort: "high",
+      claudeModel: "sonnet",
       review: DEFAULT_REVIEW_RUN_OPTIONS,
     });
 
@@ -165,9 +164,7 @@ describe("run controller orchestration", () => {
         "-p",
         "Use goal.md as the source of truth.",
         "--model",
-        "claude-sonnet-4-6",
-        "--effort",
-        "high",
+        "sonnet",
       ],
       {
         cwd: repositoryPath,
@@ -279,7 +276,6 @@ describe("run controller orchestration", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: null,
-      claudeEffort: null,
       review: {
         enabled: true,
         provider: "claude",
@@ -287,8 +283,7 @@ describe("run controller orchestration", () => {
         prompt: "Review recent commits.",
         model: null,
         reasoningEffort: null,
-        claudeModel: "claude-opus-4-8",
-        claudeEffort: "max",
+        claudeModel: "opus",
       },
     });
 
@@ -317,9 +312,7 @@ describe("run controller orchestration", () => {
         "-p",
         "Review the last 1 commit for bugs, regressions, and missed requirements. Fix any issues you find, then report what you changed.\n\nReview recent commits.",
         "--model",
-        "claude-opus-4-8",
-        "--effort",
-        "max",
+        "opus",
       ],
       {
         cwd: repositoryPath,

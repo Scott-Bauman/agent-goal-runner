@@ -1,5 +1,5 @@
 import type { AgentProvider } from "@/web/runner/agentProviders";
-import type { ClaudeEffort, ClaudeModel } from "@/web/runner/claudeOptions";
+import type { ClaudeModel } from "@/web/runner/claudeOptions";
 import type { CodexModel, CodexReasoningEffort } from "@/web/runner/codexOptions";
 
 export type ReviewRunRequest =
@@ -14,7 +14,6 @@ export type ReviewRunRequest =
       model: CodexModel | null;
       reasoningEffort: CodexReasoningEffort | null;
       claudeModel: ClaudeModel | null;
-      claudeEffort: ClaudeEffort | null;
     };
 
 export function isReviewSettingsVisible(reviewEnabled: boolean): boolean {
@@ -45,7 +44,6 @@ export function createReviewRunRequest({
   prompt,
   reasoningEffort,
   claudeModel = null,
-  claudeEffort = null,
   reviewEnabled,
 }: {
   intervalCommits: number;
@@ -54,7 +52,6 @@ export function createReviewRunRequest({
   prompt: string;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel?: ClaudeModel | null;
-  claudeEffort?: ClaudeEffort | null;
   reviewEnabled: boolean;
 }): ReviewRunRequest {
   if (!reviewEnabled) {
@@ -71,7 +68,6 @@ export function createReviewRunRequest({
     prompt: preferSkillReferenceSyntax(prompt),
     reasoningEffort: provider === "codex" ? reasoningEffort : null,
     claudeModel: provider === "claude" ? claudeModel : null,
-    claudeEffort: provider === "claude" ? claudeEffort : null,
   };
 }
 

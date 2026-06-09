@@ -70,9 +70,7 @@ import {
   type AgentProvider,
 } from "@/web/runner/agentProviders";
 import {
-  CLAUDE_EFFORTS,
   CLAUDE_MODELS,
-  type ClaudeEffort,
   type ClaudeModel,
 } from "@/web/runner/claudeOptions";
 import {
@@ -102,7 +100,6 @@ const CLI_DEFAULT_OPTION = "CLI default";
 type ModelSelection = CodexModel | typeof CLI_DEFAULT_OPTION;
 type ReasoningEffortSelection = CodexReasoningEffort | typeof CLI_DEFAULT_OPTION;
 type ClaudeModelSelection = ClaudeModel | typeof CLI_DEFAULT_OPTION;
-type ClaudeEffortSelection = ClaudeEffort | typeof CLI_DEFAULT_OPTION;
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
 const PROVIDER_OPTIONS: AgentProvider[] = [...AGENT_PROVIDERS];
@@ -114,10 +111,6 @@ const REASONING_EFFORT_OPTIONS: ReasoningEffortSelection[] = [
 const CLAUDE_MODEL_OPTIONS: ClaudeModelSelection[] = [
   CLI_DEFAULT_OPTION,
   ...CLAUDE_MODELS,
-];
-const CLAUDE_EFFORT_OPTIONS: ClaudeEffortSelection[] = [
-  CLI_DEFAULT_OPTION,
-  ...CLAUDE_EFFORTS,
 ];
 
 export const RUN_SETUP_SECTIONS = [
@@ -255,10 +248,6 @@ function toRunReasoningEffort(
 }
 
 function toRunClaudeModel(selection: ClaudeModelSelection): ClaudeModel | null {
-  return selection === CLI_DEFAULT_OPTION ? null : selection;
-}
-
-function toRunClaudeEffort(selection: ClaudeEffortSelection): ClaudeEffort | null {
   return selection === CLI_DEFAULT_OPTION ? null : selection;
 }
 
@@ -571,20 +560,16 @@ function ProviderSetupSection({
 }
 
 function ModelSetupSection({
-  claudeEffort,
   claudeModel,
   model,
-  onClaudeEffortChange,
   onClaudeModelChange,
   onModelChange,
   onReasoningEffortChange,
   provider,
   reasoningEffort,
 }: {
-  claudeEffort: ClaudeEffortSelection;
   claudeModel: ClaudeModelSelection;
   model: ModelSelection;
-  onClaudeEffortChange: (effort: ClaudeEffortSelection) => void;
   onClaudeModelChange: (model: ClaudeModelSelection) => void;
   onModelChange: (model: ModelSelection) => void;
   onReasoningEffortChange: (reasoningEffort: ReasoningEffortSelection) => void;
@@ -600,22 +585,13 @@ function ModelSetupSection({
     >
       <div className="grid gap-3">
         {provider === "claude" ? (
-          <>
-            <SelectionCombobox
-              id="claude-model"
-              items={CLAUDE_MODEL_OPTIONS}
-              label="Claude model"
-              onValueChange={onClaudeModelChange}
-              value={claudeModel}
-            />
-            <SelectionCombobox
-              id="claude-effort"
-              items={CLAUDE_EFFORT_OPTIONS}
-              label="Claude effort"
-              onValueChange={onClaudeEffortChange}
-              value={claudeEffort}
-            />
-          </>
+          <SelectionCombobox
+            id="claude-model"
+            items={CLAUDE_MODEL_OPTIONS}
+            label="Claude model"
+            onValueChange={onClaudeModelChange}
+            value={claudeModel}
+          />
         ) : (
           <>
             <SelectionCombobox
@@ -840,7 +816,6 @@ function CommitSetupSection({
 }
 
 function ReviewSetupSection({
-  reviewClaudeEffort,
   reviewClaudeModel,
   isPromptValid,
   isReviewIntervalValid,
@@ -853,7 +828,6 @@ function ReviewSetupSection({
   reviewPrompt,
   reviewReasoningEffort,
   setAutoCommit,
-  setReviewClaudeEffort,
   setReviewClaudeModel,
   setReviewIntervalCommits,
   setReviewModel,
@@ -861,7 +835,6 @@ function ReviewSetupSection({
   setReviewProvider,
   setReviewReasoningEffort,
 }: {
-  reviewClaudeEffort: ClaudeEffortSelection;
   reviewClaudeModel: ClaudeModelSelection;
   isPromptValid: boolean;
   isReviewIntervalValid: boolean;
@@ -874,7 +847,6 @@ function ReviewSetupSection({
   reviewPrompt: string;
   reviewReasoningEffort: ReasoningEffortSelection;
   setAutoCommit: StateSetter<boolean>;
-  setReviewClaudeEffort: StateSetter<ClaudeEffortSelection>;
   setReviewClaudeModel: StateSetter<ClaudeModelSelection>;
   setReviewIntervalCommits: StateSetter<string>;
   setReviewModel: StateSetter<ModelSelection>;
@@ -934,7 +906,6 @@ function ReviewSetupSection({
 
         {isReviewSettingsVisible(reviewEnabled) ? (
           <ReviewSettings
-            reviewClaudeEffort={reviewClaudeEffort}
             reviewClaudeModel={reviewClaudeModel}
             isPromptValid={isPromptValid}
             isReviewIntervalValid={isReviewIntervalValid}
@@ -944,7 +915,6 @@ function ReviewSetupSection({
             reviewModel={reviewModel}
             reviewPrompt={reviewPrompt}
             reviewReasoningEffort={reviewReasoningEffort}
-            setReviewClaudeEffort={setReviewClaudeEffort}
             setReviewClaudeModel={setReviewClaudeModel}
             setReviewIntervalCommits={setReviewIntervalCommits}
             setReviewModel={setReviewModel}
@@ -959,7 +929,6 @@ function ReviewSetupSection({
 }
 
 function ReviewSettings({
-  reviewClaudeEffort,
   reviewClaudeModel,
   isPromptValid,
   isReviewIntervalValid,
@@ -969,7 +938,6 @@ function ReviewSettings({
   reviewModel,
   reviewPrompt,
   reviewReasoningEffort,
-  setReviewClaudeEffort,
   setReviewClaudeModel,
   setReviewIntervalCommits,
   setReviewModel,
@@ -977,7 +945,6 @@ function ReviewSettings({
   setReviewProvider,
   setReviewReasoningEffort,
 }: {
-  reviewClaudeEffort: ClaudeEffortSelection;
   reviewClaudeModel: ClaudeModelSelection;
   isPromptValid: boolean;
   isReviewIntervalValid: boolean;
@@ -987,7 +954,6 @@ function ReviewSettings({
   reviewModel: ModelSelection;
   reviewPrompt: string;
   reviewReasoningEffort: ReasoningEffortSelection;
-  setReviewClaudeEffort: StateSetter<ClaudeEffortSelection>;
   setReviewClaudeModel: StateSetter<ClaudeModelSelection>;
   setReviewIntervalCommits: StateSetter<string>;
   setReviewModel: StateSetter<ModelSelection>;
@@ -1012,22 +978,13 @@ function ReviewSettings({
       />
       <div className="grid gap-3">
         {reviewProvider === "claude" ? (
-          <>
-            <SelectionCombobox
-              id="review-claude-model"
-              items={CLAUDE_MODEL_OPTIONS}
-              label="Review Claude model"
-              onValueChange={setReviewClaudeModel}
-              value={reviewClaudeModel}
-            />
-            <SelectionCombobox
-              id="review-claude-effort"
-              items={CLAUDE_EFFORT_OPTIONS}
-              label="Review Claude effort"
-              onValueChange={setReviewClaudeEffort}
-              value={reviewClaudeEffort}
-            />
-          </>
+          <SelectionCombobox
+            id="review-claude-model"
+            items={CLAUDE_MODEL_OPTIONS}
+            label="Review Claude model"
+            onValueChange={setReviewClaudeModel}
+            value={reviewClaudeModel}
+          />
         ) : (
           <>
             <SelectionCombobox
@@ -1145,8 +1102,6 @@ export function ControlsPanel({
     useState<ReasoningEffortSelection>("high");
   const [claudeModel, setClaudeModel] =
     useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
-  const [claudeEffort, setClaudeEffort] =
-    useState<ClaudeEffortSelection>(CLI_DEFAULT_OPTION);
   const [reviewEnabled, setReviewEnabled] = useState(false);
   const [reviewProvider, setReviewProvider] = useState<AgentProvider>(
     DEFAULT_AGENT_PROVIDER,
@@ -1160,8 +1115,6 @@ export function ControlsPanel({
     useState<ReasoningEffortSelection>("high");
   const [reviewClaudeModel, setReviewClaudeModel] =
     useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
-  const [reviewClaudeEffort, setReviewClaudeEffort] =
-    useState<ClaudeEffortSelection>(CLI_DEFAULT_OPTION);
   const [commandTarget, setCommandTarget] = useState<HTMLElement | null>(null);
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
@@ -1318,13 +1271,7 @@ export function ControlsPanel({
             provider === "codex" ? toRunReasoningEffort(reasoningEffort) : null,
           claudeModel:
             provider === "claude" ? toRunClaudeModel(claudeModel) : null,
-          claudeEffort:
-            provider === "claude" ? toRunClaudeEffort(claudeEffort) : null,
           review: createReviewRunRequest({
-            claudeEffort:
-              reviewProvider === "claude"
-                ? toRunClaudeEffort(reviewClaudeEffort)
-                : null,
             claudeModel:
               reviewProvider === "claude"
                 ? toRunClaudeModel(reviewClaudeModel)
@@ -1481,10 +1428,8 @@ export function ControlsPanel({
           provider={provider}
         />
         <ModelSetupSection
-          claudeEffort={claudeEffort}
           claudeModel={claudeModel}
           model={model}
-          onClaudeEffortChange={setClaudeEffort}
           onClaudeModelChange={setClaudeModel}
           onModelChange={setModel}
           onReasoningEffortChange={setReasoningEffort}
@@ -1506,7 +1451,6 @@ export function ControlsPanel({
           reviewEnabled={reviewEnabled}
         />
         <ReviewSetupSection
-          reviewClaudeEffort={reviewClaudeEffort}
           reviewClaudeModel={reviewClaudeModel}
           isPromptValid={isReviewPromptValid}
           isReviewIntervalValid={isReviewIntervalValid}
@@ -1519,7 +1463,6 @@ export function ControlsPanel({
           reviewPrompt={reviewPrompt}
           reviewReasoningEffort={reviewReasoningEffort}
           setAutoCommit={setAutoCommit}
-          setReviewClaudeEffort={setReviewClaudeEffort}
           setReviewClaudeModel={setReviewClaudeModel}
           setReviewIntervalCommits={setReviewIntervalCommits}
           setReviewModel={setReviewModel}

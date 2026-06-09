@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { getClaudePrintSpawnCommand } from "../../../src/server/runner/claudeCommand";
@@ -13,43 +17,59 @@ describe("Claude command resolution", () => {
   it("adds the selected model after the prompt", () => {
     expect(
       getClaudePrintSpawnCommand("continue", {
-        model: "claude-sonnet-4-6",
-        effort: null,
+        model: "sonnet",
       }),
     ).toEqual({
       command: "claude",
-      args: ["-p", "continue", "--model", "claude-sonnet-4-6"],
+      args: ["-p", "continue", "--model", "sonnet"],
     });
   });
 
-  it("adds the selected effort after the prompt", () => {
-    expect(
-      getClaudePrintSpawnCommand("continue", {
-        model: null,
-        effort: "max",
-      }),
-    ).toEqual({
-      command: "claude",
-      args: ["-p", "continue", "--effort", "max"],
-    });
-  });
+  it("uses the npm package entrypoint on Windows when available", () => {
+    const originalPath = process.env.PATH;
+    const originalPlatform = process.platform;
+    const tempPathEntry = mkdtempSync(path.join(tmpdir(), "claude-command-"));
+    const packageDirectory = path.join(
+      tempPathEntry,
+      "node_modules",
+      "@anthropic-ai",
+      "claude-code",
+    );
+    const entrypoint = path.join(packageDirectory, "cli.js");
 
-  it("places model before effort when both are selected", () => {
-    expect(
-      getClaudePrintSpawnCommand("continue", {
-        model: "claude-opus-4-8",
-        effort: "xhigh",
-      }),
-    ).toEqual({
-      command: "claude",
-      args: [
-        "-p",
-        "continue",
-        "--model",
-        "claude-opus-4-8",
-        "--effort",
-        "xhigh",
-      ],
-    });
+    try {
+      mkdirSync(packageDirectory, {
+        recursive: true,
+      });
+      writeFileSync(
+        path.join(packageDirectory, "package.json"),
+        JSON.stringify({
+          bin: {
+            claude: "cli.js",
+          },
+        }),
+      );
+      writeFileSync(entrypoint, "");
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "win32",
+      });
+      process.env.PATH = tempPathEntry;
+
+      expect(getClaudePrintSpawnCommand("continue")).toEqual({
+        command: process.execPath,
+        args: [entrypoint, "-p", "continue"],
+      });
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      process.env.PATH = originalPath;
+      rmSync(tempPathEntry, {
+        force: true,
+        recursive: true,
+      });
+    }
   });
 });

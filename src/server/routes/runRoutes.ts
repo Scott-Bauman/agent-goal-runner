@@ -5,10 +5,7 @@ import {
   AGENT_PROVIDERS,
   DEFAULT_AGENT_PROVIDER,
 } from "../runner/agentProviders.js";
-import {
-  CLAUDE_EFFORTS,
-  CLAUDE_MODELS,
-} from "../runner/claudeOptions.js";
+import { CLAUDE_MODELS } from "../runner/claudeOptions.js";
 import {
   CODEX_MODELS,
   CODEX_REASONING_EFFORTS,
@@ -46,7 +43,6 @@ const enabledReviewSchema = z
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
     claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
-    claudeEffort: z.enum(CLAUDE_EFFORTS).nullable().default(null),
   })
   .strict();
 
@@ -104,7 +100,6 @@ const runStartSchema = z
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
     claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
-    claudeEffort: z.enum(CLAUDE_EFFORTS).nullable().default(null),
     review: reviewSchema,
   })
   .strict()
@@ -126,7 +121,6 @@ const runStartSchema = z
 
 function addProviderSettingIssues(
   requestBody: {
-    claudeEffort: unknown;
     claudeModel: unknown;
     model: unknown;
     provider: "codex" | "claude";
@@ -163,13 +157,6 @@ function addProviderSettingIssues(
     });
   }
 
-  if (requestBody.claudeEffort !== null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Claude effort is only supported when provider is claude.",
-      path: [...pathPrefix, "claudeEffort"],
-    });
-  }
 }
 
 export function registerRunRoutes(
@@ -205,7 +192,6 @@ export function registerRunRoutes(
       model,
       reasoningEffort,
       claudeModel,
-      claudeEffort,
       review: parsedReview,
     } = parsedBody.data;
     const review = parsedReview.enabled ? parsedReview : DEFAULT_REVIEW_RUN_OPTIONS;
@@ -240,7 +226,6 @@ export function registerRunRoutes(
       model,
       reasoningEffort,
       claudeModel,
-      claudeEffort,
       review,
     });
 
@@ -255,7 +240,6 @@ export function registerRunRoutes(
       model,
       reasoningEffort,
       claudeModel,
-      claudeEffort,
       review,
     });
   });

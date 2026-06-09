@@ -126,18 +126,18 @@ describe("run start endpoint", () => {
         claudeModel: "claude-unknown",
       },
       "claudeModel",
-      "Invalid enum value. Expected 'claude-opus-4-8' | 'claude-opus-4-7' | 'claude-opus-4-6' | 'claude-sonnet-4-6' | 'claude-haiku-4-5-20251001', received 'claude-unknown'",
+      "Invalid enum value. Expected 'sonnet' | 'opus', received 'claude-unknown'",
     ],
     [
-      "invalid Claude effort",
+      "unsupported Claude effort",
       {
         provider: "claude",
         prompt: "Use goal.md as the source of truth.",
         runCount: 1,
         claudeEffort: "ultracode",
       },
-      "claudeEffort",
-      "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh' | 'max', received 'ultracode'",
+      "request",
+      "Unrecognized key(s) in object: 'claudeEffort'",
     ],
     [
       "review without auto-commit",
@@ -351,7 +351,6 @@ describe("run start endpoint", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: null,
-      claudeEffort: null,
       review: {
         enabled: false,
         provider: "codex",
@@ -360,7 +359,6 @@ describe("run start endpoint", () => {
         model: null,
         reasoningEffort: null,
         claudeModel: null,
-        claudeEffort: null,
       },
     });
   });
@@ -704,7 +702,7 @@ describe("run start endpoint", () => {
     expect(runProcess.stdin.writableEnded).toBe(true);
   });
 
-  it("spawns claude print in the selected repository with model and effort", async () => {
+  it("spawns claude print in the selected repository with model", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
@@ -722,15 +720,13 @@ describe("run start endpoint", () => {
         provider: "claude",
         prompt: "  Use goal.md as the source of truth.  ",
         runCount: 1,
-        claudeModel: "claude-opus-4-8",
-        claudeEffort: "max",
+        claudeModel: "opus",
       },
     });
     const expectedClaudeCommand = getClaudePrintSpawnCommand(
       "Use goal.md as the source of truth.",
       {
-        model: "claude-opus-4-8",
-        effort: "max",
+        model: "opus",
       },
     );
 
@@ -739,8 +735,7 @@ describe("run start endpoint", () => {
       provider: "claude",
       model: null,
       reasoningEffort: null,
-      claudeModel: "claude-opus-4-8",
-      claudeEffort: "max",
+      claudeModel: "opus",
     });
     expect(spawnProcess).toHaveBeenCalledWith(
       expectedClaudeCommand.command,
