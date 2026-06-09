@@ -133,7 +133,7 @@ export const RUN_SETUP_SECTIONS = [
   {
     icon: PackageCheck,
     id: "run-setup-skill",
-    info: "Shows whether the goal-runner-framework skill is installed where Codex can load it for the selected repository.",
+    info: "Shows whether the required goal-runner-framework skill is installed where Codex can load it for the selected repository.",
     title: "Skill",
   },
   {
