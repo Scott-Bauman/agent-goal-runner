@@ -58,9 +58,9 @@ npm run build
 npm start
 ```
 
-Open the frontend at Vite preview's printed local URL, usually `http://127.0.0.1:4173`. The backend runs at `http://127.0.0.1:4317`.
+Open the app at `http://127.0.0.1:4317`. In the built app, the Fastify backend serves both the API and the built frontend from the same localhost server.
 
-## Highly Recomended Skill 
+## Highly Recommended Skill 
 
 Install the bundled `goal-runner-framework` skill globally or into the repository you plan to automate:
 

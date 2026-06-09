@@ -47,7 +47,7 @@ npm run install:skill:global
 npm start
 ```
 
-By default, `npm start` runs the built backend on `http://127.0.0.1:4317` and serves the built frontend through Vite preview, usually at `http://127.0.0.1:4173`.
+By default, `npm start` runs the built backend on `http://127.0.0.1:4317`. The backend serves the built frontend from `dist/web`, so the app and API share the same localhost origin.
 
 Repo-local skill installation is often the most reliable option when using the app across different selected repositories because Codex can load the skill directly from that repository:
 
@@ -62,11 +62,11 @@ Scripts are defined in `package.json`.
 | Script | Behavior |
 | --- | --- |
 | `npm run dev` | Runs backend and frontend development servers together with `concurrently`. |
-| `npm start` | Runs the built backend and built frontend preview together with `concurrently`. |
+| `npm start` | Starts the built backend from `dist/server/index.js`; the backend serves the built frontend from `dist/web`. |
 | `npm run start:server` | Starts the built backend from `dist/server/index.js`. |
-| `npm run start:web` | Serves the built frontend with Vite preview on `127.0.0.1`. |
 | `npm run dev:server` | Watches and runs `src/server/index.ts` with `tsx`. |
 | `npm run dev:web` | Starts Vite on `127.0.0.1`. |
+| `npm run preview:web` | Serves only the built frontend with Vite preview for frontend-only inspection. |
 | `npm run typecheck` | Runs TypeScript checks for the web and server configs. |
 | `npm run lint` | Runs ESLint over the repository. |
 | `npm test` | Runs Vitest with coverage and `--passWithNoTests`. |
@@ -88,8 +88,10 @@ Scripts are defined in `package.json`.
 ## Current Local Behavior
 
 - Backend server starts on `127.0.0.1:4317` by default.
-- Backend exposes `GET /` with app status and `GET /health` for a health check.
-- Vite proxies frontend `/api/*` requests to the local backend during development and built-preview startup.
+- In development, backend exposes `GET /` with app status and `GET /health` for a health check.
+- In built startup, backend serves the frontend app shell at `GET /` and still exposes `GET /health` for a health check.
+- Vite proxies frontend `/api/*` requests to the local backend during development.
+- Built frontend assets are emitted to `dist/web` and are served by the backend during `npm start`.
 - Frontend renders an operations panel with repository status, branch controls, rendered `goal.md`, run controls, logs, and latest summary.
 - Repository selection uses `POST /api/repository/browse`, which opens a native folder picker on the backend host.
 - The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.

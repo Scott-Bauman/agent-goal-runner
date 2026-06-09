@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
-    "start": "concurrently -k \"npm:start:server\" \"npm:start:web\"",
+    "start": "npm run start:server",
     "start:server": "node dist/server/index.js",
-    "start:web": "vite preview --host 127.0.0.1",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
+    "preview:web": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "lint": "eslint .",
     "test": "vitest run --coverage --passWithNoTests",
@@ -22,10 +22,10 @@
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@fastify/cors": "^11.0.1",
+    "@fastify/static": "^9.1.3",
     "@radix-ui/react-dialog": "^1.1.16",
     "@radix-ui/react-slot": "^1.2.5",
     "@radix-ui/react-tooltip": "^1.2.9",
-    "zod": "^3.25.76",
     "chokidar": "^4.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -33,9 +33,10 @@
     "fastify": "^5.4.0",
     "lucide-react": "^0.468.0",
     "marked": "^15.0.12",
-    "tailwind-merge": "^3.6.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
