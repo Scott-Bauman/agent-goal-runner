@@ -53,10 +53,37 @@ describe("ControlsPanel review setup helpers", () => {
       }),
     ).toEqual({
       enabled: true,
+      provider: "codex",
       intervalCommits: 3,
       model: "gpt-5.4-nano",
       prompt: "Use $review.",
       reasoningEffort: "low",
+      claudeModel: null,
+      claudeEffort: null,
+    });
+  });
+
+  it("creates an enabled Claude review request with Claude settings only", () => {
+    expect(
+      createReviewRunRequest({
+        intervalCommits: 1,
+        provider: "claude",
+        model: "gpt-5.4",
+        prompt: "Review recent commits.",
+        reasoningEffort: "high",
+        claudeModel: "claude-opus-4-8",
+        claudeEffort: "max",
+        reviewEnabled: true,
+      }),
+    ).toEqual({
+      enabled: true,
+      provider: "claude",
+      intervalCommits: 1,
+      model: null,
+      prompt: "Review recent commits.",
+      reasoningEffort: null,
+      claudeModel: "claude-opus-4-8",
+      claudeEffort: "max",
     });
   });
 });

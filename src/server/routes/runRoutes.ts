@@ -2,6 +2,14 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import {
+  AGENT_PROVIDERS,
+  DEFAULT_AGENT_PROVIDER,
+} from "../runner/agentProviders.js";
+import {
+  CLAUDE_EFFORTS,
+  CLAUDE_MODELS,
+} from "../runner/claudeOptions.js";
+import {
   CODEX_MODELS,
   CODEX_REASONING_EFFORTS,
 } from "../runner/codexOptions.js";
@@ -25,6 +33,7 @@ const disabledReviewSchema = z
 const enabledReviewSchema = z
   .object({
     enabled: z.literal(true),
+    provider: z.enum(AGENT_PROVIDERS).default(DEFAULT_AGENT_PROVIDER),
     intervalCommits: z
       .number({
         invalid_type_error: "Review interval must be a number.",
@@ -36,6 +45,8 @@ const enabledReviewSchema = z
     prompt: z.string().trim().min(1, "Review prompt is required."),
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
+    claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
+    claudeEffort: z.enum(CLAUDE_EFFORTS).nullable().default(null),
   })
   .strict();
 
@@ -47,6 +58,7 @@ const reviewSchema = z
 
 const runStartSchema = z
   .object({
+    provider: z.enum(AGENT_PROVIDERS).default(DEFAULT_AGENT_PROVIDER),
     prompt: z.string().trim().min(1, "Prompt is required."),
     autoCommit: z
       .boolean({
@@ -91,10 +103,18 @@ const runStartSchema = z
       .max(100, "Run count must be at most 100."),
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
+    claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
+    claudeEffort: z.enum(CLAUDE_EFFORTS).nullable().default(null),
     review: reviewSchema,
   })
   .strict()
   .superRefine((requestBody, context) => {
+    addProviderSettingIssues(requestBody, context);
+
+    if (requestBody.review.enabled) {
+      addProviderSettingIssues(requestBody.review, context, ["review"]);
+    }
+
     if (requestBody.review.enabled && !requestBody.autoCommit) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -103,6 +123,54 @@ const runStartSchema = z
       });
     }
   });
+
+function addProviderSettingIssues(
+  requestBody: {
+    claudeEffort: unknown;
+    claudeModel: unknown;
+    model: unknown;
+    provider: "codex" | "claude";
+    reasoningEffort: unknown;
+  },
+  context: z.RefinementCtx,
+  pathPrefix: string[] = [],
+): void {
+  if (requestBody.provider === "claude") {
+    if (requestBody.model !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Codex model is only supported when provider is codex.",
+        path: [...pathPrefix, "model"],
+      });
+    }
+
+    if (requestBody.reasoningEffort !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Codex reasoning effort is only supported when provider is codex.",
+        path: [...pathPrefix, "reasoningEffort"],
+      });
+    }
+
+    return;
+  }
+
+  if (requestBody.claudeModel !== null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Claude model is only supported when provider is claude.",
+      path: [...pathPrefix, "claudeModel"],
+    });
+  }
+
+  if (requestBody.claudeEffort !== null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Claude effort is only supported when provider is claude.",
+      path: [...pathPrefix, "claudeEffort"],
+    });
+  }
+}
 
 export function registerRunRoutes(
   server: FastifyInstance,
@@ -130,11 +198,14 @@ export function registerRunRoutes(
     }
     const {
       prompt,
+      provider,
       runCount,
       verificationCommands,
       autoCommit,
       model,
       reasoningEffort,
+      claudeModel,
+      claudeEffort,
       review: parsedReview,
     } = parsedBody.data;
     const review = parsedReview.enabled ? parsedReview : DEFAULT_REVIEW_RUN_OPTIONS;
@@ -161,24 +232,30 @@ export function registerRunRoutes(
 
     context.runController.start({
       repositoryPath,
+      provider,
       prompt,
       runCount,
       verificationCommandsToRun,
       autoCommit,
       model,
       reasoningEffort,
+      claudeModel,
+      claudeEffort,
       review,
     });
 
     return reply.code(202).send({
       status: context.runtimeState.stream.runLoop.status,
       repositoryPath,
+      provider,
       prompt,
       runCount,
       verificationCommands,
       autoCommit,
       model,
       reasoningEffort,
+      claudeModel,
+      claudeEffort,
       review,
     });
   });

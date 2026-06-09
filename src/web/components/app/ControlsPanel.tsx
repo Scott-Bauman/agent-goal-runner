@@ -8,6 +8,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   BadgeCheck,
+  Bot,
   BrainCircuit,
   FolderGit2,
   FolderOpen,
@@ -64,6 +65,17 @@ import {
   type RunnerStatus,
 } from "@/web/runner/statuses";
 import {
+  AGENT_PROVIDERS,
+  DEFAULT_AGENT_PROVIDER,
+  type AgentProvider,
+} from "@/web/runner/agentProviders";
+import {
+  CLAUDE_EFFORTS,
+  CLAUDE_MODELS,
+  type ClaudeEffort,
+  type ClaudeModel,
+} from "@/web/runner/claudeOptions";
+import {
   CODEX_MODELS,
   CODEX_REASONING_EFFORTS,
   type CodexModel,
@@ -89,12 +101,23 @@ const CLI_DEFAULT_OPTION = "CLI default";
 
 type ModelSelection = CodexModel | typeof CLI_DEFAULT_OPTION;
 type ReasoningEffortSelection = CodexReasoningEffort | typeof CLI_DEFAULT_OPTION;
+type ClaudeModelSelection = ClaudeModel | typeof CLI_DEFAULT_OPTION;
+type ClaudeEffortSelection = ClaudeEffort | typeof CLI_DEFAULT_OPTION;
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
+const PROVIDER_OPTIONS: AgentProvider[] = [...AGENT_PROVIDERS];
 const MODEL_OPTIONS: ModelSelection[] = [CLI_DEFAULT_OPTION, ...CODEX_MODELS];
 const REASONING_EFFORT_OPTIONS: ReasoningEffortSelection[] = [
   CLI_DEFAULT_OPTION,
   ...CODEX_REASONING_EFFORTS,
+];
+const CLAUDE_MODEL_OPTIONS: ClaudeModelSelection[] = [
+  CLI_DEFAULT_OPTION,
+  ...CLAUDE_MODELS,
+];
+const CLAUDE_EFFORT_OPTIONS: ClaudeEffortSelection[] = [
+  CLI_DEFAULT_OPTION,
+  ...CLAUDE_EFFORTS,
 ];
 
 export const RUN_SETUP_SECTIONS = [
@@ -110,9 +133,15 @@ export const RUN_SETUP_SECTIONS = [
     title: "Prompt",
   },
   {
+    icon: Bot,
+    id: "run-setup-provider",
+    info: "Choose which local agent CLI runs this prompt.",
+    title: "Provider",
+  },
+  {
     icon: BrainCircuit,
     id: "run-setup-model",
-    info: "Choose the Codex model and reasoning effort, or leave both on the CLI defaults.",
+    info: "Choose provider-specific model settings, or leave them on the CLI defaults.",
     title: "Model",
   },
   {
@@ -149,6 +178,7 @@ export const RUN_SETUP_SECTIONS = [
 const [
   REPOSITORY_SECTION,
   PROMPT_SECTION,
+  PROVIDER_SECTION,
   MODEL_SECTION,
   RUN_SECTION,
   VERIFICATION_SECTION,
@@ -221,6 +251,14 @@ function toRunModel(selection: ModelSelection): CodexModel | null {
 function toRunReasoningEffort(
   selection: ReasoningEffortSelection,
 ): CodexReasoningEffort | null {
+  return selection === CLI_DEFAULT_OPTION ? null : selection;
+}
+
+function toRunClaudeModel(selection: ClaudeModelSelection): ClaudeModel | null {
+  return selection === CLI_DEFAULT_OPTION ? null : selection;
+}
+
+function toRunClaudeEffort(selection: ClaudeEffortSelection): ClaudeEffort | null {
   return selection === CLI_DEFAULT_OPTION ? null : selection;
 }
 
@@ -507,15 +545,50 @@ function PromptSetupSection({
   );
 }
 
+function ProviderSetupSection({
+  onProviderChange,
+  provider,
+}: {
+  onProviderChange: (provider: AgentProvider) => void;
+  provider: AgentProvider;
+}) {
+  return (
+    <SetupArea
+      icon={PROVIDER_SECTION.icon}
+      id={PROVIDER_SECTION.id}
+      info={PROVIDER_SECTION.info}
+      title={PROVIDER_SECTION.title}
+    >
+      <SelectionCombobox
+        id="agent-provider"
+        items={PROVIDER_OPTIONS}
+        label="Provider"
+        onValueChange={onProviderChange}
+        value={provider}
+      />
+    </SetupArea>
+  );
+}
+
 function ModelSetupSection({
+  claudeEffort,
+  claudeModel,
   model,
+  onClaudeEffortChange,
+  onClaudeModelChange,
   onModelChange,
   onReasoningEffortChange,
+  provider,
   reasoningEffort,
 }: {
+  claudeEffort: ClaudeEffortSelection;
+  claudeModel: ClaudeModelSelection;
   model: ModelSelection;
+  onClaudeEffortChange: (effort: ClaudeEffortSelection) => void;
+  onClaudeModelChange: (model: ClaudeModelSelection) => void;
   onModelChange: (model: ModelSelection) => void;
   onReasoningEffortChange: (reasoningEffort: ReasoningEffortSelection) => void;
+  provider: AgentProvider;
   reasoningEffort: ReasoningEffortSelection;
 }) {
   return (
@@ -526,20 +599,41 @@ function ModelSetupSection({
       title={MODEL_SECTION.title}
     >
       <div className="grid gap-3">
-        <SelectionCombobox
-          id="codex-model"
-          items={MODEL_OPTIONS}
-          label="Model"
-          onValueChange={onModelChange}
-          value={model}
-        />
-        <SelectionCombobox
-          id="reasoning-effort"
-          items={REASONING_EFFORT_OPTIONS}
-          label="Reasoning effort"
-          onValueChange={onReasoningEffortChange}
-          value={reasoningEffort}
-        />
+        {provider === "claude" ? (
+          <>
+            <SelectionCombobox
+              id="claude-model"
+              items={CLAUDE_MODEL_OPTIONS}
+              label="Claude model"
+              onValueChange={onClaudeModelChange}
+              value={claudeModel}
+            />
+            <SelectionCombobox
+              id="claude-effort"
+              items={CLAUDE_EFFORT_OPTIONS}
+              label="Claude effort"
+              onValueChange={onClaudeEffortChange}
+              value={claudeEffort}
+            />
+          </>
+        ) : (
+          <>
+            <SelectionCombobox
+              id="codex-model"
+              items={MODEL_OPTIONS}
+              label="Codex model"
+              onValueChange={onModelChange}
+              value={model}
+            />
+            <SelectionCombobox
+              id="reasoning-effort"
+              items={REASONING_EFFORT_OPTIONS}
+              label="Codex reasoning"
+              onValueChange={onReasoningEffortChange}
+              value={reasoningEffort}
+            />
+          </>
+        )}
       </div>
     </SetupArea>
   );
@@ -746,34 +840,46 @@ function CommitSetupSection({
 }
 
 function ReviewSetupSection({
+  reviewClaudeEffort,
+  reviewClaudeModel,
   isPromptValid,
   isReviewIntervalValid,
   onReviewEnabledChange,
   parsedReviewIntervalCommits,
+  reviewProvider,
   reviewEnabled,
   reviewIntervalCommits,
   reviewModel,
   reviewPrompt,
   reviewReasoningEffort,
   setAutoCommit,
+  setReviewClaudeEffort,
+  setReviewClaudeModel,
   setReviewIntervalCommits,
   setReviewModel,
   setReviewPrompt,
+  setReviewProvider,
   setReviewReasoningEffort,
 }: {
+  reviewClaudeEffort: ClaudeEffortSelection;
+  reviewClaudeModel: ClaudeModelSelection;
   isPromptValid: boolean;
   isReviewIntervalValid: boolean;
   onReviewEnabledChange: StateSetter<boolean>;
   parsedReviewIntervalCommits: number;
+  reviewProvider: AgentProvider;
   reviewEnabled: boolean;
   reviewIntervalCommits: string;
   reviewModel: ModelSelection;
   reviewPrompt: string;
   reviewReasoningEffort: ReasoningEffortSelection;
   setAutoCommit: StateSetter<boolean>;
+  setReviewClaudeEffort: StateSetter<ClaudeEffortSelection>;
+  setReviewClaudeModel: StateSetter<ClaudeModelSelection>;
   setReviewIntervalCommits: StateSetter<string>;
   setReviewModel: StateSetter<ModelSelection>;
   setReviewPrompt: StateSetter<string>;
+  setReviewProvider: StateSetter<AgentProvider>;
   setReviewReasoningEffort: StateSetter<ReasoningEffortSelection>;
 }) {
   return (
@@ -828,16 +934,22 @@ function ReviewSetupSection({
 
         {isReviewSettingsVisible(reviewEnabled) ? (
           <ReviewSettings
+            reviewClaudeEffort={reviewClaudeEffort}
+            reviewClaudeModel={reviewClaudeModel}
             isPromptValid={isPromptValid}
             isReviewIntervalValid={isReviewIntervalValid}
             parsedReviewIntervalCommits={parsedReviewIntervalCommits}
+            reviewProvider={reviewProvider}
             reviewIntervalCommits={reviewIntervalCommits}
             reviewModel={reviewModel}
             reviewPrompt={reviewPrompt}
             reviewReasoningEffort={reviewReasoningEffort}
+            setReviewClaudeEffort={setReviewClaudeEffort}
+            setReviewClaudeModel={setReviewClaudeModel}
             setReviewIntervalCommits={setReviewIntervalCommits}
             setReviewModel={setReviewModel}
             setReviewPrompt={setReviewPrompt}
+            setReviewProvider={setReviewProvider}
             setReviewReasoningEffort={setReviewReasoningEffort}
           />
         ) : null}
@@ -847,28 +959,40 @@ function ReviewSetupSection({
 }
 
 function ReviewSettings({
+  reviewClaudeEffort,
+  reviewClaudeModel,
   isPromptValid,
   isReviewIntervalValid,
   parsedReviewIntervalCommits,
+  reviewProvider,
   reviewIntervalCommits,
   reviewModel,
   reviewPrompt,
   reviewReasoningEffort,
+  setReviewClaudeEffort,
+  setReviewClaudeModel,
   setReviewIntervalCommits,
   setReviewModel,
   setReviewPrompt,
+  setReviewProvider,
   setReviewReasoningEffort,
 }: {
+  reviewClaudeEffort: ClaudeEffortSelection;
+  reviewClaudeModel: ClaudeModelSelection;
   isPromptValid: boolean;
   isReviewIntervalValid: boolean;
   parsedReviewIntervalCommits: number;
+  reviewProvider: AgentProvider;
   reviewIntervalCommits: string;
   reviewModel: ModelSelection;
   reviewPrompt: string;
   reviewReasoningEffort: ReasoningEffortSelection;
+  setReviewClaudeEffort: StateSetter<ClaudeEffortSelection>;
+  setReviewClaudeModel: StateSetter<ClaudeModelSelection>;
   setReviewIntervalCommits: StateSetter<string>;
   setReviewModel: StateSetter<ModelSelection>;
   setReviewPrompt: StateSetter<string>;
+  setReviewProvider: StateSetter<AgentProvider>;
   setReviewReasoningEffort: StateSetter<ReasoningEffortSelection>;
 }) {
   return (
@@ -879,21 +1003,49 @@ function ReviewSettings({
         setReviewIntervalCommits={setReviewIntervalCommits}
         setReviewPrompt={setReviewPrompt}
       />
+      <SelectionCombobox
+        id="review-provider"
+        items={PROVIDER_OPTIONS}
+        label="Review provider"
+        onValueChange={setReviewProvider}
+        value={reviewProvider}
+      />
       <div className="grid gap-3">
-        <SelectionCombobox
-          id="review-model"
-          items={MODEL_OPTIONS}
-          label="Review model"
-          onValueChange={setReviewModel}
-          value={reviewModel}
-        />
-        <SelectionCombobox
-          id="review-reasoning-effort"
-          items={REASONING_EFFORT_OPTIONS}
-          label="Review reasoning"
-          onValueChange={setReviewReasoningEffort}
-          value={reviewReasoningEffort}
-        />
+        {reviewProvider === "claude" ? (
+          <>
+            <SelectionCombobox
+              id="review-claude-model"
+              items={CLAUDE_MODEL_OPTIONS}
+              label="Review Claude model"
+              onValueChange={setReviewClaudeModel}
+              value={reviewClaudeModel}
+            />
+            <SelectionCombobox
+              id="review-claude-effort"
+              items={CLAUDE_EFFORT_OPTIONS}
+              label="Review Claude effort"
+              onValueChange={setReviewClaudeEffort}
+              value={reviewClaudeEffort}
+            />
+          </>
+        ) : (
+          <>
+            <SelectionCombobox
+              id="review-model"
+              items={MODEL_OPTIONS}
+              label="Review Codex model"
+              onValueChange={setReviewModel}
+              value={reviewModel}
+            />
+            <SelectionCombobox
+              id="review-reasoning-effort"
+              items={REASONING_EFFORT_OPTIONS}
+              label="Review Codex reasoning"
+              onValueChange={setReviewReasoningEffort}
+              value={reviewReasoningEffort}
+            />
+          </>
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <label
@@ -982,13 +1134,23 @@ export function ControlsPanel({
   runnerStatus: RunnerStatus;
 }) {
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
+  const [provider, setProvider] = useState<AgentProvider>(
+    DEFAULT_AGENT_PROVIDER,
+  );
   const [runCount, setRunCount] = useState("1");
   const [verificationCommands, setVerificationCommands] = useState([""]);
   const [autoCommit, setAutoCommit] = useState(false);
   const [model, setModel] = useState<ModelSelection>("gpt-5.4");
   const [reasoningEffort, setReasoningEffort] =
     useState<ReasoningEffortSelection>("high");
+  const [claudeModel, setClaudeModel] =
+    useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
+  const [claudeEffort, setClaudeEffort] =
+    useState<ClaudeEffortSelection>(CLI_DEFAULT_OPTION);
   const [reviewEnabled, setReviewEnabled] = useState(false);
+  const [reviewProvider, setReviewProvider] = useState<AgentProvider>(
+    DEFAULT_AGENT_PROVIDER,
+  );
   const [reviewIntervalCommits, setReviewIntervalCommits] = useState(
     String(DEFAULT_REVIEW_INTERVAL_COMMITS),
   );
@@ -996,6 +1158,10 @@ export function ControlsPanel({
   const [reviewModel, setReviewModel] = useState<ModelSelection>("gpt-5.4");
   const [reviewReasoningEffort, setReviewReasoningEffort] =
     useState<ReasoningEffortSelection>("high");
+  const [reviewClaudeModel, setReviewClaudeModel] =
+    useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
+  const [reviewClaudeEffort, setReviewClaudeEffort] =
+    useState<ClaudeEffortSelection>(CLI_DEFAULT_OPTION);
   const [commandTarget, setCommandTarget] = useState<HTMLElement | null>(null);
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
@@ -1145,14 +1311,32 @@ export function ControlsPanel({
       const response = await fetch("/api/run/start", {
         body: JSON.stringify({
           autoCommit: getAutoCommitForReview(reviewEnabled, autoCommit),
-          model: toRunModel(model),
+          provider,
+          model: provider === "codex" ? toRunModel(model) : null,
           prompt: preferSkillReferenceSyntax(repeatPrompt),
-          reasoningEffort: toRunReasoningEffort(reasoningEffort),
+          reasoningEffort:
+            provider === "codex" ? toRunReasoningEffort(reasoningEffort) : null,
+          claudeModel:
+            provider === "claude" ? toRunClaudeModel(claudeModel) : null,
+          claudeEffort:
+            provider === "claude" ? toRunClaudeEffort(claudeEffort) : null,
           review: createReviewRunRequest({
+            claudeEffort:
+              reviewProvider === "claude"
+                ? toRunClaudeEffort(reviewClaudeEffort)
+                : null,
+            claudeModel:
+              reviewProvider === "claude"
+                ? toRunClaudeModel(reviewClaudeModel)
+                : null,
             intervalCommits: parsedReviewIntervalCommits,
-            model: toRunModel(reviewModel),
+            provider: reviewProvider,
+            model: reviewProvider === "codex" ? toRunModel(reviewModel) : null,
             prompt: reviewPrompt,
-            reasoningEffort: toRunReasoningEffort(reviewReasoningEffort),
+            reasoningEffort:
+              reviewProvider === "codex"
+                ? toRunReasoningEffort(reviewReasoningEffort)
+                : null,
             reviewEnabled,
           }),
           runCount: parsedRunCount,
@@ -1292,10 +1476,19 @@ export function ControlsPanel({
           onPromptChange={setRepeatPrompt}
           prompt={repeatPrompt}
         />
+        <ProviderSetupSection
+          onProviderChange={setProvider}
+          provider={provider}
+        />
         <ModelSetupSection
+          claudeEffort={claudeEffort}
+          claudeModel={claudeModel}
           model={model}
+          onClaudeEffortChange={setClaudeEffort}
+          onClaudeModelChange={setClaudeModel}
           onModelChange={setModel}
           onReasoningEffortChange={setReasoningEffort}
+          provider={provider}
           reasoningEffort={reasoningEffort}
         />
         <RunCountSetupSection
@@ -1313,19 +1506,25 @@ export function ControlsPanel({
           reviewEnabled={reviewEnabled}
         />
         <ReviewSetupSection
+          reviewClaudeEffort={reviewClaudeEffort}
+          reviewClaudeModel={reviewClaudeModel}
           isPromptValid={isReviewPromptValid}
           isReviewIntervalValid={isReviewIntervalValid}
           onReviewEnabledChange={setReviewEnabled}
           parsedReviewIntervalCommits={parsedReviewIntervalCommits}
+          reviewProvider={reviewProvider}
           reviewEnabled={reviewEnabled}
           reviewIntervalCommits={reviewIntervalCommits}
           reviewModel={reviewModel}
           reviewPrompt={reviewPrompt}
           reviewReasoningEffort={reviewReasoningEffort}
           setAutoCommit={setAutoCommit}
+          setReviewClaudeEffort={setReviewClaudeEffort}
+          setReviewClaudeModel={setReviewClaudeModel}
           setReviewIntervalCommits={setReviewIntervalCommits}
           setReviewModel={setReviewModel}
           setReviewPrompt={setReviewPrompt}
+          setReviewProvider={setReviewProvider}
           setReviewReasoningEffort={setReviewReasoningEffort}
         />
         <FormAlert

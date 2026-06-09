@@ -1,4 +1,6 @@
 import type { RunnerStatus } from "@/web/runner/statuses";
+import type { AgentProvider } from "@/web/runner/agentProviders";
+import type { ClaudeEffort, ClaudeModel } from "@/web/runner/claudeOptions";
 import type { CodexModel, CodexReasoningEffort } from "@/web/runner/codexOptions";
 
 export type RepositorySelectionResponse = {
@@ -45,14 +47,20 @@ export type ApiErrorResponse = {
 
 export type RunStartResponse = {
   status: RunnerStatus;
+  provider: AgentProvider;
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
+  claudeModel: ClaudeModel | null;
+  claudeEffort: ClaudeEffort | null;
   review: {
     enabled: boolean;
+    provider: AgentProvider;
     intervalCommits: number;
     prompt: string;
     model: CodexModel | null;
     reasoningEffort: CodexReasoningEffort | null;
+    claudeModel: ClaudeModel | null;
+    claudeEffort: ClaudeEffort | null;
   };
 };
 

@@ -2,7 +2,10 @@ import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 
-import { getCodexExecSpawnCommand } from "../../../src/server/index";
+import {
+  getClaudePrintSpawnCommand,
+  getCodexExecSpawnCommand,
+} from "../../../src/server/index";
 import { createTestServer, listenOnRandomPort, trackTestServer } from "../helpers/fastify";
 import { createMockRunProcess } from "../helpers/process";
 import { browseRepository } from "../helpers/repositoryBrowse";
@@ -113,6 +116,28 @@ describe("run start endpoint", () => {
       },
       "reasoningEffort",
       "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh', received 'extreme'",
+    ],
+    [
+      "invalid Claude model",
+      {
+        provider: "claude",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        claudeModel: "claude-unknown",
+      },
+      "claudeModel",
+      "Invalid enum value. Expected 'claude-opus-4-8' | 'claude-opus-4-7' | 'claude-opus-4-6' | 'claude-sonnet-4-6' | 'claude-haiku-4-5-20251001', received 'claude-unknown'",
+    ],
+    [
+      "invalid Claude effort",
+      {
+        provider: "claude",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        claudeEffort: "ultracode",
+      },
+      "claudeEffort",
+      "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh' | 'max', received 'ultracode'",
     ],
     [
       "review without auto-commit",
@@ -318,18 +343,24 @@ describe("run start endpoint", () => {
     expect(response.json()).toEqual({
       status: "running",
       repositoryPath: path.normalize(repositoryPath),
+      provider: "codex",
       prompt: "Use goal.md as the source of truth.",
       runCount: 2,
       verificationCommands: [],
       autoCommit: false,
       model: null,
       reasoningEffort: null,
+      claudeModel: null,
+      claudeEffort: null,
       review: {
         enabled: false,
+        provider: "codex",
         intervalCommits: 3,
         prompt: "",
         model: null,
         reasoningEffort: null,
+        claudeModel: null,
+        claudeEffort: null,
       },
     });
   });
@@ -671,6 +702,142 @@ describe("run start endpoint", () => {
       },
     );
     expect(runProcess.stdin.writableEnded).toBe(true);
+  });
+
+  it("spawns claude print in the selected repository with model and effort", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "claude",
+        prompt: "  Use goal.md as the source of truth.  ",
+        runCount: 1,
+        claudeModel: "claude-opus-4-8",
+        claudeEffort: "max",
+      },
+    });
+    const expectedClaudeCommand = getClaudePrintSpawnCommand(
+      "Use goal.md as the source of truth.",
+      {
+        model: "claude-opus-4-8",
+        effort: "max",
+      },
+    );
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      provider: "claude",
+      model: null,
+      reasoningEffort: null,
+      claudeModel: "claude-opus-4-8",
+      claudeEffort: "max",
+    });
+    expect(spawnProcess).toHaveBeenCalledWith(
+      expectedClaudeCommand.command,
+      expectedClaudeCommand.args,
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+    expect(runProcess.stdin.writableEnded).toBe(true);
+  });
+
+  it("rejects Codex settings when provider is Claude", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = vi.fn(() => createMockRunProcess());
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "claude",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        model: "gpt-5.4",
+        reasoningEffort: "high",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: "model",
+          message: "Codex model is only supported when provider is codex.",
+        },
+        {
+          path: "reasoningEffort",
+          message:
+            "Codex reasoning effort is only supported when provider is codex.",
+        },
+      ]),
+    );
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it("fails the run with a clear message when Claude Code is missing", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const app = await createTestServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    trackTestServer(app);
+    const origin = await listenOnRandomPort(app);
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await browseRepository(app, repositoryPath);
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "claude",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    runProcess.emit(
+      "error",
+      Object.assign(new Error("spawn claude ENOENT"), {
+        code: "ENOENT",
+      }),
+    );
+    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
+    await reader.cancel();
+
+    expect(summaryPayloads).toEqual([
+      {
+        status: "failed",
+        message: "Claude Code is not installed or is not available on PATH.",
+      },
+    ]);
   });
 
   it("fails the run when Codex cannot be started", async () => {

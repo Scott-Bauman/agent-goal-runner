@@ -133,6 +133,62 @@ describe("run controller orchestration", () => {
     });
   });
 
+  it("completes a Claude run and records stdout as the final assistant message", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Goal\n\n- [ ] Next\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess(321);
+    const spawnProcess = vi.fn(() => runProcess);
+    const runtimeState: RuntimeState = {
+      selectedRepositoryPath: repositoryPath,
+      stream: createInitialStreamState(),
+    };
+    const controller = new RunController(runtimeState, new SseHub(), spawnProcess);
+
+    controller.start({
+      repositoryPath,
+      provider: "claude",
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommandsToRun: [],
+      autoCommit: false,
+      model: null,
+      reasoningEffort: null,
+      claudeModel: "claude-sonnet-4-6",
+      claudeEffort: "high",
+      review: DEFAULT_REVIEW_RUN_OPTIONS,
+    });
+
+    expect(spawnProcess).toHaveBeenCalledWith(
+      "claude",
+      [
+        "-p",
+        "Use goal.md as the source of truth.",
+        "--model",
+        "claude-sonnet-4-6",
+        "--effort",
+        "high",
+      ],
+      {
+        cwd: repositoryPath,
+        windowsHide: true,
+      },
+    );
+
+    runProcess.stdout.write("Claude final answer\n");
+    runProcess.emit("close", 0, null);
+
+    await vi.waitFor(() => {
+      expect(runtimeState.stream.runLoop.latestSummary).toEqual({
+        status: "complete",
+        message: `Completed Claude run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      });
+    });
+    expect(runtimeState.stream.runLoop.details.lastAssistantMessage).toBe(
+      "Claude final answer",
+    );
+  });
+
   it("does not run review when auto-commit skips a no-change normal run", async () => {
     const repositoryPath = await createRepositoryPath();
     const goalMarkdown = "# Goal\n\n- [ ] Next\n";
@@ -184,6 +240,107 @@ describe("run controller orchestration", () => {
       });
     });
     expect(spawnProcess).toHaveBeenCalledTimes(3);
+  });
+
+  it("runs Claude review after a Codex auto-commit when review provider is Claude", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Goal\n\n- [ ] Next\n");
+    const runProcess = createMockRunProcess(101);
+    const gitAddProcess = createMockRunProcess(102);
+    const gitStatusProcess = createMockRunProcess(103);
+    const gitCommitProcess = createMockRunProcess(104);
+    const reviewRunProcess = createMockRunProcess(105);
+    const reviewGitAddProcess = createMockRunProcess(106);
+    const reviewGitStatusProcess = createMockRunProcess(107);
+    const reviewGitCommitProcess = createMockRunProcess(108);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(gitAddProcess)
+      .mockReturnValueOnce(gitStatusProcess)
+      .mockReturnValueOnce(gitCommitProcess)
+      .mockReturnValueOnce(reviewRunProcess)
+      .mockReturnValueOnce(reviewGitAddProcess)
+      .mockReturnValueOnce(reviewGitStatusProcess)
+      .mockReturnValueOnce(reviewGitCommitProcess);
+    const runtimeState: RuntimeState = {
+      selectedRepositoryPath: repositoryPath,
+      stream: createInitialStreamState(),
+    };
+    const controller = new RunController(runtimeState, new SseHub(), spawnProcess);
+
+    controller.start({
+      repositoryPath,
+      provider: "codex",
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommandsToRun: [],
+      autoCommit: true,
+      model: null,
+      reasoningEffort: null,
+      claudeModel: null,
+      claudeEffort: null,
+      review: {
+        enabled: true,
+        provider: "claude",
+        intervalCommits: 1,
+        prompt: "Review recent commits.",
+        model: null,
+        reasoningEffort: null,
+        claudeModel: "claude-opus-4-8",
+        claudeEffort: "max",
+      },
+    });
+
+    runProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+    });
+    gitAddProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(3);
+    });
+    gitStatusProcess.stdout.write(" M goal.md\n");
+    gitStatusProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(4);
+    });
+    gitCommitProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(5);
+    });
+
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      5,
+      "claude",
+      [
+        "-p",
+        "Review the last 1 commit for bugs, regressions, and missed requirements. Fix any issues you find, then report what you changed.\n\nReview recent commits.",
+        "--model",
+        "claude-opus-4-8",
+        "--effort",
+        "max",
+      ],
+      {
+        cwd: repositoryPath,
+        windowsHide: true,
+      },
+    );
+
+    reviewRunProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(6);
+    });
+    reviewGitAddProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(7);
+    });
+    reviewGitStatusProcess.emit("close", 0, null);
+    reviewGitCommitProcess.emit("close", 0, null);
+
+    await vi.waitFor(() => {
+      expect(runtimeState.stream.runLoop.latestSummary?.status).toBe("complete");
+    });
   });
 
   it("runs review after the configured number of successful normal commits", async () => {

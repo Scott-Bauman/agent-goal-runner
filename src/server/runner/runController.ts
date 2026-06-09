@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,32 +12,39 @@ import { isNodeErrorCode } from "../shared/nodeErrors.js";
 import type { ProcessSpawner } from "../shared/process.js";
 import type { RuntimeState } from "../shared/runtime.js";
 import type { SseHub } from "../sse/sseHub.js";
-import { getCodexExecSpawnCommand } from "./codexCommand.js";
 import {
-  CodexJsonEventParser,
+  getAgentProviderLabel,
+  getAgentRunLabel,
+  type AgentProvider,
+} from "./agentProviders.js";
+import {
+  getAgentRunner,
+  type AgentRunSettings,
+  type StartedAgentRun,
+} from "./agentRunner.js";
+import type { ClaudeEffort, ClaudeModel } from "./claudeOptions.js";
+import {
   createSkillPreflightStatus,
   preferSkillReferenceSyntax,
 } from "./codexJsonEvents.js";
 import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { ParsedVerificationCommand } from "./verificationCommand.js";
 
-type ActiveRunProcessKind = "codex" | "review" | "verification" | "git";
+type ActiveRunProcessKind = "agent" | "review" | "verification" | "git";
 
-type AutoCommitPhase = "codex" | "review";
+type AutoCommitPhase = "agent" | "review";
 
 type AutoCommitResult = {
   succeeded: boolean;
   committed: boolean;
 };
 
-type CodexProcessCloseContext = {
-  childProcess: ChildProcessWithoutNullStreams;
+type AgentProcessCloseContext = {
   code: number | null;
-  codexJsonParser: CodexJsonEventParser;
   normalCommitsSinceReview: number;
   options: StartRunOptions;
-  outputLastMessagePath: string;
   runNumber: number;
+  startedRun: StartedAgentRun;
 };
 
 type ReviewContinuationResult = {
@@ -47,18 +54,24 @@ type ReviewContinuationResult = {
 
 export type ReviewRunOptions = {
   enabled: boolean;
+  provider: AgentProvider;
   intervalCommits: number;
   prompt: string;
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
+  claudeModel: ClaudeModel | null;
+  claudeEffort: ClaudeEffort | null;
 };
 
 export const DEFAULT_REVIEW_RUN_OPTIONS: ReviewRunOptions = {
   enabled: false,
+  provider: "codex",
   intervalCommits: 3,
   prompt: "",
   model: null,
   reasoningEffort: null,
+  claudeModel: null,
+  claudeEffort: null,
 };
 
 export function createReviewPromptPrefix(intervalCommits: number): string {
@@ -80,18 +93,22 @@ export function createReviewPrompt(options: ReviewRunOptions): string {
 
 export type StartRunOptions = {
   repositoryPath: string;
+  provider: AgentProvider;
   prompt: string;
   runCount: number;
   verificationCommandsToRun: ParsedVerificationCommand[];
   autoCommit: boolean;
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
+  claudeModel: ClaudeModel | null;
+  claudeEffort: ClaudeEffort | null;
   review: ReviewRunOptions;
 };
 
 export class RunController {
   private activeRunProcess: ChildProcessWithoutNullStreams | null = null;
   private activeRunProcessKind: ActiveRunProcessKind | null = null;
+  private activeRunAgentProvider: AgentProvider | null = null;
 
   constructor(
     private readonly runtimeState: RuntimeState,
@@ -108,10 +125,11 @@ export class RunController {
     this.activeRunProcess?.kill();
     this.activeRunProcess = null;
     this.activeRunProcessKind = null;
+    this.activeRunAgentProvider = null;
   }
 
   start(options: StartRunOptions): void {
-    this.startCodexRun(options, 1, 0);
+    this.startAgentRun(options, 1, 0);
   }
 
   // fallow-ignore-next-line unused-class-member
@@ -128,7 +146,7 @@ export class RunController {
           ? "git process"
           : this.activeRunProcessKind === "review"
             ? "review process"
-          : "Codex process";
+            : `${getAgentProviderLabel(this.activeRunAgentProvider ?? "codex")} process`;
     this.runtimeState.stream.runLoop = {
       ...this.runtimeState.stream.runLoop,
       status: "stopping",
@@ -186,6 +204,7 @@ export class RunController {
 
     this.activeRunProcess = null;
     this.activeRunProcessKind = null;
+    this.activeRunAgentProvider = null;
     this.failRun(message);
   }
 
@@ -225,14 +244,116 @@ export class RunController {
     );
   }
 
-  private appendFinalAssistantMessageFromFile(outputPath: string): void {
-    if (!existsSync(outputPath)) {
-      return;
+  private createAgentRunSettings(
+    options: StartRunOptions,
+    runNumber: number,
+  ): AgentRunSettings {
+    if (options.provider === "claude") {
+      return {
+        provider: "claude",
+        effort: options.claudeEffort,
+        model: options.claudeModel,
+      };
     }
 
-    const finalMessage = readFileSync(outputPath, "utf8").trim();
+    return {
+      provider: "codex",
+      model: options.model,
+      outputLastMessagePath: this.createLastMessageOutputPath(runNumber),
+      reasoningEffort: options.reasoningEffort,
+    };
+  }
 
-    if (finalMessage.length === 0) {
+  private createReviewAgentRunSettings(
+    review: ReviewRunOptions,
+    runNumber: number,
+  ): AgentRunSettings {
+    if (review.provider === "claude") {
+      return {
+        provider: "claude",
+        effort: review.claudeEffort,
+        model: review.claudeModel,
+      };
+    }
+
+    return {
+      provider: "codex",
+      model: review.model,
+      outputLastMessagePath: this.createLastMessageOutputPath(runNumber),
+      reasoningEffort: review.reasoningEffort,
+    };
+  }
+
+  private getAgentRunDetails(options: StartRunOptions): {
+    model: string | null;
+    reasoningEffort: string | null;
+  } {
+    if (options.provider === "claude") {
+      return {
+        model: options.claudeModel,
+        reasoningEffort: options.claudeEffort,
+      };
+    }
+
+    return {
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+    };
+  }
+
+  private getReviewRunDetails(review: ReviewRunOptions): {
+    model: string | null;
+    reasoningEffort: string | null;
+  } {
+    if (review.provider === "claude") {
+      return {
+        model: review.claudeModel,
+        reasoningEffort: review.claudeEffort,
+      };
+    }
+
+    return {
+      model: review.model,
+      reasoningEffort: review.reasoningEffort,
+    };
+  }
+
+  private formatAgentSpawnError(
+    provider: AgentProvider,
+    runNumber: number,
+    error: unknown,
+  ): string {
+    if (provider === "claude" && isNodeErrorCode(error, "ENOENT")) {
+      return "Claude Code is not installed or is not available on PATH.";
+    }
+
+    if (provider === "claude") {
+      return `Failed to start Claude run ${runNumber}; ensure Claude Code is installed and available on PATH.`;
+    }
+
+    return `Failed to start Codex run ${runNumber}; ensure the Codex CLI is installed and available on PATH.`;
+  }
+
+  private formatReviewSpawnError(
+    options: StartRunOptions,
+    runNumber: number,
+    error: unknown,
+  ): string {
+    const runLabel = getAgentRunLabel(options.provider);
+
+    if (options.review.provider === "claude" && isNodeErrorCode(error, "ENOENT")) {
+      return "Claude Code is not installed or is not available on PATH.";
+    }
+
+    if (options.review.provider === "claude") {
+      return `Failed to start review after ${runLabel} ${runNumber}; ensure Claude Code is installed and available on PATH.`;
+    }
+
+    return `Failed to start review after ${runLabel} ${runNumber}; ensure the Codex CLI is installed and available on PATH.`;
+  }
+
+  private appendFinalAssistantMessage(finalMessage: string | null): void {
+    if (!finalMessage) {
       return;
     }
 
@@ -243,7 +364,7 @@ export class RunController {
     this.appendRunEvent("final_assistant_message", finalMessage);
   }
 
-  private startCodexRun(
+  private startAgentRun(
     options: StartRunOptions,
     runNumber: number,
     normalCommitsSinceReview: number,
@@ -252,61 +373,58 @@ export class RunController {
       repositoryPath,
       prompt,
       runCount,
-      model,
-      reasoningEffort,
+      provider,
     } = options;
-    const codexPrompt = preferSkillReferenceSyntax(prompt);
+    const agentPrompt = preferSkillReferenceSyntax(prompt);
     const skillPreflight = createSkillPreflightStatus(
       repositoryPath,
-      codexPrompt,
+      agentPrompt,
       existsSync,
     );
-    const outputLastMessagePath = this.createLastMessageOutputPath(runNumber);
-    const codexJsonParser = new CodexJsonEventParser();
-    const codexCommand = getCodexExecSpawnCommand(codexPrompt, {
-      model,
-      outputLastMessagePath,
-      reasoningEffort,
+    const runner = getAgentRunner(provider);
+    const startedRun = runner.startRun({
+      hooks: {
+        onMetadata: (metadata) => {
+          this.updateRunDetails(metadata);
+        },
+        onRunEvent: (event) => {
+          this.sseHub.appendRunEvent(this.runtimeState.stream, event);
+        },
+        onStderr: (chunk) => {
+          this.appendProcessLog("stderr", chunk);
+        },
+        onStdout: (chunk) => {
+          this.appendProcessLog("stdout", chunk);
+        },
+      },
+      prompt: agentPrompt,
+      repositoryPath,
+      settings: this.createAgentRunSettings(options, runNumber),
+      spawnProcess: this.spawnProcess,
     });
-    const childProcess = this.spawnProcess(codexCommand.command, codexCommand.args, {
-      cwd: repositoryPath,
-      windowsHide: true,
-    });
+    const childProcess = startedRun.childProcess;
 
-    childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      this.appendProcessLog("stdout", chunk);
-      const parsedChunk = codexJsonParser.push(chunk);
-
-      for (const event of parsedChunk.events) {
-        this.sseHub.appendRunEvent(this.runtimeState.stream, event);
-      }
-
-      this.updateRunDetails(parsedChunk.metadata);
-    });
-    childProcess.stderr.on("data", (chunk: Buffer | string) => {
-      this.appendProcessLog("stderr", chunk);
-    });
-    childProcess.stdin.end();
-    childProcess.on("error", () => {
+    childProcess.on("error", (error) => {
       this.handleProcessSpawnError(
         childProcess,
-        `Failed to start Codex run ${runNumber}; ensure the Codex CLI is installed and available on PATH.`,
+        this.formatAgentSpawnError(options.provider, runNumber, error),
       );
     });
     childProcess.on("close", (code) => {
-      void this.handleCodexProcessClose({
-        childProcess,
+      void this.handleAgentProcessClose({
         code,
-        codexJsonParser,
         normalCommitsSinceReview,
         options,
-        outputLastMessagePath,
         runNumber,
+        startedRun,
       });
     });
     this.activeRunProcess = childProcess;
-    this.activeRunProcessKind = "codex";
+    this.activeRunProcessKind = "agent";
+    this.activeRunAgentProvider = provider;
 
+    const modelDetails = this.getAgentRunDetails(options);
+    const runLabel = getAgentRunLabel(provider);
     this.runtimeState.stream.runLoop = {
       status: "running",
       stopRequested: false,
@@ -317,14 +435,14 @@ export class RunController {
       },
       latestSummary: {
         status: "running",
-        message: `Started Codex run ${runNumber} of ${runCount}.`,
+        message: `Started ${runLabel} ${runNumber} of ${runCount}.`,
       },
       details: {
         status: "running",
         currentRun: runNumber,
         totalRuns: runCount,
-        model,
-        reasoningEffort,
+        model: modelDetails.model,
+        reasoningEffort: modelDetails.reasoningEffort,
         tokenCount: null,
         changedFiles: [],
         warningCount: 0,
@@ -341,7 +459,10 @@ export class RunController {
     this.sseHub.broadcast("progress", this.runtimeState.stream.runLoop.progress);
     this.sseHub.broadcast("summary", this.runtimeState.stream.runLoop.latestSummary);
     this.sseHub.broadcast("runDetails", this.runtimeState.stream.runLoop.details);
-    this.appendRunEvent("run_started", `Started Codex run ${runNumber} of ${runCount}.`);
+    this.appendRunEvent(
+      "run_started",
+      `Started ${runLabel} ${runNumber} of ${runCount}.`,
+    );
 
     if (skillPreflight.missing.length > 0) {
       this.appendRunEvent(
@@ -351,50 +472,43 @@ export class RunController {
     }
   }
 
-  private async handleCodexProcessClose(
-    context: CodexProcessCloseContext,
+  private async handleAgentProcessClose(
+    context: AgentProcessCloseContext,
   ): Promise<void> {
-    if (this.activeRunProcess !== context.childProcess) {
+    if (this.activeRunProcess !== context.startedRun.childProcess) {
       return;
     }
 
     this.activeRunProcess = null;
     this.activeRunProcessKind = null;
-    this.flushCodexJsonParser(context.codexJsonParser);
-    this.appendFinalAssistantMessageFromFile(context.outputLastMessagePath);
+    this.activeRunAgentProvider = null;
+    this.appendFinalAssistantMessage(
+      context.startedRun.complete().finalAssistantMessage,
+    );
 
     if (this.runtimeState.stream.runLoop.stopRequested) {
-      this.completeStoppedCodexRun(context.options, context.runNumber);
+      this.completeStoppedAgentRun(context.options, context.runNumber);
       return;
     }
 
     if (context.code !== 0) {
-      this.failClosedCodexRun(context.runNumber, context.code);
+      this.failClosedAgentRun(context.options.provider, context.runNumber, context.code);
       return;
     }
 
-    await this.continueAfterSuccessfulCodexRun(
+    await this.continueAfterSuccessfulAgentRun(
       context.options,
       context.runNumber,
       context.normalCommitsSinceReview,
     );
   }
 
-  private flushCodexJsonParser(codexJsonParser: CodexJsonEventParser): void {
-    const parsedRemainder = codexJsonParser.flush();
-
-    for (const event of parsedRemainder.events) {
-      this.sseHub.appendRunEvent(this.runtimeState.stream, event);
-    }
-
-    this.updateRunDetails(parsedRemainder.metadata);
-  }
-
-  private completeStoppedCodexRun(
+  private completeStoppedAgentRun(
     options: StartRunOptions,
     runNumber: number,
   ): void {
-    const message = `Stopped after Codex run ${runNumber} of ${options.runCount} because stop was requested; no additional Codex runs will start.`;
+    const runLabel = getAgentRunLabel(options.provider);
+    const message = `Stopped after ${runLabel} ${runNumber} of ${options.runCount} because stop was requested; no additional ${runLabel}s will start.`;
 
     this.runtimeState.stream.runLoop = {
       ...this.runtimeState.stream.runLoop,
@@ -416,20 +530,26 @@ export class RunController {
     this.publishRunStatus();
   }
 
-  private failClosedCodexRun(runNumber: number, code: number | null): void {
+  private failClosedAgentRun(
+    provider: AgentProvider,
+    runNumber: number,
+    code: number | null,
+  ): void {
+    const runLabel = getAgentRunLabel(provider);
+
     this.failRun(
       code === null
-        ? `Codex run ${runNumber} exited without an exit code.`
-        : `Codex run ${runNumber} exited with code ${code}.`,
+        ? `${runLabel} ${runNumber} exited without an exit code.`
+        : `${runLabel} ${runNumber} exited with code ${code}.`,
     );
   }
 
-  private async continueAfterSuccessfulCodexRun(
+  private async continueAfterSuccessfulAgentRun(
     options: StartRunOptions,
     runNumber: number,
     normalCommitsSinceReview: number,
   ): Promise<void> {
-    const verificationSucceeded = await this.runVerificationAfterCodexIfNeeded(
+    const verificationSucceeded = await this.runVerificationAfterAgentIfNeeded(
       options,
       runNumber,
     );
@@ -438,7 +558,7 @@ export class RunController {
       return;
     }
 
-    const commitResult = await this.runAutoCommitAfterCodexIfEnabled(
+    const commitResult = await this.runAutoCommitAfterAgentIfEnabled(
       options,
       runNumber,
     );
@@ -447,7 +567,7 @@ export class RunController {
       return;
     }
 
-    const reviewResult = await this.runReviewAfterCodexIfDue(
+    const reviewResult = await this.runReviewAfterAgentIfDue(
       options,
       runNumber,
       normalCommitsSinceReview + (commitResult.committed ? 1 : 0),
@@ -457,8 +577,9 @@ export class RunController {
       return;
     }
 
-    const refreshedGoalMarkdown = await this.refreshGoalMarkdownAfterCodexRun(
+    const refreshedGoalMarkdown = await this.refreshGoalMarkdownAfterAgentRun(
       options.repositoryPath,
+      options.provider,
       runNumber,
     );
 
@@ -471,7 +592,7 @@ export class RunController {
     }
 
     if (runNumber < options.runCount) {
-      this.startCodexRun(
+      this.startAgentRun(
         options,
         runNumber + 1,
         reviewResult.normalCommitsSinceReview,
@@ -479,10 +600,10 @@ export class RunController {
       return;
     }
 
-    this.completeFinalCodexRun(options, runNumber, refreshedGoalMarkdown);
+    this.completeFinalAgentRun(options, runNumber, refreshedGoalMarkdown);
   }
 
-  private runVerificationAfterCodexIfNeeded(
+  private runVerificationAfterAgentIfNeeded(
     options: StartRunOptions,
     runNumber: number,
   ): Promise<boolean> {
@@ -493,7 +614,7 @@ export class RunController {
     return this.runVerificationCommands(options, runNumber);
   }
 
-  private runAutoCommitAfterCodexIfEnabled(
+  private runAutoCommitAfterAgentIfEnabled(
     options: StartRunOptions,
     runNumber: number,
   ): Promise<AutoCommitResult> {
@@ -507,7 +628,7 @@ export class RunController {
     return this.runAutoCommit(options, runNumber);
   }
 
-  private async runReviewAfterCodexIfDue(
+  private async runReviewAfterAgentIfDue(
     options: StartRunOptions,
     runNumber: number,
     normalCommitsSinceReview: number,
@@ -531,28 +652,35 @@ export class RunController {
     };
   }
 
-  private async refreshGoalMarkdownAfterCodexRun(
+  private async refreshGoalMarkdownAfterAgentRun(
     repositoryPath: string,
+    provider: AgentProvider,
     runNumber: number,
   ): Promise<string | null> {
     try {
       return await readGoalMarkdown(repositoryPath);
     } catch (error) {
-      this.failRun(this.formatGoalRefreshError(error, runNumber));
+      this.failRun(this.formatGoalRefreshError(error, provider, runNumber));
       return null;
     }
   }
 
-  private formatGoalRefreshError(error: unknown, runNumber: number): string {
+  private formatGoalRefreshError(
+    error: unknown,
+    provider: AgentProvider,
+    runNumber: number,
+  ): string {
+    const runLabel = getAgentRunLabel(provider);
+
     if (isNodeErrorCode(error, "ENOENT")) {
-      return `goal.md became unavailable after Codex run ${runNumber}.`;
+      return `goal.md became unavailable after ${runLabel} ${runNumber}.`;
     }
 
     if (isGoalPathRestrictionError(error)) {
-      return `goal.md resolves outside the selected repository after Codex run ${runNumber}.`;
+      return `goal.md resolves outside the selected repository after ${runLabel} ${runNumber}.`;
     }
 
-    return `Failed to refresh goal.md after Codex run ${runNumber}.`;
+    return `Failed to refresh goal.md after ${runLabel} ${runNumber}.`;
   }
 
   private stopForGoalMarker(
@@ -567,7 +695,8 @@ export class RunController {
     }
 
     const markerStatus = goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
-    const message = `Stopped after Codex run ${runNumber} of ${options.runCount} because refreshed goal.md contains ${goalStopMarker}.`;
+    const runLabel = getAgentRunLabel(options.provider);
+    const message = `Stopped after ${runLabel} ${runNumber} of ${options.runCount} because refreshed goal.md contains ${goalStopMarker}.`;
 
     this.runtimeState.stream.runLoop = {
       ...this.runtimeState.stream.runLoop,
@@ -590,12 +719,13 @@ export class RunController {
     return true;
   }
 
-  private completeFinalCodexRun(
+  private completeFinalAgentRun(
     options: StartRunOptions,
     runNumber: number,
     refreshedGoalMarkdown: string,
   ): void {
-    const message = `Completed Codex run ${runNumber} of ${options.runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`;
+    const runLabel = getAgentRunLabel(options.provider);
+    const message = `Completed ${runLabel} ${runNumber} of ${options.runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`;
 
     this.runtimeState.stream.runLoop = {
       ...this.runtimeState.stream.runLoop,
@@ -621,7 +751,7 @@ export class RunController {
     options: StartRunOptions,
     runNumber: number,
   ): Promise<boolean> {
-    const reviewSucceeded = await this.runReviewCodex(options, runNumber);
+    const reviewSucceeded = await this.runReviewAgent(options, runNumber);
 
     if (!reviewSucceeded) {
       return false;
@@ -644,7 +774,7 @@ export class RunController {
     return commitResult.succeeded;
   }
 
-  private runReviewCodex(
+  private runReviewAgent(
     options: StartRunOptions,
     runNumber: number,
   ): Promise<boolean> {
@@ -655,43 +785,37 @@ export class RunController {
         reviewPrompt,
         existsSync,
       );
-      const outputLastMessagePath = this.createLastMessageOutputPath(runNumber);
-      const codexJsonParser = new CodexJsonEventParser();
-      const codexCommand = getCodexExecSpawnCommand(reviewPrompt, {
-        model: options.review.model,
-        outputLastMessagePath,
-        reasoningEffort: options.review.reasoningEffort,
-      });
-      const childProcess = this.spawnProcess(
-        codexCommand.command,
-        codexCommand.args,
-        {
-          cwd: options.repositoryPath,
-          windowsHide: true,
+      const runner = getAgentRunner(options.review.provider);
+      const startedRun = runner.startRun({
+        hooks: {
+          onMetadata: (metadata) => {
+            this.updateRunDetails(metadata);
+          },
+          onRunEvent: (event) => {
+            this.sseHub.appendRunEvent(this.runtimeState.stream, event);
+          },
+          onStderr: (chunk) => {
+            this.appendProcessLog("stderr", chunk);
+          },
+          onStdout: (chunk) => {
+            this.appendProcessLog("stdout", chunk);
+          },
         },
-      );
+        prompt: reviewPrompt,
+        repositoryPath: options.repositoryPath,
+        settings: this.createReviewAgentRunSettings(options.review, runNumber),
+        spawnProcess: this.spawnProcess,
+      });
+      const childProcess = startedRun.childProcess;
+      const runLabel = getAgentRunLabel(options.provider);
       const startMessage =
         `Started review of the last ${options.review.intervalCommits} commits ` +
-        `after Codex run ${runNumber} of ${options.runCount}.`;
+        `after ${runLabel} ${runNumber} of ${options.runCount}.`;
 
-      childProcess.stdout.on("data", (chunk: Buffer | string) => {
-        this.appendProcessLog("stdout", chunk);
-        const parsedChunk = codexJsonParser.push(chunk);
-
-        for (const event of parsedChunk.events) {
-          this.sseHub.appendRunEvent(this.runtimeState.stream, event);
-        }
-
-        this.updateRunDetails(parsedChunk.metadata);
-      });
-      childProcess.stderr.on("data", (chunk: Buffer | string) => {
-        this.appendProcessLog("stderr", chunk);
-      });
-      childProcess.stdin.end();
-      childProcess.on("error", () => {
+      childProcess.on("error", (error) => {
         this.handleProcessSpawnError(
           childProcess,
-          `Failed to start review after Codex run ${runNumber}; ensure the Codex CLI is installed and available on PATH.`,
+          this.formatReviewSpawnError(options, runNumber, error),
         );
         resolve(false);
       });
@@ -703,20 +827,15 @@ export class RunController {
 
         this.activeRunProcess = null;
         this.activeRunProcessKind = null;
-
-        const parsedRemainder = codexJsonParser.flush();
-
-        for (const event of parsedRemainder.events) {
-          this.sseHub.appendRunEvent(this.runtimeState.stream, event);
-        }
-
-        this.updateRunDetails(parsedRemainder.metadata);
-        this.appendFinalAssistantMessageFromFile(outputLastMessagePath);
+        this.activeRunAgentProvider = null;
+        this.appendFinalAssistantMessage(
+          startedRun.complete().finalAssistantMessage,
+        );
 
         if (this.runtimeState.stream.runLoop.stopRequested) {
           const message =
-            `Stopped after review for Codex run ${runNumber} of ${options.runCount} ` +
-            "because stop was requested; no additional Codex runs will start.";
+            `Stopped after review for ${runLabel} ${runNumber} of ${options.runCount} ` +
+            `because stop was requested; no additional ${runLabel}s will start.`;
           this.runtimeState.stream.runLoop = {
             ...this.runtimeState.stream.runLoop,
             status: "stopped",
@@ -742,9 +861,9 @@ export class RunController {
         if (code === 0) {
           this.appendRunEvent(
             "command_succeeded",
-            `Review after Codex run ${runNumber} succeeded.`,
+            `Review after ${runLabel} ${runNumber} succeeded.`,
             {
-              command: "codex exec",
+              command: startedRun.commandDisplay,
               exitCode: 0,
             },
           );
@@ -754,14 +873,15 @@ export class RunController {
 
         this.failRun(
           code === null
-            ? `Review after Codex run ${runNumber} exited without an exit code.`
-            : `Review after Codex run ${runNumber} exited with code ${code}.`,
+            ? `Review after ${runLabel} ${runNumber} exited without an exit code.`
+            : `Review after ${runLabel} ${runNumber} exited with code ${code}.`,
         );
         resolve(false);
       });
 
       this.activeRunProcess = childProcess;
       this.activeRunProcessKind = "review";
+      this.activeRunAgentProvider = options.review.provider;
       this.runtimeState.stream.runLoop = {
         ...this.runtimeState.stream.runLoop,
         activeProcessId: childProcess.pid ?? null,
@@ -772,8 +892,7 @@ export class RunController {
       };
       this.updateRunDetails({
         status: "running",
-        model: options.review.model,
-        reasoningEffort: options.review.reasoningEffort,
+        ...this.getReviewRunDetails(options.review),
         tokenCount: null,
         lastAssistantMessage: null,
         skillPreflight,
@@ -793,7 +912,7 @@ export class RunController {
   private async runAutoCommit(
     options: StartRunOptions,
     runNumber: number,
-    phase: AutoCommitPhase = "codex",
+    phase: AutoCommitPhase = "agent",
   ): Promise<AutoCommitResult> {
     const messages = this.createAutoCommitMessages(options, runNumber, phase);
     const addSucceeded = await this.runGitCommand(
@@ -842,7 +961,15 @@ export class RunController {
 
     const commitSucceeded = await this.runGitCommand(
       options,
-      ["commit", ...this.createAutoCommitMessageArgs(runNumber, options.runCount, phase)],
+      [
+        "commit",
+        ...this.createAutoCommitMessageArgs(
+          runNumber,
+          options.runCount,
+          phase,
+          options.provider,
+        ),
+      ],
       messages.commitStarted,
       messages.commitFailed,
       messages.stopped,
@@ -857,12 +984,15 @@ export class RunController {
   private createAutoCommitMessageArgs(
     runNumber: number,
     totalRuns: number,
-    phase: AutoCommitPhase = "codex",
+    phase: AutoCommitPhase = "agent",
+    provider: AgentProvider = "codex",
   ): string[] {
+    const runLabel = getAgentRunLabel(provider);
+
     if (phase === "review") {
       return [
         "-m",
-        `codex-goal-runner: apply review after Codex run ${runNumber} of ${totalRuns}`,
+        `codex-goal-runner: apply review after ${runLabel} ${runNumber} of ${totalRuns}`,
         "-m",
         "Generated by codex-goal-runner after review and optional verification succeeded.",
       ];
@@ -870,9 +1000,9 @@ export class RunController {
 
     return [
       "-m",
-      `codex-goal-runner: apply Codex run ${runNumber} of ${totalRuns}`,
+      `codex-goal-runner: apply ${runLabel} ${runNumber} of ${totalRuns}`,
       "-m",
-      "Generated by codex-goal-runner after Codex and optional verification succeeded.",
+      `Generated by codex-goal-runner after ${getAgentProviderLabel(provider)} and optional verification succeeded.`,
     ];
   }
 
@@ -890,46 +1020,48 @@ export class RunController {
     skipped: string;
     stopped: string;
   } {
+    const runLabel = getAgentRunLabel(options.provider);
+
     if (phase === "review") {
       return {
-        stageStarted: `Started review auto-commit staging after Codex run ${runNumber} of ${options.runCount}.`,
+        stageStarted: `Started review auto-commit staging after ${runLabel} ${runNumber} of ${options.runCount}.`,
         stageFailed: (code) =>
           code === null
-            ? `Review auto-commit staging after Codex run ${runNumber} exited without an exit code.`
-            : `Review auto-commit staging after Codex run ${runNumber} exited with code ${code}.`,
-        statusStarted: `Started review auto-commit status check after Codex run ${runNumber} of ${options.runCount}.`,
+            ? `Review auto-commit staging after ${runLabel} ${runNumber} exited without an exit code.`
+            : `Review auto-commit staging after ${runLabel} ${runNumber} exited with code ${code}.`,
+        statusStarted: `Started review auto-commit status check after ${runLabel} ${runNumber} of ${options.runCount}.`,
         statusFailed: (code) =>
           code === null
-            ? `Review auto-commit status check after Codex run ${runNumber} exited without an exit code.`
-            : `Review auto-commit status check after Codex run ${runNumber} exited with code ${code}.`,
-        commitStarted: `Started review auto-commit after Codex run ${runNumber} of ${options.runCount}.`,
+            ? `Review auto-commit status check after ${runLabel} ${runNumber} exited without an exit code.`
+            : `Review auto-commit status check after ${runLabel} ${runNumber} exited with code ${code}.`,
+        commitStarted: `Started review auto-commit after ${runLabel} ${runNumber} of ${options.runCount}.`,
         commitFailed: (code) =>
           code === null
-            ? `Review auto-commit after Codex run ${runNumber} exited without an exit code.`
-            : `Review auto-commit after Codex run ${runNumber} exited with code ${code}.`,
-        skipped: `Skipped review auto-commit after Codex run ${runNumber} of ${options.runCount} because git status reported no changes.`,
-        stopped: `Stopped during review auto-commit after Codex run ${runNumber} of ${options.runCount} because stop was requested; no additional Codex runs will start.`,
+            ? `Review auto-commit after ${runLabel} ${runNumber} exited without an exit code.`
+            : `Review auto-commit after ${runLabel} ${runNumber} exited with code ${code}.`,
+        skipped: `Skipped review auto-commit after ${runLabel} ${runNumber} of ${options.runCount} because git status reported no changes.`,
+        stopped: `Stopped during review auto-commit after ${runLabel} ${runNumber} of ${options.runCount} because stop was requested; no additional ${runLabel}s will start.`,
       };
     }
 
     return {
-      stageStarted: `Started auto-commit staging after Codex run ${runNumber} of ${options.runCount}.`,
+      stageStarted: `Started auto-commit staging after ${runLabel} ${runNumber} of ${options.runCount}.`,
       stageFailed: (code) =>
         code === null
-          ? `Auto-commit staging after Codex run ${runNumber} exited without an exit code.`
-          : `Auto-commit staging after Codex run ${runNumber} exited with code ${code}.`,
-      statusStarted: `Started auto-commit status check after Codex run ${runNumber} of ${options.runCount}.`,
+          ? `Auto-commit staging after ${runLabel} ${runNumber} exited without an exit code.`
+          : `Auto-commit staging after ${runLabel} ${runNumber} exited with code ${code}.`,
+      statusStarted: `Started auto-commit status check after ${runLabel} ${runNumber} of ${options.runCount}.`,
       statusFailed: (code) =>
         code === null
-          ? `Auto-commit status check after Codex run ${runNumber} exited without an exit code.`
-          : `Auto-commit status check after Codex run ${runNumber} exited with code ${code}.`,
-      commitStarted: `Started auto-commit after Codex run ${runNumber} of ${options.runCount}.`,
+          ? `Auto-commit status check after ${runLabel} ${runNumber} exited without an exit code.`
+          : `Auto-commit status check after ${runLabel} ${runNumber} exited with code ${code}.`,
+      commitStarted: `Started auto-commit after ${runLabel} ${runNumber} of ${options.runCount}.`,
       commitFailed: (code) =>
         code === null
-          ? `Auto-commit after Codex run ${runNumber} exited without an exit code.`
-          : `Auto-commit after Codex run ${runNumber} exited with code ${code}.`,
-      skipped: `Skipped auto-commit after Codex run ${runNumber} of ${options.runCount} because git status reported no changes.`,
-      stopped: `Stopped during auto-commit after Codex run ${runNumber} of ${options.runCount} because stop was requested; no additional Codex runs will start.`,
+          ? `Auto-commit after ${runLabel} ${runNumber} exited without an exit code.`
+          : `Auto-commit after ${runLabel} ${runNumber} exited with code ${code}.`,
+      skipped: `Skipped auto-commit after ${runLabel} ${runNumber} of ${options.runCount} because git status reported no changes.`,
+      stopped: `Stopped during auto-commit after ${runLabel} ${runNumber} of ${options.runCount} because stop was requested; no additional ${runLabel}s will start.`,
     };
   }
 
@@ -975,7 +1107,7 @@ export class RunController {
       gitProcess.on("error", () => {
         this.handleProcessSpawnError(
           gitProcess,
-          `Failed to start auto-commit status check after Codex run ${runNumber}; ensure git is installed and available on PATH.`,
+          `Failed to start auto-commit status check after ${getAgentRunLabel(options.provider)} ${runNumber}; ensure git is installed and available on PATH.`,
         );
         resolve(null);
       });
@@ -1007,7 +1139,7 @@ export class RunController {
         if (code === 0) {
           this.appendRunEvent(
             "command_succeeded",
-            `Auto-commit status check after Codex run ${runNumber} succeeded.`,
+            `Auto-commit status check after ${getAgentRunLabel(options.provider)} ${runNumber} succeeded.`,
             {
               command: "git status --porcelain",
               exitCode: 0,
@@ -1121,7 +1253,7 @@ export class RunController {
   private async runVerificationCommands(
     options: StartRunOptions,
     runNumber: number,
-    phase: "codex" | "review" = "codex",
+    phase: AutoCommitPhase = "agent",
   ): Promise<boolean> {
     for (const [
       commandIndex,
@@ -1148,7 +1280,7 @@ export class RunController {
     runNumber: number,
     verificationCommandToRun: ParsedVerificationCommand,
     commandIndex: number,
-    phase: "codex" | "review",
+    phase: AutoCommitPhase,
   ): Promise<boolean> {
     return new Promise((resolve) => {
       const commandNumber = commandIndex + 1;
@@ -1157,12 +1289,15 @@ export class RunController {
         commandTotal === 1
           ? "verification"
           : `verification command ${commandNumber} of ${commandTotal}`;
+      const runLabel = getAgentRunLabel(options.provider);
       const phaseLabel =
         phase === "review"
-          ? `review for Codex run ${runNumber} of ${options.runCount}`
-          : `Codex run ${runNumber} of ${options.runCount}`;
+          ? `review for ${runLabel} ${runNumber} of ${options.runCount}`
+          : `${runLabel} ${runNumber} of ${options.runCount}`;
       const phaseShortLabel =
-        phase === "review" ? `review for Codex run ${runNumber}` : `Codex run ${runNumber}`;
+        phase === "review"
+          ? `review for ${runLabel} ${runNumber}`
+          : `${runLabel} ${runNumber}`;
       const verificationProcess = this.spawnProcess(
         verificationCommandToRun.executable,
         verificationCommandToRun.args,
@@ -1203,7 +1338,7 @@ export class RunController {
       verificationProcess.on("error", () => {
         this.handleProcessSpawnError(
           verificationProcess,
-          `Failed to start ${commandLabel} after Codex run ${runNumber}; ensure the verification executable is installed and available on PATH.`,
+          `Failed to start ${commandLabel} after ${runLabel} ${runNumber}; ensure the verification executable is installed and available on PATH.`,
         );
         resolve(false);
       });
@@ -1224,7 +1359,7 @@ export class RunController {
             activeProcessId: null,
             latestSummary: {
               status: "stopped",
-              message: `Stopped after verification for ${phaseLabel} because stop was requested; no additional Codex runs will start.`,
+              message: `Stopped after verification for ${phaseLabel} because stop was requested; no additional ${runLabel}s will start.`,
             },
           };
           this.publishRunStatus();

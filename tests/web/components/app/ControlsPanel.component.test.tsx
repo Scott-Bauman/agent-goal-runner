@@ -54,6 +54,8 @@ describe("ControlsPanel", () => {
     );
     expect(screen.getByText("Repository")).toBeTruthy();
     expect(screen.getAllByText("Prompt").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Provider").length).toBeGreaterThan(0);
+    expect(screen.getByText("Codex model")).toBeTruthy();
     expect(screen.getAllByText("Verification").length).toBeGreaterThan(0);
   });
 
@@ -142,9 +144,12 @@ describe("ControlsPanel", () => {
     );
     expect(JSON.parse(String(requestInit.body))).toEqual({
       autoCommit: false,
+      provider: "codex",
       model: "gpt-5.4",
       prompt: "Use goal.md as the source of truth.\n\nComplete the next valid unchecked item.",
       reasoningEffort: "high",
+      claudeModel: null,
+      claudeEffort: null,
       review: {
         enabled: false,
       },
