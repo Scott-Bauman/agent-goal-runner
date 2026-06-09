@@ -41,6 +41,7 @@ import {
   connectionStatusConfig,
   type RuntimeStreamState,
 } from "@/web/events/runtimeStream";
+import { getSseConnectionIndicatorState } from "./topBarConnection";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import { getRepositoryFolderLabel } from "@/web/repository/repositoryPath";
 import {
@@ -68,7 +69,6 @@ type BranchMergeAlert = {
   variant: "success" | "error";
 };
 type SseConnectionStatus = RuntimeStreamState["connectionStatus"];
-type SseConnectionIndicatorState = "active" | "down" | "fixing";
 
 const EMPTY_BRANCHES: RepositoryBranchesResponse = {
   currentBranch: null,
@@ -368,19 +368,6 @@ export function TopBar({
       </div>
     </header>
   );
-}
-
-export function getSseConnectionIndicatorState(
-  connectionStatus: SseConnectionStatus,
-): SseConnectionIndicatorState {
-  switch (connectionStatus) {
-    case "open":
-      return "active";
-    case "error":
-      return "down";
-    case "connecting":
-      return "fixing";
-  }
 }
 
 function SseConnectionBadge({

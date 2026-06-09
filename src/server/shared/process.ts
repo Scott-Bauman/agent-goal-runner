@@ -1,3 +1,4 @@
+/* v8 ignore start -- Type-only module with no runtime behavior. */
 import type {
   ChildProcessWithoutNullStreams,
   SpawnOptionsWithoutStdio,

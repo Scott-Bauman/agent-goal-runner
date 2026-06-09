@@ -16,8 +16,8 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarTrigger,
-  useSidebar,
 } from "@/web/components/ui/sidebar";
+import { useSidebar } from "@/web/components/ui/sidebarContext";
 import type { RuntimeStreamState } from "@/web/events/runtimeStream";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
 import type { RunnerStatus } from "@/web/runner/statuses";

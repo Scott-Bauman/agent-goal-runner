@@ -1,3 +1,4 @@
+/* v8 ignore start -- Type-only module with no runtime behavior. */
 import type { GoalWatcherController } from "../goal/goalWatcher.js";
 import type { FolderDialogResult } from "../repository/folderDialog.js";
 import type { RunController } from "../runner/runController.js";

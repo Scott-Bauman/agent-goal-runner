@@ -1,3 +1,4 @@
+/* v8 ignore start -- Type-only module with no runtime behavior. */
 import type { RunnerStatus } from "../runner/statuses.js";
 
 export type LogEntry = {

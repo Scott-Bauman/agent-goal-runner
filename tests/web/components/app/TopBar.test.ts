@@ -5,7 +5,7 @@ import {
   shouldShowBranchSelector,
   getWorkingTreeStatusLabel,
 } from "../../../../src/web/components/app/topBarGit";
-import { getSseConnectionIndicatorState } from "../../../../src/web/components/app/TopBar";
+import { getSseConnectionIndicatorState } from "../../../../src/web/components/app/topBarConnection";
 import {
   getNextThemeMode,
   getThemeToggleLabel,
