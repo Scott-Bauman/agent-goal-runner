@@ -1,8 +1,10 @@
 # agent-goal-runner
 
-Run long agent coding tasks as a controlled series of fresh, goal-driven passes.
+Run long agent coding tasks as a controlled series of fresh, goal-driven passes. Works with your Codex and Claude subscription!
 
 `agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. Select a repository, keep the goal visible, start a repeatable run loop, and watch each pass execute with live logs, progress, summaries, optional verification, and optional Git commits.
+
+![Agent Goal Runner UI](docs/assets/image.png)
 
 The core idea is simple: instead of asking one overloaded agent session to carry a long task forever, the app repeatedly starts focused CLI passes from the selected repository. Each pass can re-read the current `goal.md`, work on the next valid step, and stop when the goal says the task is complete or blocked. That keeps context fresh, makes progress easier to inspect, and gives you safer checkpoints during larger implementation work.
 
@@ -39,8 +41,7 @@ Use it when you want agent automation to stay tied to a local repo, a visible go
 - Node.js 20 or newer
 - npm
 - Git
-- Codex CLI for Codex runs
-- Claude CLI only when using the Claude provider
+- Codex CLI or Claude CLI 
 
 ## Installation
 
@@ -50,46 +51,33 @@ Clone the repository, then install dependencies:
 npm install
 ```
 
-For Codex workflows, install the bundled `goal-runner-framework` skill globally or into the repository you plan to automate:
-
-```sh
-npm run install:skill:global
-npm run install:skill:repo -- "C:\path\to\target-repo"
-```
-
-## Run Locally
-
-Start the development app:
-
-```sh
-npm run dev
-```
-
-Vite prints the frontend URL. The backend runs on `http://127.0.0.1:4317` by default.
-
-To run a built version:
+Then run locally:
 
 ```sh
 npm run build
 npm start
 ```
 
-## Checks
+## Highly Recomended Skill 
+
+Install the bundled `goal-runner-framework` skill globally or into the repository you plan to automate:
 
 ```sh
-npm test
-npm run typecheck
-npm run lint
+npm run install:skill:global
+npm run install:skill:repo -- "C:\path\to\target-repo"
 ```
+
+There are also buttons in the UI that will run these scripts for you if you do not want to.
+
+This skill allows your agent to make goal.md files that align with this program.
+
+It is extremely highly recommended that you download this skill as the program relies on a semi-structured output for goal.md.
 
 ## Documentation
 
 - [Development guide](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
-## Status
-
-This project is an early local MVP. It is useful for goal-driven local agent workflows today, but the interfaces and workflow details may continue to change before a stable release.
 
 ## License
 
