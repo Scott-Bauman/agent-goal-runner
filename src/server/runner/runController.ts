@@ -84,6 +84,7 @@ export class RunController {
     private readonly spawnProcess: ProcessSpawner,
   ) {}
 
+  // fallow-ignore-next-line unused-class-member
   hasActiveProcess(): boolean {
     return this.activeRunProcess !== null;
   }
@@ -98,6 +99,7 @@ export class RunController {
     this.startCodexRun(options, 1, 0);
   }
 
+  // fallow-ignore-next-line unused-class-member
   requestStop(): boolean {
     if (!this.activeRunProcess) {
       return false;

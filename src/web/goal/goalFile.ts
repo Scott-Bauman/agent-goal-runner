@@ -24,7 +24,7 @@ export type GoalFileState =
       revision: null;
     };
 
-export function createLoadingGoalFileState(): GoalFileState {
+function createLoadingGoalFileState(): GoalFileState {
   return {
     status: "loading",
     error: null,

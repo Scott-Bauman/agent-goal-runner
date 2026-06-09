@@ -6,7 +6,7 @@ export type RepositoryBranches = {
   workingTreeStatus: GitWorkingTreeStatus;
 };
 
-export type GitCommandResult = {
+type GitCommandResult = {
   stdout: string;
   stderr: string;
   exitCode: number | null;
@@ -14,7 +14,7 @@ export type GitCommandResult = {
 
 export type GitWorkingTreeStatus = "clean" | "changes" | "unknown";
 
-export class GitCommandError extends Error {
+class GitCommandError extends Error {
   constructor(
     message: string,
     readonly result: GitCommandResult | null = null,

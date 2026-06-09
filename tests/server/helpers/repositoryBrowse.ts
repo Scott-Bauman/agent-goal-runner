@@ -9,7 +9,7 @@ export const openRepositoryFolderDialogMock = vi.fn(async () => {
   return folderDialogResults.shift() ?? { cancelled: true, path: null };
 });
 
-export function queueRepositoryBrowsePath(repositoryPath: string): void {
+function queueRepositoryBrowsePath(repositoryPath: string): void {
   folderDialogResults.push({
     cancelled: false,
     path: repositoryPath,

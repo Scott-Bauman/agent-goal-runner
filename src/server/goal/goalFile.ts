@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { isNodeErrorCode } from "../shared/nodeErrors.js";
 
-export const DEFAULT_GOAL_MARKDOWN = `# Project Goal
+const DEFAULT_GOAL_MARKDOWN = `# Project Goal
 
 ## Product Goal
 
@@ -22,14 +22,14 @@ Describe the desired end state for this repository.
 - [ ] Replace this default goal with project-specific implementation steps.
 `;
 
-export class GoalPathRestrictionError extends Error {
+class GoalPathRestrictionError extends Error {
   constructor() {
     super("goal.md resolves outside the selected repository.");
     this.name = "GoalPathRestrictionError";
   }
 }
 
-export class GoalRevisionMismatchError extends Error {
+class GoalRevisionMismatchError extends Error {
   readonly actualRevision: string;
   readonly expectedRevision: string;
 
@@ -79,7 +79,7 @@ export function detectGoalStopMarker(
   return null;
 }
 
-export function isPathInsideDirectory(
+function isPathInsideDirectory(
   directoryPath: string,
   targetPath: string,
 ): boolean {
@@ -117,7 +117,7 @@ export async function assertResolvedGoalPathInsideRepository(
   }
 }
 
-export async function assertExistingGoalPathDoesNotEscape(
+async function assertExistingGoalPathDoesNotEscape(
   repositoryPath: string,
   goalFilePath: string,
 ): Promise<void> {
@@ -140,7 +140,7 @@ async function assertGoalPathIsNotSymlink(goalFilePath: string): Promise<void> {
   }
 }
 
-export function getGoalRevision(goalFileStats: Stats): string {
+function getGoalRevision(goalFileStats: Stats): string {
   return [
     goalFileStats.mtimeMs.toString(36),
     goalFileStats.size.toString(36),

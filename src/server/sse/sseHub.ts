@@ -114,13 +114,6 @@ export class SseHub {
     this.appendLogEntry(streamState, stream, chunk);
   }
 
-  appendSystemLog(
-    streamState: RuntimeStreamState,
-    chunk: Buffer | string,
-  ): void {
-    this.appendLogEntry(streamState, "system", chunk);
-  }
-
   private appendLogEntry(
     streamState: RuntimeStreamState,
     stream: LogEntry["stream"],

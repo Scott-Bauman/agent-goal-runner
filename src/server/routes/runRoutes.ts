@@ -6,7 +6,6 @@ import {
   CODEX_REASONING_EFFORTS,
 } from "../runner/codexOptions.js";
 import { DEFAULT_REVIEW_RUN_OPTIONS } from "../runner/runController.js";
-import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
 import { parseVerificationCommand } from "../runner/verificationCommand.js";
 import type { ParsedVerificationCommand } from "../runner/verificationCommand.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
@@ -15,6 +14,7 @@ import {
   formatZodIssues,
   validationError,
 } from "../shared/validation.js";
+import { getRepositoryPathForInactiveRun } from "./routeGuards.js";
 
 const disabledReviewSchema = z
   .object({
@@ -119,19 +119,15 @@ export function registerRunRoutes(
         );
     }
 
-    if (!context.runtimeState.selectedRepositoryPath) {
-      return reply.code(409).send({
-        error: "No repository selected.",
-      });
-    }
+    const repositoryPath = getRepositoryPathForInactiveRun(
+      context,
+      reply,
+      "A run is already active.",
+    );
 
-    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
-      return reply.code(409).send({
-        error: "A run is already active.",
-      });
+    if (!repositoryPath) {
+      return;
     }
-
-    const repositoryPath = context.runtimeState.selectedRepositoryPath;
     const {
       prompt,
       runCount,

@@ -44,7 +44,7 @@ function trimSelectedPath(output: string): string | null {
   return selectedPath.length > 0 ? selectedPath : null;
 }
 
-export async function runDialogCommand(
+async function runDialogCommand(
   command: string,
   args: string[],
 ): Promise<DialogCommandResult> {

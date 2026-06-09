@@ -16,6 +16,7 @@ export class GoalWatcherController {
     this.watchedGoalPath = null;
   }
 
+  // fallow-ignore-next-line unused-class-member
   async replace(repositoryPath: string): Promise<void> {
     const goalFilePath = getGoalFilePath(repositoryPath);
 

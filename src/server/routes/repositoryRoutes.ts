@@ -18,7 +18,7 @@ import {
 import {
   validateRepositoryPath,
 } from "../repository/repositorySelection.js";
-import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
+import { getRepositoryPathForInactiveRun } from "./routeGuards.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
 import {
   formatZodIssues,
@@ -90,19 +90,15 @@ export function registerRepositoryRoutes(
         );
     }
 
-    if (!context.runtimeState.selectedRepositoryPath) {
-      return reply.code(409).send({
-        error: "No repository selected.",
-      });
-    }
+    const repositoryPath = getRepositoryPathForInactiveRun(
+      context,
+      reply,
+      "Cannot switch branches while a run is active.",
+    );
 
-    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
-      return reply.code(409).send({
-        error: "Cannot switch branches while a run is active.",
-      });
+    if (!repositoryPath) {
+      return;
     }
-
-    const repositoryPath = context.runtimeState.selectedRepositoryPath;
 
     try {
       const branches = await getRepositoryBranches(
@@ -147,19 +143,15 @@ export function registerRepositoryRoutes(
         );
     }
 
-    if (!context.runtimeState.selectedRepositoryPath) {
-      return reply.code(409).send({
-        error: "No repository selected.",
-      });
-    }
+    const repositoryPath = getRepositoryPathForInactiveRun(
+      context,
+      reply,
+      "Cannot create branches while a run is active.",
+    );
 
-    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
-      return reply.code(409).send({
-        error: "Cannot create branches while a run is active.",
-      });
+    if (!repositoryPath) {
+      return;
     }
-
-    const repositoryPath = context.runtimeState.selectedRepositoryPath;
 
     try {
       await validateRepositoryBranchName(
@@ -205,19 +197,15 @@ export function registerRepositoryRoutes(
         );
     }
 
-    if (!context.runtimeState.selectedRepositoryPath) {
-      return reply.code(409).send({
-        error: "No repository selected.",
-      });
-    }
+    const repositoryPath = getRepositoryPathForInactiveRun(
+      context,
+      reply,
+      "Cannot merge branches while a run is active.",
+    );
 
-    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
-      return reply.code(409).send({
-        error: "Cannot merge branches while a run is active.",
-      });
+    if (!repositoryPath) {
+      return;
     }
-
-    const repositoryPath = context.runtimeState.selectedRepositoryPath;
 
     try {
       const branches = await getRepositoryBranches(
@@ -279,19 +267,15 @@ export function registerRepositoryRoutes(
         );
     }
 
-    if (!context.runtimeState.selectedRepositoryPath) {
-      return reply.code(409).send({
-        error: "No repository selected.",
-      });
-    }
+    const repositoryPath = getRepositoryPathForInactiveRun(
+      context,
+      reply,
+      "Cannot delete branches while a run is active.",
+    );
 
-    if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
-      return reply.code(409).send({
-        error: "Cannot delete branches while a run is active.",
-      });
+    if (!repositoryPath) {
+      return;
     }
-
-    const repositoryPath = context.runtimeState.selectedRepositoryPath;
 
     try {
       const branches = await getRepositoryBranches(
