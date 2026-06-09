@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
-    "start": "node dist/server/index.js",
+    "start": "concurrently -k \"npm:start:server\" \"npm:start:web\"",
+    "start:server": "node dist/server/index.js",
+    "start:web": "vite preview --host 127.0.0.1",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",

@@ -10,7 +10,7 @@ If the frontend cannot connect, confirm the backend is running:
 curl http://127.0.0.1:4317/health
 ```
 
-During development, `npm run dev` starts both the backend and Vite frontend. You can isolate issues by running:
+During development, `npm run dev` starts both the backend and Vite frontend. For a built app, `npm start` starts both the built backend and the built frontend preview. You can isolate development issues by running:
 
 ```sh
 npm run dev:server
@@ -95,6 +95,6 @@ The app also rejects invalid branch operations such as deleting the current bran
 The frontend uses `GET /api/events` for live status, logs, progress, summaries, and `goal.md` change notifications. If the SSE connection badge does not open:
 
 - Confirm the backend health check succeeds.
-- Confirm Vite is proxying `/api/*` to the backend during development.
-- Restart `npm run dev` if either dev server stopped.
+- Confirm Vite is proxying `/api/*` to the backend during development or built-preview startup.
+- Restart `npm run dev` or `npm start` if either process stopped.
 - Check the browser console and backend terminal for API errors.

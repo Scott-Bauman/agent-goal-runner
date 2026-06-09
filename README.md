@@ -58,6 +58,8 @@ npm run build
 npm start
 ```
 
+Open the frontend at Vite preview's printed local URL, usually `http://127.0.0.1:4173`. The backend runs at `http://127.0.0.1:4317`.
+
 ## Highly Recomended Skill 
 
 Install the bundled `goal-runner-framework` skill globally or into the repository you plan to automate:
