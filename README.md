@@ -1,168 +1,96 @@
-# Agent-goal-runner
+# agent-goal-runner
 
-Lightweight local operations panel for repeatedly running the Agent CLI against a selected repository's `goal.md`.
+Run long agent coding tasks as a controlled series of fresh, goal-driven passes.
 
-The MVP has completed Phase 9 verification and polish. It has a Fastify backend, a Vite React frontend, Tailwind styling, focused shadcn/ui primitives for the operations panel, local API endpoints for selecting a repository plus reading or creating that repository's `goal.md`, Server-Sent Events for status and `goal.md` change notifications, a controlled Agent run loop, optional verification, optional auto-commit, sanitized runtime markdown rendering, editable repeat prompt, run count, and verification command fields, a local auto-commit switch, start/stop controls wired to the run-loop API, connected live status, progress, logs, and latest-summary display, and unit coverage for the core safety and run-loop behavior.
+`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. Select a repository, keep the goal visible, start a repeatable run loop, and watch each pass execute with live logs, progress, summaries, optional verification, and optional Git commits.
 
-## Current Behavior
+The core idea is simple: instead of asking one overloaded agent session to carry a long task forever, the app repeatedly starts focused CLI passes from the selected repository. Each pass can re-read the current `goal.md`, work on the next valid step, and stop when the goal says the task is complete or blocked. That keeps context fresh, makes progress easier to inspect, and gives you safer checkpoints during larger implementation work.
 
-- Backend server starts on `127.0.0.1:4317` by default.
-- Backend exposes `GET /` with the app name and status, plus `GET /health` for a simple health check.
-- Frontend starts with Vite and renders a responsive operations-panel shell.
-- shadcn/ui is configured with local aliases, Tailwind semantic tokens, and generated focused primitives for badges, buttons, cards, empty states, inputs, and textareas.
-- The top bar shows the app name, selected repository path state, and locally tracked runner status badge.
-- The main workspace has a left rendered `goal.md` document panel, a compact right-side controls panel, and a bottom logs plus latest-summary panel.
-- Repository selection is available in the controls panel through a native folder picker with selected-path display and frontend-ready validation errors.
-- When the selected repository has no `goal.md`, the document panel shows a generated shadcn/ui empty state with an explicit create-default-`goal.md` action.
-- The repeat prompt textarea is editable and prefilled with a goal-driven default prompt for future run starts.
-- The run count input is editable and uses the same 1 through 100 numeric bounds accepted by the backend start endpoint.
-- The optional verification command list is editable and each entry accepts the same single-command style that the backend validates when run starts are connected.
-- The auto-commit switch can be toggled locally in the controls panel and is included in run submissions.
-- The Start button submits the repeat prompt, run count, optional verification commands, and auto-commit flag to `POST /api/run/start`.
-- The Start button is disabled until a repository is selected, the prompt is non-empty, the run count is from 1 through 100, no run is active, and no run-control request is pending.
-- The Stop button submits `POST /api/run/stop` and is enabled only while the frontend has a running status and no run-control request is pending.
-- The frontend connects to `GET /api/events` with EventSource and tracks the stream as connecting, open, or errored.
-- The top status badge updates from backend `status` events.
-- The logs panel renders streamed system, stdout, and stderr entries from backend `logs` events.
-- The logs header and latest-summary panel render current run progress from backend `progress` events.
-- The latest-summary panel renders the most recent run-loop message from backend `summary` events.
-- Vite proxies frontend `/api/*` requests to the local backend during development.
-- Repository selection is available through `POST /api/repository/browse`, which opens a native folder picker on the backend host.
-- A successful browse returns `{ "repositoryPath": "...", "cancelled": false }`; user cancellation returns `{ "repositoryPath": null, "cancelled": true }` and leaves state unchanged.
-- The selected path must exist, be a directory, and include a `.git` marker directory or worktree marker file.
-- The selected repository is kept only in server memory and can be read with `GET /api/repository/selection`.
-- The backend reads only the selected repository's `goal.md` through `GET /api/goal`.
-- Missing goals return a clear `GOAL_MISSING` response so the frontend can offer creation.
-- A default `goal.md` can be created only by explicit request with `POST /api/goal`, and existing goals are not overwritten.
-- Goal API requests reject caller-provided alternate markdown paths or plan names.
-- Validation failures return frontend-ready issue details with `VALIDATION_ERROR`.
-- Available `goal.md` content is converted with `marked` using GitHub-flavored markdown and sanitized with DOMPurify before rendering in the browser.
-- Rendered markdown includes readable styling for headings, lists, task checkboxes, links, inline code, code blocks, blockquotes, rules, and tables.
-- Server-Sent Events are available through `GET /api/events`.
-- New SSE clients receive the current `status`, `logs`, `progress`, and `summary` snapshot.
-- Selecting a repository starts or replaces a watcher for only that repository's `goal.md`.
-- Repository selection changes broadcast a `status` event with the selected repository path.
-- `goal.md` add, change, and unlink events broadcast `goalChanged` with the repository path, goal path, and existence state.
-- The frontend refreshes the rendered `goal.md` after matching `goalChanged` events and after complete or blocked run summaries.
-- Run-loop statuses include `idle`, `running`, `stopping`, `complete`, `blocked`, `failed`, and `stopped`.
-- Agent runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100.
-- The run loop requires a selected repository, rejects concurrent starts, and spawns `codex exec <prompt>` inside the selected repository for each pass.
-- Agent stdout and stderr stream to connected SSE clients as log entries.
-- After each successful Agent pass, the backend re-reads the selected repository's `goal.md`.
-- The run loop stops when Agent exits non-zero, the requested run count is reached, refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`, `goal.md` becomes unavailable, or the user requests stop.
-- User stop is available through `POST /api/run/stop`; it marks the run as stopping, terminates the active Agent process when possible, and prevents additional passes from starting.
-- Optional verification is accepted as an empty value or a single executable with arguments; shell operators and shell wrappers are rejected.
-- Verification runs only after a successful Agent pass, streams stdout and stderr over SSE, and stops the run loop on failure.
-- Auto-commit is opt-in per run. When enabled, the backend runs `git add -A`, checks `git status --porcelain`, skips commits when there are no changes, creates a generated commit message when changes exist, streams git output over SSE, and stops the run loop on git failure.
-- Run progress and latest summary updates are broadcast over SSE.
-- Unit tests cover stop-condition detection, request validation, `goal.md` path restrictions, and run-loop state transitions.
-- Manual Phase 9 verification covered repository selection, default goal creation, goal rendering, a harmless one-run Agent loop, max-run stop, `GOAL_COMPLETE`, `GOAL_BLOCKED`, user stop, verification failure, and auto-commit failure.
-- Shared development scripts are available for local dev, type checking, linting, tests, and production builds.
+Use it when you want agent automation to stay tied to a local repo, a visible goal file, and the same checks you would run yourself.
+
+## Why Use It
+
+- Keep long tasks moving without depending on one increasingly stale conversation context.
+- Use `goal.md` as a durable source of truth for what the agent should do next.
+- Watch runs from a local UI instead of stitching together terminal output by hand.
+- Add verification commands so a pass has to prove itself before the loop continues.
+- Optionally commit successful work between passes so progress has clear checkpoints.
+- Stop the loop when the goal is complete, blocked, failing, or no longer safe to continue.
+
+## Features
+
+- Local repository picker with `goal.md` viewing and default goal creation.
+- Controlled Codex or Claude run loop with configurable prompt, model options, and run count.
+- Live status, logs, progress, summaries, and `goal.md` refreshes while the loop runs.
+- Optional verification commands after successful agent passes.
+- Optional auto-commit for successful pass results.
+- Bundled `goal-runner-framework` skill installation helpers.
+- Local Git branch switch, create, merge, delete, and refresh controls.
+
+## What It Is Not
+
+- It is not a hosted service or multi-user web app.
+- It is not an agent provider; it shells out to locally installed CLI tools.
+- It is not a replacement for Git review, tests, or human judgment.
+- It is not published as an npm package; it is intended to run from a local clone.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
-- Codex CLI installed and authenticated for run-loop execution
+- Git
+- Codex CLI for Codex runs
+- Claude CLI only when using the Claude provider
 
-## Local Development
+## Installation
 
-Install dependencies:
+Clone the repository, then install dependencies:
 
 ```sh
 npm install
 ```
 
-For a GitHub clone intended to run the built app, install dependencies, build the app, install the bundled `goal-runner-framework` skill globally, then start the server:
+For Codex workflows, install the bundled `goal-runner-framework` skill globally or into the repository you plan to automate:
 
 ```sh
-npm install
-npm run build
 npm run install:skill:global
-npm start
-```
-
-Repo-local skill installation is the most reliable option when using the app across different selected repositories because Codex can load the skill directly from that repository:
-
-```sh
 npm run install:skill:repo -- "C:\path\to\target-repo"
 ```
 
-Start the backend and frontend together:
+## Run Locally
+
+Start the development app:
 
 ```sh
 npm run dev
 ```
 
-By default:
+Vite prints the frontend URL. The backend runs on `http://127.0.0.1:4317` by default.
 
-- Backend: `http://127.0.0.1:4317`
-- Frontend: Vite's printed local URL, usually `http://127.0.0.1:5173`
-
-Open the frontend URL in a browser to select a repository, render its `goal.md`, configure a run, and watch live status, logs, progress, and the latest run summary. Use `http://127.0.0.1:4317/health` to confirm the backend is running.
-
-You can also run each side separately:
-
-```sh
-npm run dev:server
-npm run dev:web
-```
-
-## Run Loop API
-
-After selecting a repository with `POST /api/repository/browse`, start a controlled Agent loop with:
-
-```sh
-curl -X POST http://127.0.0.1:4317/api/run/start \
-  -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1,\"verificationCommands\":[\"npm test\"],\"autoCommit\":false}"
-```
-
-Request a stop for the active run with:
-
-```sh
-curl -X POST http://127.0.0.1:4317/api/run/stop
-```
-
-Subscribe to status, log, progress, summary, and `goal.md` change events with `GET /api/events`.
-
-The frontend subscribes to this stream automatically during local development and updates the status badge, live logs, run progress, latest summary, and rendered `goal.md` refreshes from those events.
-
-## Verification
-
-Run type checking:
-
-```sh
-npm run typecheck
-```
-
-Run tests:
-
-```sh
-npm test
-```
-
-Run linting:
-
-```sh
-npm run lint
-```
-
-Build production outputs:
+To run a built version:
 
 ```sh
 npm run build
+npm start
 ```
 
-Final MVP verification status: passed.
+## Checks
 
-- `npm run typecheck`
-- `npm test`
-- `npm run lint`
-- `npm run build`
+```sh
+npm test
+npm run typecheck
+npm run lint
+```
 
-Browser automation is intentionally not part of normal verification for this project; visual checks are manual unless explicitly requested.
+## Documentation
 
-## Project Control
+- [Development guide](docs/DEVELOPMENT.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
 
-Implementation work is controlled by this repository's `goal.md`. Future Agent runs should complete one valid unchecked checkbox or sub-checkbox at a time, verify the change, and update only the completed checkbox in `goal.md`.
+## Status
+
+This project is an early local MVP. It is useful for goal-driven local agent workflows today, but the interfaces and workflow details may continue to change before a stable release.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
