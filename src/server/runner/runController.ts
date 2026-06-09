@@ -30,6 +30,21 @@ type AutoCommitResult = {
   committed: boolean;
 };
 
+type CodexProcessCloseContext = {
+  childProcess: ChildProcessWithoutNullStreams;
+  code: number | null;
+  codexJsonParser: CodexJsonEventParser;
+  normalCommitsSinceReview: number;
+  options: StartRunOptions;
+  outputLastMessagePath: string;
+  runNumber: number;
+};
+
+type ReviewContinuationResult = {
+  succeeded: boolean;
+  normalCommitsSinceReview: number;
+};
+
 export type ReviewRunOptions = {
   enabled: boolean;
   intervalCommits: number;
@@ -237,8 +252,6 @@ export class RunController {
       repositoryPath,
       prompt,
       runCount,
-      verificationCommandsToRun,
-      autoCommit,
       model,
       reasoningEffort,
     } = options;
@@ -281,165 +294,15 @@ export class RunController {
       );
     });
     childProcess.on("close", (code) => {
-      void (async () => {
-        if (this.activeRunProcess !== childProcess) {
-          return;
-        }
-
-        this.activeRunProcess = null;
-        this.activeRunProcessKind = null;
-
-        const parsedRemainder = codexJsonParser.flush();
-
-        for (const event of parsedRemainder.events) {
-          this.sseHub.appendRunEvent(this.runtimeState.stream, event);
-        }
-
-        this.updateRunDetails(parsedRemainder.metadata);
-        this.appendFinalAssistantMessageFromFile(outputLastMessagePath);
-
-        if (this.runtimeState.stream.runLoop.stopRequested) {
-          const message = `Stopped after Codex run ${runNumber} of ${runCount} because stop was requested; no additional Codex runs will start.`;
-          this.runtimeState.stream.runLoop = {
-            ...this.runtimeState.stream.runLoop,
-            status: "stopped",
-            stopRequested: false,
-            activeProcessId: null,
-            latestSummary: {
-              status: "stopped",
-              message,
-            },
-          };
-          this.updateRunDetails({
-            status: "stopped",
-            stopReason: message,
-          });
-          this.appendRunEvent("run_completed", message, {
-            stopReason: message,
-          });
-          this.publishRunStatus();
-          return;
-        }
-
-        if (code === 0) {
-          if (verificationCommandsToRun.length > 0) {
-            const verificationSucceeded = await this.runVerificationCommands(
-              options,
-              runNumber,
-            );
-
-            if (!verificationSucceeded) {
-              return;
-            }
-          }
-
-          let nextNormalCommitsSinceReview = normalCommitsSinceReview;
-
-          if (autoCommit) {
-            const commitResult = await this.runAutoCommit(options, runNumber);
-
-            if (!commitResult.succeeded) {
-              return;
-            }
-
-            if (commitResult.committed) {
-              nextNormalCommitsSinceReview += 1;
-            }
-          }
-
-          if (
-            options.review.enabled &&
-            nextNormalCommitsSinceReview >= options.review.intervalCommits
-          ) {
-            const reviewSucceeded = await this.runReview(options, runNumber);
-
-            if (!reviewSucceeded) {
-              return;
-            }
-
-            nextNormalCommitsSinceReview = 0;
-          }
-
-          let refreshedGoalMarkdown: string;
-
-          try {
-            refreshedGoalMarkdown = await readGoalMarkdown(repositoryPath);
-          } catch (error) {
-            this.failRun(
-              isNodeErrorCode(error, "ENOENT")
-                ? `goal.md became unavailable after Codex run ${runNumber}.`
-                : isGoalPathRestrictionError(error)
-                  ? `goal.md resolves outside the selected repository after Codex run ${runNumber}.`
-                  : `Failed to refresh goal.md after Codex run ${runNumber}.`,
-            );
-            return;
-          }
-
-          const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
-
-          if (goalStopMarker) {
-            const markerStatus =
-              goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
-            const message = `Stopped after Codex run ${runNumber} of ${runCount} because refreshed goal.md contains ${goalStopMarker}.`;
-
-            this.runtimeState.stream.runLoop = {
-              ...this.runtimeState.stream.runLoop,
-              status: markerStatus,
-              stopRequested: false,
-              activeProcessId: null,
-              latestSummary: {
-                status: markerStatus,
-                message,
-              },
-            };
-            this.updateRunDetails({
-              status: markerStatus,
-              stopReason: message,
-            });
-            this.appendRunEvent("run_completed", message, {
-              stopReason: message,
-            });
-            this.publishRunStatus();
-            return;
-          }
-
-          if (runNumber < runCount) {
-            this.startCodexRun(
-              options,
-              runNumber + 1,
-              nextNormalCommitsSinceReview,
-            );
-            return;
-          }
-
-          const message = `Completed Codex run ${runNumber} of ${runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`;
-          this.runtimeState.stream.runLoop = {
-            ...this.runtimeState.stream.runLoop,
-            status: "complete",
-            stopRequested: false,
-            activeProcessId: null,
-            latestSummary: {
-              status: "complete",
-              message,
-            },
-          };
-          this.updateRunDetails({
-            status: "complete",
-            stopReason: message,
-          });
-          this.appendRunEvent("run_completed", message, {
-            stopReason: message,
-          });
-          this.publishRunStatus();
-          return;
-        }
-
-        this.failRun(
-          code === null
-            ? `Codex run ${runNumber} exited without an exit code.`
-            : `Codex run ${runNumber} exited with code ${code}.`,
-        );
-      })();
+      void this.handleCodexProcessClose({
+        childProcess,
+        code,
+        codexJsonParser,
+        normalCommitsSinceReview,
+        options,
+        outputLastMessagePath,
+        runNumber,
+      });
     });
     this.activeRunProcess = childProcess;
     this.activeRunProcessKind = "codex";
@@ -486,6 +349,272 @@ export class RunController {
         `Skill preflight checked .agents/skills; missing ${skillPreflight.missing.map((skill) => `$${skill}`).join(", ")}.`,
       );
     }
+  }
+
+  private async handleCodexProcessClose(
+    context: CodexProcessCloseContext,
+  ): Promise<void> {
+    if (this.activeRunProcess !== context.childProcess) {
+      return;
+    }
+
+    this.activeRunProcess = null;
+    this.activeRunProcessKind = null;
+    this.flushCodexJsonParser(context.codexJsonParser);
+    this.appendFinalAssistantMessageFromFile(context.outputLastMessagePath);
+
+    if (this.runtimeState.stream.runLoop.stopRequested) {
+      this.completeStoppedCodexRun(context.options, context.runNumber);
+      return;
+    }
+
+    if (context.code !== 0) {
+      this.failClosedCodexRun(context.runNumber, context.code);
+      return;
+    }
+
+    await this.continueAfterSuccessfulCodexRun(
+      context.options,
+      context.runNumber,
+      context.normalCommitsSinceReview,
+    );
+  }
+
+  private flushCodexJsonParser(codexJsonParser: CodexJsonEventParser): void {
+    const parsedRemainder = codexJsonParser.flush();
+
+    for (const event of parsedRemainder.events) {
+      this.sseHub.appendRunEvent(this.runtimeState.stream, event);
+    }
+
+    this.updateRunDetails(parsedRemainder.metadata);
+  }
+
+  private completeStoppedCodexRun(
+    options: StartRunOptions,
+    runNumber: number,
+  ): void {
+    const message = `Stopped after Codex run ${runNumber} of ${options.runCount} because stop was requested; no additional Codex runs will start.`;
+
+    this.runtimeState.stream.runLoop = {
+      ...this.runtimeState.stream.runLoop,
+      status: "stopped",
+      stopRequested: false,
+      activeProcessId: null,
+      latestSummary: {
+        status: "stopped",
+        message,
+      },
+    };
+    this.updateRunDetails({
+      status: "stopped",
+      stopReason: message,
+    });
+    this.appendRunEvent("run_completed", message, {
+      stopReason: message,
+    });
+    this.publishRunStatus();
+  }
+
+  private failClosedCodexRun(runNumber: number, code: number | null): void {
+    this.failRun(
+      code === null
+        ? `Codex run ${runNumber} exited without an exit code.`
+        : `Codex run ${runNumber} exited with code ${code}.`,
+    );
+  }
+
+  private async continueAfterSuccessfulCodexRun(
+    options: StartRunOptions,
+    runNumber: number,
+    normalCommitsSinceReview: number,
+  ): Promise<void> {
+    const verificationSucceeded = await this.runVerificationAfterCodexIfNeeded(
+      options,
+      runNumber,
+    );
+
+    if (!verificationSucceeded) {
+      return;
+    }
+
+    const commitResult = await this.runAutoCommitAfterCodexIfEnabled(
+      options,
+      runNumber,
+    );
+
+    if (!commitResult.succeeded) {
+      return;
+    }
+
+    const reviewResult = await this.runReviewAfterCodexIfDue(
+      options,
+      runNumber,
+      normalCommitsSinceReview + (commitResult.committed ? 1 : 0),
+    );
+
+    if (!reviewResult.succeeded) {
+      return;
+    }
+
+    const refreshedGoalMarkdown = await this.refreshGoalMarkdownAfterCodexRun(
+      options.repositoryPath,
+      runNumber,
+    );
+
+    if (refreshedGoalMarkdown === null) {
+      return;
+    }
+
+    if (this.stopForGoalMarker(options, runNumber, refreshedGoalMarkdown)) {
+      return;
+    }
+
+    if (runNumber < options.runCount) {
+      this.startCodexRun(
+        options,
+        runNumber + 1,
+        reviewResult.normalCommitsSinceReview,
+      );
+      return;
+    }
+
+    this.completeFinalCodexRun(options, runNumber, refreshedGoalMarkdown);
+  }
+
+  private runVerificationAfterCodexIfNeeded(
+    options: StartRunOptions,
+    runNumber: number,
+  ): Promise<boolean> {
+    if (options.verificationCommandsToRun.length === 0) {
+      return Promise.resolve(true);
+    }
+
+    return this.runVerificationCommands(options, runNumber);
+  }
+
+  private runAutoCommitAfterCodexIfEnabled(
+    options: StartRunOptions,
+    runNumber: number,
+  ): Promise<AutoCommitResult> {
+    if (!options.autoCommit) {
+      return Promise.resolve({
+        succeeded: true,
+        committed: false,
+      });
+    }
+
+    return this.runAutoCommit(options, runNumber);
+  }
+
+  private async runReviewAfterCodexIfDue(
+    options: StartRunOptions,
+    runNumber: number,
+    normalCommitsSinceReview: number,
+  ): Promise<ReviewContinuationResult> {
+    const shouldRunReview =
+      options.review.enabled &&
+      normalCommitsSinceReview >= options.review.intervalCommits;
+
+    if (!shouldRunReview) {
+      return {
+        succeeded: true,
+        normalCommitsSinceReview,
+      };
+    }
+
+    const reviewSucceeded = await this.runReview(options, runNumber);
+
+    return {
+      succeeded: reviewSucceeded,
+      normalCommitsSinceReview: reviewSucceeded ? 0 : normalCommitsSinceReview,
+    };
+  }
+
+  private async refreshGoalMarkdownAfterCodexRun(
+    repositoryPath: string,
+    runNumber: number,
+  ): Promise<string | null> {
+    try {
+      return await readGoalMarkdown(repositoryPath);
+    } catch (error) {
+      this.failRun(this.formatGoalRefreshError(error, runNumber));
+      return null;
+    }
+  }
+
+  private formatGoalRefreshError(error: unknown, runNumber: number): string {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return `goal.md became unavailable after Codex run ${runNumber}.`;
+    }
+
+    if (isGoalPathRestrictionError(error)) {
+      return `goal.md resolves outside the selected repository after Codex run ${runNumber}.`;
+    }
+
+    return `Failed to refresh goal.md after Codex run ${runNumber}.`;
+  }
+
+  private stopForGoalMarker(
+    options: StartRunOptions,
+    runNumber: number,
+    refreshedGoalMarkdown: string,
+  ): boolean {
+    const goalStopMarker = detectGoalStopMarker(refreshedGoalMarkdown);
+
+    if (!goalStopMarker) {
+      return false;
+    }
+
+    const markerStatus = goalStopMarker === "GOAL_BLOCKED" ? "blocked" : "complete";
+    const message = `Stopped after Codex run ${runNumber} of ${options.runCount} because refreshed goal.md contains ${goalStopMarker}.`;
+
+    this.runtimeState.stream.runLoop = {
+      ...this.runtimeState.stream.runLoop,
+      status: markerStatus,
+      stopRequested: false,
+      activeProcessId: null,
+      latestSummary: {
+        status: markerStatus,
+        message,
+      },
+    };
+    this.updateRunDetails({
+      status: markerStatus,
+      stopReason: message,
+    });
+    this.appendRunEvent("run_completed", message, {
+      stopReason: message,
+    });
+    this.publishRunStatus();
+    return true;
+  }
+
+  private completeFinalCodexRun(
+    options: StartRunOptions,
+    runNumber: number,
+    refreshedGoalMarkdown: string,
+  ): void {
+    const message = `Completed Codex run ${runNumber} of ${options.runCount} and refreshed goal.md (${refreshedGoalMarkdown.length} characters).`;
+
+    this.runtimeState.stream.runLoop = {
+      ...this.runtimeState.stream.runLoop,
+      status: "complete",
+      stopRequested: false,
+      activeProcessId: null,
+      latestSummary: {
+        status: "complete",
+        message,
+      },
+    };
+    this.updateRunDetails({
+      status: "complete",
+      stopReason: message,
+    });
+    this.appendRunEvent("run_completed", message, {
+      stopReason: message,
+    });
+    this.publishRunStatus();
   }
 
   private async runReview(

@@ -18,6 +18,17 @@ export type ParsedCodexJsonEvent = {
 
 type JsonObject = Record<string, unknown>;
 
+type RunEventParseContext = {
+  command: string | undefined;
+  exitCode: number | undefined;
+  files: string[];
+  level: string;
+  message: string;
+  normalizedType: string;
+  role: string;
+  status: string;
+};
+
 const SKILL_REFERENCE_PATTERN = /\$([A-Za-z0-9][A-Za-z0-9_-]*)\b/g;
 const DIRECT_SKILL_REFERENCE_PATTERN =
   /\b(?:use|invoke|load|apply)\s+(?:the\s+)?(?:skill\s+)?([A-Za-z0-9][A-Za-z0-9_-]*)\s+skill\b/gi;
@@ -197,15 +208,39 @@ function toRunEvent(
   object: JsonObject,
   seenDiffs: Set<string>,
 ): RunEventPayload | null {
+  const context = createRunEventParseContext(object);
+
+  return (
+    createLevelEvent(context) ??
+    createSessionEvent(context) ??
+    createCommandEvent(context) ??
+    createPatchEvent(context, seenDiffs) ??
+    createFileEvent(context) ??
+    createAssistantMessageEvent(context) ??
+    createFailureEvent(context) ??
+    createSkillLookupWarning(context)
+  );
+}
+
+function createRunEventParseContext(object: JsonObject): RunEventParseContext {
   const type = getStringField(object, "type", "event", "name", "kind");
-  const normalizedType = normalizeText(type);
-  const status = normalizeText(getStringField(object, "status", "state", "outcome"));
-  const level = normalizeText(getStringField(object, "level", "severity"));
-  const role = normalizeText(getStringField(object, "role"));
-  const message = extractMessage(object);
-  const command = getStringField(object, "command", "cmd");
-  const exitCode = getNumberField(object, "exit_code", "exitCode", "code");
-  const files = extractChangedFilesFromObject(object);
+
+  return {
+    command: getStringField(object, "command", "cmd"),
+    exitCode: getNumberField(object, "exit_code", "exitCode", "code"),
+    files: extractChangedFilesFromObject(object),
+    level: normalizeText(getStringField(object, "level", "severity")),
+    message: extractMessage(object),
+    normalizedType: normalizeText(type),
+    role: normalizeText(getStringField(object, "role")),
+    status: normalizeText(getStringField(object, "status", "state", "outcome")),
+  };
+}
+
+function createLevelEvent(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  const { level, message } = context;
 
   if (level === "warn" || level === "warning") {
     return {
@@ -214,106 +249,174 @@ function toRunEvent(
     };
   }
 
-  if (level === "error") {
-    return {
-      kind: isFailedSkillLookup(message) ? "warning" : "error",
-      message: message || "Codex emitted an error.",
-    };
+  if (level !== "error") {
+    return null;
   }
 
-  if (
+  return {
+    kind: isFailedSkillLookup(message) ? "warning" : "error",
+    message: message || "Codex emitted an error.",
+  };
+}
+
+function createSessionEvent(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  const { message, normalizedType, status } = context;
+  const isSessionType =
     normalizedType.includes("session") ||
     normalizedType.includes("thread") ||
-    normalizedType.includes("conversation")
-  ) {
-    if (isStarted(normalizedType, status)) {
-      return {
-        kind: "codex_session_started",
-        message: message || "Codex session started.",
-      };
-    }
+    normalizedType.includes("conversation");
+
+  if (!isSessionType || !isStarted(normalizedType, status)) {
+    return null;
   }
 
-  if (normalizedType.includes("command") || command) {
-    if (isFailed(normalizedType, status) || (typeof exitCode === "number" && exitCode !== 0)) {
-      return {
-        command,
-        exitCode,
-        kind: "command_failed",
-        message: message || formatCommandMessage(command, "failed"),
-      };
-    }
+  return {
+    kind: "codex_session_started",
+    message: message || "Codex session started.",
+  };
+}
 
-    if (isSucceeded(normalizedType, status) || exitCode === 0) {
-      return {
-        command,
-        exitCode,
-        kind: "command_succeeded",
-        message: message || formatCommandMessage(command, "succeeded"),
-      };
-    }
+function createCommandEvent(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  const { command, exitCode, message, normalizedType, status } = context;
 
-    if (isStarted(normalizedType, status)) {
-      return {
-        command,
-        kind: "command_started",
-        message: message || formatCommandMessage(command, "started"),
-      };
-    }
+  if (!normalizedType.includes("command") && !command) {
+    return null;
   }
 
-  if (normalizedType.includes("patch") || hasDiff(message)) {
-    const diffFingerprint = message ? normalizeDiff(message) : null;
-
-    if (diffFingerprint) {
-      if (seenDiffs.has(diffFingerprint)) {
-        return null;
-      }
-
-      seenDiffs.add(diffFingerprint);
-    }
-
+  if (isFailed(normalizedType, status) || isNonZeroExitCode(exitCode)) {
     return {
-      files,
-      kind: "patch_applied",
-      message: message || formatFilesMessage(files, "Patch applied."),
+      command,
+      exitCode,
+      kind: "command_failed",
+      message: message || formatCommandMessage(command, "failed"),
     };
   }
 
-  if (files.length > 0 || normalizedType.includes("file")) {
+  if (isSucceeded(normalizedType, status) || exitCode === 0) {
     return {
-      files,
-      kind: "file_changed",
-      message: message || formatFilesMessage(files, "File changed."),
+      command,
+      exitCode,
+      kind: "command_succeeded",
+      message: message || formatCommandMessage(command, "succeeded"),
     };
   }
+
+  if (!isStarted(normalizedType, status)) {
+    return null;
+  }
+
+  return {
+    command,
+    kind: "command_started",
+    message: message || formatCommandMessage(command, "started"),
+  };
+}
+
+function createPatchEvent(
+  context: RunEventParseContext,
+  seenDiffs: Set<string>,
+): RunEventPayload | null {
+  const { files, message, normalizedType } = context;
+
+  if (!normalizedType.includes("patch") && !hasDiff(message)) {
+    return null;
+  }
+
+  if (hasSeenDiff(message, seenDiffs)) {
+    return null;
+  }
+
+  return {
+    files,
+    kind: "patch_applied",
+    message: message || formatFilesMessage(files, "Patch applied."),
+  };
+}
+
+function createFileEvent(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  const { files, message, normalizedType } = context;
+
+  if (files.length === 0 && !normalizedType.includes("file")) {
+    return null;
+  }
+
+  return {
+    files,
+    kind: "file_changed",
+    message: message || formatFilesMessage(files, "File changed."),
+  };
+}
+
+function createAssistantMessageEvent(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  const { message, normalizedType, role } = context;
 
   if (
-    role === "assistant" &&
-    (normalizedType.includes("message") || normalizedType.includes("response")) &&
-    message
+    role !== "assistant" ||
+    (!normalizedType.includes("message") && !normalizedType.includes("response")) ||
+    !message
   ) {
-    return {
-      kind: "final_assistant_message",
-      message,
-    };
+    return null;
   }
 
-  if (isFailed(normalizedType, status)) {
-    return {
-      kind: isFailedSkillLookup(message) ? "warning" : "error",
-      message: message || "Codex reported a failure.",
-    };
+  return {
+    kind: "final_assistant_message",
+    message,
+  };
+}
+
+function createFailureEvent(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  const { message, normalizedType, status } = context;
+
+  if (!isFailed(normalizedType, status)) {
+    return null;
   }
 
-  if (message && isFailedSkillLookup(message)) {
-    return {
-      kind: "warning",
-      message,
-    };
+  return {
+    kind: isFailedSkillLookup(message) ? "warning" : "error",
+    message: message || "Codex reported a failure.",
+  };
+}
+
+function createSkillLookupWarning(
+  context: RunEventParseContext,
+): RunEventPayload | null {
+  if (!context.message || !isFailedSkillLookup(context.message)) {
+    return null;
   }
 
-  return null;
+  return {
+    kind: "warning",
+    message: context.message,
+  };
+}
+
+function isNonZeroExitCode(exitCode: number | undefined): boolean {
+  return typeof exitCode === "number" && exitCode !== 0;
+}
+
+function hasSeenDiff(message: string, seenDiffs: Set<string>): boolean {
+  const diffFingerprint = message ? normalizeDiff(message) : null;
+
+  if (!diffFingerprint) {
+    return false;
+  }
+
+  if (seenDiffs.has(diffFingerprint)) {
+    return true;
+  }
+
+  seenDiffs.add(diffFingerprint);
+  return false;
 }
 
 function extractMetadata(object: JsonObject): ParsedCodexJsonEvent["metadata"] {
@@ -380,25 +483,8 @@ function extractMessage(object: JsonObject): string {
 function extractChangedFilesFromObject(object: JsonObject): string[] {
   const files = new Set<string>();
 
-  for (const key of ["file", "path", "filename"]) {
-    const value = object[key];
-
-    if (typeof value === "string" && looksLikePath(value)) {
-      files.add(shortenPath(value));
-    }
-  }
-
-  for (const key of ["files", "paths", "changed_files", "changedFiles"]) {
-    const value = object[key];
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (typeof item === "string" && looksLikePath(item)) {
-          files.add(shortenPath(item));
-        }
-      }
-    }
-  }
+  collectPathFields(files, object);
+  collectPathArrayFields(files, object);
 
   const message = extractMessage(object);
 
@@ -407,6 +493,30 @@ function extractChangedFilesFromObject(object: JsonObject): string[] {
   }
 
   return Array.from(files).sort((first, second) => first.localeCompare(second));
+}
+
+function collectPathFields(files: Set<string>, object: JsonObject): void {
+  for (const key of ["file", "path", "filename"]) {
+    addPath(files, object[key]);
+  }
+}
+
+function collectPathArrayFields(files: Set<string>, object: JsonObject): void {
+  for (const key of ["files", "paths", "changed_files", "changedFiles"]) {
+    const value = object[key];
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        addPath(files, item);
+      }
+    }
+  }
+}
+
+function addPath(files: Set<string>, value: unknown): void {
+  if (typeof value === "string" && looksLikePath(value)) {
+    files.add(shortenPath(value));
+  }
 }
 
 function extractPathsFromText(text: string): string[] {

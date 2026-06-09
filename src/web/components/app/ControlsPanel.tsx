@@ -1,4 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   BadgeCheck,
@@ -83,6 +89,7 @@ const CLI_DEFAULT_OPTION = "CLI default";
 
 type ModelSelection = CodexModel | typeof CLI_DEFAULT_OPTION;
 type ReasoningEffortSelection = CodexReasoningEffort | typeof CLI_DEFAULT_OPTION;
+type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
 const MODEL_OPTIONS: ModelSelection[] = [CLI_DEFAULT_OPTION, ...CODEX_MODELS];
 const REASONING_EFFORT_OPTIONS: ReasoningEffortSelection[] = [
@@ -217,6 +224,750 @@ function toRunReasoningEffort(
   return selection === CLI_DEFAULT_OPTION ? null : selection;
 }
 
+function getSelectedRepositoryPath(
+  repositorySelection: RepositorySelectionState,
+): string | null {
+  return repositorySelection.status === "ready"
+    ? repositorySelection.repositoryPath
+    : null;
+}
+
+function isCountInAllowedRange(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 100;
+}
+
+function canSubmitRun({
+  hasRepositoryPath,
+  isPromptValid,
+  isReviewIntervalValid,
+  isReviewPromptValid,
+  isRunActive,
+  isRunControlPending,
+  isRunCountValid,
+  isRepositorySubmitting,
+}: {
+  hasRepositoryPath: boolean;
+  isPromptValid: boolean;
+  isRepositorySubmitting: boolean;
+  isReviewIntervalValid: boolean;
+  isReviewPromptValid: boolean;
+  isRunActive: boolean;
+  isRunControlPending: boolean;
+  isRunCountValid: boolean;
+}): boolean {
+  return (
+    hasRepositoryPath &&
+    isPromptValid &&
+    isRunCountValid &&
+    isReviewIntervalValid &&
+    isReviewPromptValid &&
+    !isRunActive &&
+    !isRunControlPending &&
+    !isRepositorySubmitting
+  );
+}
+
+function canSubmitStop({
+  isRepositorySubmitting,
+  isRunControlPending,
+  runnerStatus,
+}: {
+  isRepositorySubmitting: boolean;
+  isRunControlPending: boolean;
+  runnerStatus: RunnerStatus;
+}): boolean {
+  return (
+    runnerStatus === "running" &&
+    !isRunControlPending &&
+    !isRepositorySubmitting
+  );
+}
+
+function formatValidationIssueMessages(issues: ValidationIssue[]): string[] {
+  return issues.map((issue) =>
+    issue.path === "request" || issue.path === "path"
+      ? issue.message
+      : `${issue.path}: ${issue.message}`,
+  );
+}
+
+function FormAlert({
+  error,
+  errorId,
+  issueMessages,
+  issuesId,
+}: {
+  error: string | null;
+  errorId: string;
+  issueMessages: string[];
+  issuesId: string;
+}) {
+  if (!error && issueMessages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
+      role="alert"
+    >
+      {error ? (
+        <p
+          className="font-medium"
+          id={errorId}
+        >
+          {error}
+        </p>
+      ) : null}
+      {issueMessages.length > 0 ? (
+        <ul
+          className="flex flex-col gap-1"
+          id={issuesId}
+        >
+          {issueMessages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function SelectionCombobox<T extends string>({
+  id,
+  items,
+  label,
+  onValueChange,
+  value,
+}: {
+  id: string;
+  items: readonly T[];
+  label: string;
+  onValueChange: (value: T) => void;
+  value: T;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label
+        className="text-xs font-medium text-foreground"
+        htmlFor={id}
+      >
+        {label}
+      </label>
+      <Combobox<T>
+        items={items}
+        onValueChange={(nextValue) => {
+          if (nextValue) {
+            onValueChange(nextValue);
+          }
+        }}
+        value={value}
+      >
+        <ComboboxInput
+          id={id}
+          readOnly
+        />
+        <ComboboxContent>
+          <ComboboxList>
+            {items.map((option) => (
+              <ComboboxItem
+                key={option}
+                value={option}
+              >
+                {option}
+              </ComboboxItem>
+            ))}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </div>
+  );
+}
+
+function RunControlButtons({
+  canStartRun,
+  canStopRun,
+  onRunStart,
+  onRunStop,
+  status,
+}: {
+  canStartRun: boolean;
+  canStopRun: boolean;
+  onRunStart: () => void;
+  onRunStop: () => void;
+  status: RunControlFormState["status"];
+}) {
+  return (
+    <>
+      <Button
+        disabled={!canStartRun}
+        onClick={onRunStart}
+        type="button"
+      >
+        <Play
+          aria-hidden="true"
+          data-icon="inline-start"
+          strokeWidth={2}
+        />
+        {status === "starting" ? "Starting..." : "Start"}
+      </Button>
+      <Button
+        disabled={!canStopRun}
+        onClick={onRunStop}
+        type="button"
+        variant="outline"
+      >
+        <Square
+          aria-hidden="true"
+          data-icon="inline-start"
+          strokeWidth={2}
+        />
+        {status === "stopping" ? "Stopping..." : "Stop"}
+      </Button>
+    </>
+  );
+}
+
+function RepositorySetupSection({
+  describedBy,
+  form,
+  hasError,
+  issueMessages,
+  onBrowse,
+}: {
+  describedBy: string | undefined;
+  form: RepositoryPathFormState;
+  hasError: boolean;
+  issueMessages: string[];
+  onBrowse: () => void;
+}) {
+  return (
+    <SetupArea
+      icon={REPOSITORY_SECTION.icon}
+      id={REPOSITORY_SECTION.id}
+      title={REPOSITORY_SECTION.title}
+    >
+      <Button
+        aria-describedby={describedBy}
+        aria-invalid={hasError}
+        disabled={form.status === "submitting"}
+        onClick={onBrowse}
+        type="button"
+        variant="outline"
+      >
+        <FolderOpen
+          aria-hidden="true"
+          data-icon="inline-start"
+          strokeWidth={2}
+        />
+        {form.status === "submitting" ? "Choosing..." : "Choose Folder"}
+      </Button>
+      <FormAlert
+        error={form.error}
+        errorId="repository-path-error"
+        issueMessages={issueMessages}
+        issuesId="repository-path-issues"
+      />
+    </SetupArea>
+  );
+}
+
+function PromptSetupSection({
+  onPromptChange,
+  prompt,
+}: {
+  onPromptChange: (prompt: string) => void;
+  prompt: string;
+}) {
+  return (
+    <SetupArea
+      icon={PROMPT_SECTION.icon}
+      id={PROMPT_SECTION.id}
+      info={PROMPT_SECTION.info}
+      title={PROMPT_SECTION.title}
+    >
+      <div className="flex flex-col gap-2">
+        <label
+          className="sr-only"
+          htmlFor="repeat-prompt"
+        >
+          Prompt
+        </label>
+        <Textarea
+          className="min-h-28 resize-y leading-5"
+          id="repeat-prompt"
+          placeholder="Use goal.md as the source of truth."
+          onChange={(event) => {
+            onPromptChange(event.target.value);
+          }}
+          value={prompt}
+        />
+      </div>
+    </SetupArea>
+  );
+}
+
+function ModelSetupSection({
+  model,
+  onModelChange,
+  onReasoningEffortChange,
+  reasoningEffort,
+}: {
+  model: ModelSelection;
+  onModelChange: (model: ModelSelection) => void;
+  onReasoningEffortChange: (reasoningEffort: ReasoningEffortSelection) => void;
+  reasoningEffort: ReasoningEffortSelection;
+}) {
+  return (
+    <SetupArea
+      icon={MODEL_SECTION.icon}
+      id={MODEL_SECTION.id}
+      info={MODEL_SECTION.info}
+      title={MODEL_SECTION.title}
+    >
+      <div className="grid gap-3">
+        <SelectionCombobox
+          id="codex-model"
+          items={MODEL_OPTIONS}
+          label="Model"
+          onValueChange={onModelChange}
+          value={model}
+        />
+        <SelectionCombobox
+          id="reasoning-effort"
+          items={REASONING_EFFORT_OPTIONS}
+          label="Reasoning effort"
+          onValueChange={onReasoningEffortChange}
+          value={reasoningEffort}
+        />
+      </div>
+    </SetupArea>
+  );
+}
+
+function RunCountSetupSection({
+  isValid,
+  onRunCountChange,
+  runCount,
+}: {
+  isValid: boolean;
+  onRunCountChange: (runCount: string) => void;
+  runCount: string;
+}) {
+  return (
+    <SetupArea
+      icon={RUN_SECTION.icon}
+      id={RUN_SECTION.id}
+      info={RUN_SECTION.info}
+      title={RUN_SECTION.title}
+    >
+      <div className="grid gap-3">
+        <div className="flex flex-col gap-2">
+          <label
+            className="sr-only"
+            htmlFor="run-count"
+          >
+            Run count
+          </label>
+          <Input
+            aria-invalid={!isValid}
+            id="run-count"
+            inputMode="numeric"
+            max={100}
+            min={1}
+            onChange={(event) => {
+              onRunCountChange(event.target.value);
+            }}
+            step={1}
+            type="number"
+            value={runCount}
+          />
+        </div>
+      </div>
+    </SetupArea>
+  );
+}
+
+function VerificationSetupSection({
+  commands,
+  setCommands,
+}: {
+  commands: string[];
+  setCommands: StateSetter<string[]>;
+}) {
+  return (
+    <SetupArea
+      icon={VERIFICATION_SECTION.icon}
+      id={VERIFICATION_SECTION.id}
+      info={VERIFICATION_SECTION.info}
+      title={VERIFICATION_SECTION.title}
+    >
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
+          {commands.map((command, index) => (
+            <VerificationCommandInput
+              command={command}
+              commandCount={commands.length}
+              index={index}
+              key={`verification-command-${index}`}
+              setCommands={setCommands}
+            />
+          ))}
+        </div>
+        <Button
+          aria-label="Add verification command"
+          className="self-start"
+          size="icon"
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setCommands((currentCommands) => [...currentCommands, ""]);
+          }}
+        >
+          <Plus
+            aria-hidden="true"
+            strokeWidth={2}
+          />
+        </Button>
+      </div>
+    </SetupArea>
+  );
+}
+
+function VerificationCommandInput({
+  command,
+  commandCount,
+  index,
+  setCommands,
+}: {
+  command: string;
+  commandCount: number;
+  index: number;
+  setCommands: StateSetter<string[]>;
+}) {
+  const commandId = `verification-command-${index}`;
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <Input
+        aria-label={`Verification command ${index + 1}`}
+        className="min-w-0 font-mono text-xs"
+        id={commandId}
+        placeholder={index === 0 ? "npm test" : "npm run lint"}
+        onChange={(event) => {
+          setCommands((currentCommands) =>
+            currentCommands.map((currentCommand, commandIndex) =>
+              commandIndex === index ? event.target.value : currentCommand,
+            ),
+          );
+        }}
+        value={command}
+      />
+      {commandCount > 1 ? (
+        <Button
+          aria-label={`Remove verification command ${index + 1}`}
+          size="icon"
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            setCommands((currentCommands) =>
+              currentCommands.filter(
+                (_currentCommand, commandIndex) => commandIndex !== index,
+              ),
+            );
+          }}
+        >
+          <X
+            aria-hidden="true"
+            strokeWidth={2}
+          />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function CommitSetupSection({
+  autoCommit,
+  onAutoCommitChange,
+  reviewEnabled,
+}: {
+  autoCommit: boolean;
+  onAutoCommitChange: StateSetter<boolean>;
+  reviewEnabled: boolean;
+}) {
+  return (
+    <SetupArea
+      icon={COMMIT_SECTION.icon}
+      id={COMMIT_SECTION.id}
+      info={COMMIT_SECTION.info}
+      title={COMMIT_SECTION.title}
+    >
+      <div className="flex flex-col gap-2">
+        <span
+          className="sr-only"
+          id="auto-commit-label"
+        >
+          Auto-commit
+        </span>
+        <div className="flex h-9 items-center justify-between gap-3 rounded-md border border-input bg-muted px-3">
+          <span
+            className="text-xs font-medium text-muted-foreground"
+            id="auto-commit-state"
+          >
+            {reviewEnabled ? "Required by review" : autoCommit ? "Enabled" : "Off"}
+          </span>
+          <button
+            aria-checked={autoCommit}
+            aria-describedby="auto-commit-state"
+            aria-labelledby="auto-commit-label"
+            className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-primary"
+            data-state={autoCommit ? "checked" : "unchecked"}
+            disabled={reviewEnabled}
+            id="auto-commit"
+            onClick={() => {
+              if (!reviewEnabled) {
+                onAutoCommitChange((currentAutoCommit) => !currentAutoCommit);
+              }
+            }}
+            role="switch"
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform data-[state=checked]:translate-x-4"
+              data-state={autoCommit ? "checked" : "unchecked"}
+            />
+          </button>
+        </div>
+      </div>
+    </SetupArea>
+  );
+}
+
+function ReviewSetupSection({
+  isPromptValid,
+  isReviewIntervalValid,
+  onReviewEnabledChange,
+  parsedReviewIntervalCommits,
+  reviewEnabled,
+  reviewIntervalCommits,
+  reviewModel,
+  reviewPrompt,
+  reviewReasoningEffort,
+  setAutoCommit,
+  setReviewIntervalCommits,
+  setReviewModel,
+  setReviewPrompt,
+  setReviewReasoningEffort,
+}: {
+  isPromptValid: boolean;
+  isReviewIntervalValid: boolean;
+  onReviewEnabledChange: StateSetter<boolean>;
+  parsedReviewIntervalCommits: number;
+  reviewEnabled: boolean;
+  reviewIntervalCommits: string;
+  reviewModel: ModelSelection;
+  reviewPrompt: string;
+  reviewReasoningEffort: ReasoningEffortSelection;
+  setAutoCommit: StateSetter<boolean>;
+  setReviewIntervalCommits: StateSetter<string>;
+  setReviewModel: StateSetter<ModelSelection>;
+  setReviewPrompt: StateSetter<string>;
+  setReviewReasoningEffort: StateSetter<ReasoningEffortSelection>;
+}) {
+  return (
+    <SetupArea
+      icon={REVIEW_SECTION.icon}
+      id={REVIEW_SECTION.id}
+      info={REVIEW_SECTION.info}
+      title={REVIEW_SECTION.title}
+    >
+      <div className="flex flex-col gap-3">
+        <span
+          className="sr-only"
+          id="review-label"
+        >
+          Review
+        </span>
+        <div className="flex h-9 items-center justify-between gap-3 rounded-md border border-input bg-muted px-3">
+          <span
+            className="text-xs font-medium text-muted-foreground"
+            id="review-state"
+          >
+            {reviewEnabled ? "Enabled" : "Off"}
+          </span>
+          <button
+            aria-checked={reviewEnabled}
+            aria-describedby="review-state"
+            aria-labelledby="review-label"
+            className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-primary"
+            data-state={reviewEnabled ? "checked" : "unchecked"}
+            id="review-enabled"
+            onClick={() => {
+              onReviewEnabledChange((currentReviewEnabled) => {
+                const nextReviewEnabled = !currentReviewEnabled;
+
+                if (nextReviewEnabled) {
+                  setAutoCommit(true);
+                }
+
+                return nextReviewEnabled;
+              });
+            }}
+            role="switch"
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform data-[state=checked]:translate-x-4"
+              data-state={reviewEnabled ? "checked" : "unchecked"}
+            />
+          </button>
+        </div>
+
+        {isReviewSettingsVisible(reviewEnabled) ? (
+          <ReviewSettings
+            isPromptValid={isPromptValid}
+            isReviewIntervalValid={isReviewIntervalValid}
+            parsedReviewIntervalCommits={parsedReviewIntervalCommits}
+            reviewIntervalCommits={reviewIntervalCommits}
+            reviewModel={reviewModel}
+            reviewPrompt={reviewPrompt}
+            reviewReasoningEffort={reviewReasoningEffort}
+            setReviewIntervalCommits={setReviewIntervalCommits}
+            setReviewModel={setReviewModel}
+            setReviewPrompt={setReviewPrompt}
+            setReviewReasoningEffort={setReviewReasoningEffort}
+          />
+        ) : null}
+      </div>
+    </SetupArea>
+  );
+}
+
+function ReviewSettings({
+  isPromptValid,
+  isReviewIntervalValid,
+  parsedReviewIntervalCommits,
+  reviewIntervalCommits,
+  reviewModel,
+  reviewPrompt,
+  reviewReasoningEffort,
+  setReviewIntervalCommits,
+  setReviewModel,
+  setReviewPrompt,
+  setReviewReasoningEffort,
+}: {
+  isPromptValid: boolean;
+  isReviewIntervalValid: boolean;
+  parsedReviewIntervalCommits: number;
+  reviewIntervalCommits: string;
+  reviewModel: ModelSelection;
+  reviewPrompt: string;
+  reviewReasoningEffort: ReasoningEffortSelection;
+  setReviewIntervalCommits: StateSetter<string>;
+  setReviewModel: StateSetter<ModelSelection>;
+  setReviewPrompt: StateSetter<string>;
+  setReviewReasoningEffort: StateSetter<ReasoningEffortSelection>;
+}) {
+  return (
+    <div className="review-settings-panel grid gap-3">
+      <ReviewIntervalInput
+        isValid={isReviewIntervalValid}
+        reviewIntervalCommits={reviewIntervalCommits}
+        setReviewIntervalCommits={setReviewIntervalCommits}
+        setReviewPrompt={setReviewPrompt}
+      />
+      <div className="grid gap-3">
+        <SelectionCombobox
+          id="review-model"
+          items={MODEL_OPTIONS}
+          label="Review model"
+          onValueChange={setReviewModel}
+          value={reviewModel}
+        />
+        <SelectionCombobox
+          id="review-reasoning-effort"
+          items={REASONING_EFFORT_OPTIONS}
+          label="Review reasoning"
+          onValueChange={setReviewReasoningEffort}
+          value={reviewReasoningEffort}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <label
+          className="text-xs font-medium text-foreground"
+          htmlFor="review-prompt"
+        >
+          Review prompt
+        </label>
+        <Textarea
+          aria-invalid={!isPromptValid}
+          className="min-h-28 resize-y leading-5"
+          id="review-prompt"
+          placeholder={createDefaultReviewPrompt(parsedReviewIntervalCommits)}
+          onChange={(event) => {
+            setReviewPrompt(event.target.value);
+          }}
+          value={reviewPrompt}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReviewIntervalInput({
+  isValid,
+  reviewIntervalCommits,
+  setReviewIntervalCommits,
+  setReviewPrompt,
+}: {
+  isValid: boolean;
+  reviewIntervalCommits: string;
+  setReviewIntervalCommits: StateSetter<string>;
+  setReviewPrompt: StateSetter<string>;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label
+        className="text-xs font-medium text-foreground"
+        htmlFor="review-interval-commits"
+      >
+        Review every
+      </label>
+      <Input
+        aria-invalid={!isValid}
+        id="review-interval-commits"
+        inputMode="numeric"
+        max={100}
+        min={1}
+        onChange={(event) => {
+          const nextIntervalCommits = event.target.value;
+          const currentParsedIntervalCommits = Number(reviewIntervalCommits);
+          const nextParsedIntervalCommits = Number(nextIntervalCommits);
+
+          setReviewPrompt((currentReviewPrompt) => {
+            const currentDefaultPrompt = createDefaultReviewPrompt(
+              currentParsedIntervalCommits,
+            );
+
+            if (currentReviewPrompt !== currentDefaultPrompt) {
+              return currentReviewPrompt;
+            }
+
+            return createDefaultReviewPrompt(nextParsedIntervalCommits);
+          });
+          setReviewIntervalCommits(nextIntervalCommits);
+        }}
+        step={1}
+        type="number"
+        value={reviewIntervalCommits}
+      />
+    </div>
+  );
+}
+
 export function ControlsPanel({
   commandTargetId,
   onRepositorySelected,
@@ -257,56 +1008,47 @@ export function ControlsPanel({
     error: null,
     issues: [],
   });
-  const selectedRepositoryPath =
-    repositorySelection.status === "ready"
-      ? repositorySelection.repositoryPath
-      : null;
+  const selectedRepositoryPath = getSelectedRepositoryPath(repositorySelection);
   const repositoryPathErrorId = "repository-path-error";
   const repositoryPathIssuesId = "repository-path-issues";
   const runControlErrorId = "run-control-error";
   const runControlIssuesId = "run-control-issues";
   const hasRepositoryPathError =
     repositoryPathForm.error !== null || repositoryPathForm.issues.length > 0;
-  const hasRunControlError =
-    runControlForm.error !== null || runControlForm.issues.length > 0;
-  const repositoryPathIssueMessages = repositoryPathForm.issues.map(
-    (issue) =>
-      issue.path === "path" ? issue.message : `${issue.path}: ${issue.message}`,
+  const repositoryPathIssueMessages = formatValidationIssueMessages(
+    repositoryPathForm.issues,
   );
-  const runControlIssueMessages = runControlForm.issues.map((issue) =>
-    issue.path === "request" ? issue.message : `${issue.path}: ${issue.message}`,
+  const runControlIssueMessages = formatValidationIssueMessages(
+    runControlForm.issues,
   );
   const repositoryBrowseDescribedBy = hasRepositoryPathError
     ? `${repositoryPathErrorId} ${repositoryPathIssuesId}`
     : undefined;
   const parsedRunCount = Number(runCount);
-  const isRunCountValid =
-    Number.isInteger(parsedRunCount) &&
-    parsedRunCount >= 1 &&
-    parsedRunCount <= 100;
+  const isRunCountValid = isCountInAllowedRange(parsedRunCount);
   const parsedReviewIntervalCommits = Number(reviewIntervalCommits);
   const isReviewIntervalValid =
-    !reviewEnabled ||
-    (Number.isInteger(parsedReviewIntervalCommits) &&
-      parsedReviewIntervalCommits >= 1 &&
-      parsedReviewIntervalCommits <= 100);
+    !reviewEnabled || isCountInAllowedRange(parsedReviewIntervalCommits);
   const isPromptValid = repeatPrompt.trim().length > 0;
   const isReviewPromptValid = !reviewEnabled || reviewPrompt.trim().length > 0;
   const isRunActive = isActiveRunnerStatus(runnerStatus);
   const isRunControlPending = runControlForm.status !== "idle";
-  const canStartRun =
-    selectedRepositoryPath !== null &&
-    isPromptValid &&
-    isRunCountValid &&
-    isReviewIntervalValid &&
-    isReviewPromptValid &&
-    !isRunActive &&
-    !isRunControlPending &&
-    repositoryPathForm.status !== "submitting";
-  const canStopRun =
-    runnerStatus === "running" &&
-    !isRunControlPending &&
-    repositoryPathForm.status !== "submitting";
+  const isRepositorySubmitting = repositoryPathForm.status === "submitting";
+  const canStartRun = canSubmitRun({
+    hasRepositoryPath: selectedRepositoryPath !== null,
+    isPromptValid,
+    isRepositorySubmitting,
+    isReviewIntervalValid,
+    isReviewPromptValid,
+    isRunActive,
+    isRunControlPending,
+    isRunCountValid,
+  });
+  const canStopRun = canSubmitStop({
+    isRepositorySubmitting,
+    isRunControlPending,
+    runnerStatus,
+  });
 
   useEffect(() => {
     if (!commandTargetId) {
@@ -505,37 +1247,17 @@ export function ControlsPanel({
   }
 
   const runControls = (
-    <>
-      <Button
-        disabled={!canStartRun}
-        onClick={() => {
-          void handleRunStart();
-        }}
-        type="button"
-      >
-        <Play
-          aria-hidden="true"
-          data-icon="inline-start"
-          strokeWidth={2}
-        />
-        {runControlForm.status === "starting" ? "Starting..." : "Start"}
-      </Button>
-      <Button
-        disabled={!canStopRun}
-        onClick={() => {
-          void handleRunStop();
-        }}
-        type="button"
-        variant="outline"
-      >
-        <Square
-          aria-hidden="true"
-          data-icon="inline-start"
-          strokeWidth={2}
-        />
-        {runControlForm.status === "stopping" ? "Stopping..." : "Stop"}
-      </Button>
-    </>
+    <RunControlButtons
+      canStartRun={canStartRun}
+      canStopRun={canStopRun}
+      onRunStart={() => {
+        void handleRunStart();
+      }}
+      onRunStop={() => {
+        void handleRunStop();
+      }}
+      status={runControlForm.status}
+    />
   );
 
   return (
@@ -557,522 +1279,61 @@ export function ControlsPanel({
         <h2 id="controls-panel-title">Run setup</h2>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-x-hidden overflow-y-auto px-1 py-2">
-        <SetupArea
-          icon={REPOSITORY_SECTION.icon}
-          id={REPOSITORY_SECTION.id}
-          title={REPOSITORY_SECTION.title}
-        >
-          <Button
-            aria-describedby={repositoryBrowseDescribedBy}
-            aria-invalid={hasRepositoryPathError}
-            disabled={repositoryPathForm.status === "submitting"}
-            onClick={() => {
-              void handleRepositoryBrowse();
-            }}
-            type="button"
-            variant="outline"
-          >
-            <FolderOpen
-              aria-hidden="true"
-              data-icon="inline-start"
-              strokeWidth={2}
-            />
-            {repositoryPathForm.status === "submitting"
-              ? "Choosing..."
-              : "Choose Folder"}
-          </Button>
-          {hasRepositoryPathError ? (
-            <div
-              className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
-              role="alert"
-            >
-              {repositoryPathForm.error ? (
-                <p
-                  className="font-medium"
-                  id={repositoryPathErrorId}
-                >
-                  {repositoryPathForm.error}
-                </p>
-              ) : null}
-              {repositoryPathIssueMessages.length > 0 ? (
-                <ul
-                  className="flex flex-col gap-1"
-                  id={repositoryPathIssuesId}
-                >
-                  {repositoryPathIssueMessages.map((message) => (
-                    <li key={message}>{message}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-        </SetupArea>
-
-        <SetupArea
-          icon={PROMPT_SECTION.icon}
-          id={PROMPT_SECTION.id}
-          info={PROMPT_SECTION.info}
-          title={PROMPT_SECTION.title}
-        >
-          <div className="flex flex-col gap-2">
-            <label
-              className="sr-only"
-              htmlFor="repeat-prompt"
-            >
-              Prompt
-            </label>
-            <Textarea
-              className="min-h-28 resize-y leading-5"
-              id="repeat-prompt"
-              placeholder="Use goal.md as the source of truth."
-              onChange={(event) => {
-                setRepeatPrompt(event.target.value);
-              }}
-              value={repeatPrompt}
-            />
-          </div>
-        </SetupArea>
-
-        <SetupArea
-          icon={MODEL_SECTION.icon}
-          id={MODEL_SECTION.id}
-          info={MODEL_SECTION.info}
-          title={MODEL_SECTION.title}
-        >
-          <div className="grid gap-3">
-            <div className="flex flex-col gap-2">
-              <label
-                className="text-xs font-medium text-foreground"
-                htmlFor="codex-model"
-              >
-                Model
-              </label>
-              <Combobox<ModelSelection>
-                items={MODEL_OPTIONS}
-                onValueChange={(value) => {
-                  if (value) {
-                    setModel(value);
-                  }
-                }}
-                value={model}
-              >
-                <ComboboxInput
-                  id="codex-model"
-                  readOnly
-                />
-                <ComboboxContent>
-                  <ComboboxList>
-                    {MODEL_OPTIONS.map((option) => (
-                      <ComboboxItem
-                        key={option}
-                        value={option}
-                      >
-                        {option}
-                      </ComboboxItem>
-                    ))}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label
-                className="text-xs font-medium text-foreground"
-                htmlFor="reasoning-effort"
-              >
-                Reasoning effort
-              </label>
-              <Combobox<ReasoningEffortSelection>
-                items={REASONING_EFFORT_OPTIONS}
-                onValueChange={(value) => {
-                  if (value) {
-                    setReasoningEffort(value);
-                  }
-                }}
-                value={reasoningEffort}
-              >
-                <ComboboxInput
-                  id="reasoning-effort"
-                  readOnly
-                />
-                <ComboboxContent>
-                  <ComboboxList>
-                    {REASONING_EFFORT_OPTIONS.map((option) => (
-                      <ComboboxItem
-                        key={option}
-                        value={option}
-                      >
-                        {option}
-                      </ComboboxItem>
-                    ))}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-            </div>
-          </div>
-        </SetupArea>
-
-        <SetupArea
-          icon={RUN_SECTION.icon}
-          id={RUN_SECTION.id}
-          info={RUN_SECTION.info}
-          title={RUN_SECTION.title}
-        >
-          <div className="grid gap-3">
-            <div className="flex flex-col gap-2">
-              <label
-                className="sr-only"
-                htmlFor="run-count"
-              >
-                Run count
-              </label>
-              <Input
-                aria-invalid={!isRunCountValid}
-                id="run-count"
-                inputMode="numeric"
-                max={100}
-                min={1}
-                onChange={(event) => {
-                  setRunCount(event.target.value);
-                }}
-                step={1}
-                type="number"
-                value={runCount}
-              />
-            </div>
-          </div>
-        </SetupArea>
-
-        <SetupArea
-          icon={VERIFICATION_SECTION.icon}
-          id={VERIFICATION_SECTION.id}
-          info={VERIFICATION_SECTION.info}
-          title={VERIFICATION_SECTION.title}
-        >
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-2">
-              {verificationCommands.map((command, index) => {
-                const commandId = `verification-command-${index}`;
-
-                return (
-                  <div
-                    className="flex min-w-0 items-center gap-2"
-                    key={commandId}
-                  >
-                    <Input
-                      aria-label={`Verification command ${index + 1}`}
-                      className="min-w-0 font-mono text-xs"
-                      id={commandId}
-                      placeholder={index === 0 ? "npm test" : "npm run lint"}
-                      onChange={(event) => {
-                        const nextCommands = [...verificationCommands];
-                        nextCommands[index] = event.target.value;
-                        setVerificationCommands(nextCommands);
-                      }}
-                      value={command}
-                    />
-                    {verificationCommands.length > 1 ? (
-                      <Button
-                        aria-label={`Remove verification command ${index + 1}`}
-                        size="icon"
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          setVerificationCommands((currentCommands) =>
-                            currentCommands.filter(
-                              (_currentCommand, commandIndex) =>
-                                commandIndex !== index,
-                            ),
-                          );
-                        }}
-                      >
-                        <X
-                          aria-hidden="true"
-                          strokeWidth={2}
-                        />
-                      </Button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-            <Button
-              aria-label="Add verification command"
-              className="self-start"
-              size="icon"
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setVerificationCommands((currentCommands) => [
-                  ...currentCommands,
-                  "",
-                ]);
-              }}
-            >
-              <Plus
-                aria-hidden="true"
-                strokeWidth={2}
-              />
-            </Button>
-          </div>
-        </SetupArea>
-
-        <SetupArea
-          icon={COMMIT_SECTION.icon}
-          id={COMMIT_SECTION.id}
-          info={COMMIT_SECTION.info}
-          title={COMMIT_SECTION.title}
-        >
-          <div className="flex flex-col gap-2">
-            <span
-              className="sr-only"
-              id="auto-commit-label"
-            >
-              Auto-commit
-            </span>
-            <div className="flex h-9 items-center justify-between gap-3 rounded-md border border-input bg-muted px-3">
-              <span
-                className="text-xs font-medium text-muted-foreground"
-                id="auto-commit-state"
-              >
-                {reviewEnabled ? "Required by review" : autoCommit ? "Enabled" : "Off"}
-              </span>
-              <button
-                aria-checked={autoCommit}
-                aria-describedby="auto-commit-state"
-                aria-labelledby="auto-commit-label"
-                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-primary"
-                data-state={autoCommit ? "checked" : "unchecked"}
-                disabled={reviewEnabled}
-                id="auto-commit"
-                onClick={() => {
-                  if (!reviewEnabled) {
-                    setAutoCommit((currentAutoCommit) => !currentAutoCommit);
-                  }
-                }}
-                role="switch"
-                type="button"
-              >
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform data-[state=checked]:translate-x-4"
-                  data-state={autoCommit ? "checked" : "unchecked"}
-                />
-              </button>
-            </div>
-          </div>
-        </SetupArea>
-
-        <SetupArea
-          icon={REVIEW_SECTION.icon}
-          id={REVIEW_SECTION.id}
-          info={REVIEW_SECTION.info}
-          title={REVIEW_SECTION.title}
-        >
-          <div className="flex flex-col gap-3">
-            <span
-              className="sr-only"
-              id="review-label"
-            >
-              Review
-            </span>
-            <div className="flex h-9 items-center justify-between gap-3 rounded-md border border-input bg-muted px-3">
-              <span
-                className="text-xs font-medium text-muted-foreground"
-                id="review-state"
-              >
-                {reviewEnabled ? "Enabled" : "Off"}
-              </span>
-              <button
-                aria-checked={reviewEnabled}
-                aria-describedby="review-state"
-                aria-labelledby="review-label"
-                className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-primary"
-                data-state={reviewEnabled ? "checked" : "unchecked"}
-                id="review-enabled"
-                onClick={() => {
-                  setReviewEnabled((currentReviewEnabled) => {
-                    const nextReviewEnabled = !currentReviewEnabled;
-
-                    if (nextReviewEnabled) {
-                      setAutoCommit(true);
-                    }
-
-                    return nextReviewEnabled;
-                  });
-                }}
-                role="switch"
-                type="button"
-              >
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform data-[state=checked]:translate-x-4"
-                  data-state={reviewEnabled ? "checked" : "unchecked"}
-                />
-              </button>
-            </div>
-
-            {isReviewSettingsVisible(reviewEnabled) ? (
-              <div className="review-settings-panel grid gap-3">
-                <div className="flex flex-col gap-2">
-                  <label
-                    className="text-xs font-medium text-foreground"
-                    htmlFor="review-interval-commits"
-                  >
-                    Review every
-                  </label>
-                  <Input
-                    aria-invalid={!isReviewIntervalValid}
-                    id="review-interval-commits"
-                    inputMode="numeric"
-                    max={100}
-                    min={1}
-                    onChange={(event) => {
-                      const nextIntervalCommits = event.target.value;
-                      const currentParsedIntervalCommits =
-                        Number(reviewIntervalCommits);
-                      const nextParsedIntervalCommits =
-                        Number(nextIntervalCommits);
-
-                      setReviewPrompt((currentReviewPrompt) => {
-                        const currentDefaultPrompt = createDefaultReviewPrompt(
-                          currentParsedIntervalCommits,
-                        );
-
-                        if (currentReviewPrompt !== currentDefaultPrompt) {
-                          return currentReviewPrompt;
-                        }
-
-                        return createDefaultReviewPrompt(
-                          nextParsedIntervalCommits,
-                        );
-                      });
-                      setReviewIntervalCommits(nextIntervalCommits);
-                    }}
-                    step={1}
-                    type="number"
-                    value={reviewIntervalCommits}
-                  />
-                </div>
-                <div className="grid gap-3">
-                  <div className="flex flex-col gap-2">
-                    <label
-                      className="text-xs font-medium text-foreground"
-                      htmlFor="review-model"
-                    >
-                      Review model
-                    </label>
-                    <Combobox<ModelSelection>
-                      items={MODEL_OPTIONS}
-                      onValueChange={(value) => {
-                        if (value) {
-                          setReviewModel(value);
-                        }
-                      }}
-                      value={reviewModel}
-                    >
-                      <ComboboxInput
-                        id="review-model"
-                        readOnly
-                      />
-                      <ComboboxContent>
-                        <ComboboxList>
-                          {MODEL_OPTIONS.map((option) => (
-                            <ComboboxItem
-                              key={option}
-                              value={option}
-                            >
-                              {option}
-                            </ComboboxItem>
-                          ))}
-                        </ComboboxList>
-                      </ComboboxContent>
-                    </Combobox>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label
-                      className="text-xs font-medium text-foreground"
-                      htmlFor="review-reasoning-effort"
-                    >
-                      Review reasoning
-                    </label>
-                    <Combobox<ReasoningEffortSelection>
-                      items={REASONING_EFFORT_OPTIONS}
-                      onValueChange={(value) => {
-                        if (value) {
-                          setReviewReasoningEffort(value);
-                        }
-                      }}
-                      value={reviewReasoningEffort}
-                    >
-                      <ComboboxInput
-                        id="review-reasoning-effort"
-                        readOnly
-                      />
-                      <ComboboxContent>
-                        <ComboboxList>
-                          {REASONING_EFFORT_OPTIONS.map((option) => (
-                            <ComboboxItem
-                              key={option}
-                              value={option}
-                            >
-                              {option}
-                            </ComboboxItem>
-                          ))}
-                        </ComboboxList>
-                      </ComboboxContent>
-                    </Combobox>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label
-                    className="text-xs font-medium text-foreground"
-                    htmlFor="review-prompt"
-                  >
-                    Review prompt
-                  </label>
-                  <Textarea
-                    aria-invalid={!isReviewPromptValid}
-                    className="min-h-28 resize-y leading-5"
-                    id="review-prompt"
-                    placeholder={createDefaultReviewPrompt(
-                      parsedReviewIntervalCommits,
-                    )}
-                    onChange={(event) => {
-                      setReviewPrompt(event.target.value);
-                    }}
-                    value={reviewPrompt}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </SetupArea>
-
-        {hasRunControlError ? (
-          <div
-            className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
-            role="alert"
-          >
-            {runControlForm.error ? (
-              <p
-                className="font-medium"
-                id={runControlErrorId}
-              >
-                {runControlForm.error}
-              </p>
-            ) : null}
-            {runControlIssueMessages.length > 0 ? (
-              <ul
-                className="flex flex-col gap-1"
-                id={runControlIssuesId}
-              >
-                {runControlIssueMessages.map((message) => (
-                  <li key={message}>{message}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
+        <RepositorySetupSection
+          describedBy={repositoryBrowseDescribedBy}
+          form={repositoryPathForm}
+          hasError={hasRepositoryPathError}
+          issueMessages={repositoryPathIssueMessages}
+          onBrowse={() => {
+            void handleRepositoryBrowse();
+          }}
+        />
+        <PromptSetupSection
+          onPromptChange={setRepeatPrompt}
+          prompt={repeatPrompt}
+        />
+        <ModelSetupSection
+          model={model}
+          onModelChange={setModel}
+          onReasoningEffortChange={setReasoningEffort}
+          reasoningEffort={reasoningEffort}
+        />
+        <RunCountSetupSection
+          isValid={isRunCountValid}
+          onRunCountChange={setRunCount}
+          runCount={runCount}
+        />
+        <VerificationSetupSection
+          commands={verificationCommands}
+          setCommands={setVerificationCommands}
+        />
+        <CommitSetupSection
+          autoCommit={autoCommit}
+          onAutoCommitChange={setAutoCommit}
+          reviewEnabled={reviewEnabled}
+        />
+        <ReviewSetupSection
+          isPromptValid={isReviewPromptValid}
+          isReviewIntervalValid={isReviewIntervalValid}
+          onReviewEnabledChange={setReviewEnabled}
+          parsedReviewIntervalCommits={parsedReviewIntervalCommits}
+          reviewEnabled={reviewEnabled}
+          reviewIntervalCommits={reviewIntervalCommits}
+          reviewModel={reviewModel}
+          reviewPrompt={reviewPrompt}
+          reviewReasoningEffort={reviewReasoningEffort}
+          setAutoCommit={setAutoCommit}
+          setReviewIntervalCommits={setReviewIntervalCommits}
+          setReviewModel={setReviewModel}
+          setReviewPrompt={setReviewPrompt}
+          setReviewReasoningEffort={setReviewReasoningEffort}
+        />
+        <FormAlert
+          error={runControlForm.error}
+          errorId={runControlErrorId}
+          issueMessages={runControlIssueMessages}
+          issuesId={runControlIssuesId}
+        />
       </div>
     </section>
   );
