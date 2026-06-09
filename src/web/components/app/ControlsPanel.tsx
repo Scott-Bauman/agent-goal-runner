@@ -1689,7 +1689,7 @@ export function ControlsPanel({
       <div className="sr-only">
         <h2 id="controls-panel-title">Run setup</h2>
       </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-x-hidden overflow-y-auto px-1 py-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 px-1 py-2">
         <RepositorySetupSection
           describedBy={repositoryBrowseDescribedBy}
           form={repositoryPathForm}
@@ -1768,6 +1768,7 @@ export function ControlsPanel({
           issueMessages={runControlIssueMessages}
           issuesId={runControlIssuesId}
         />
+        <div aria-hidden="true" className="h-8 shrink-0" />
       </div>
     </section>
   );
