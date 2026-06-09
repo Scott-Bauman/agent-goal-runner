@@ -10,7 +10,7 @@
     "dev:web": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --coverage --passWithNoTests",
     "build": "npm run build:web && npm run build:server",
     "build:server": "tsc -p tsconfig.server.json",
     "build:web": "vite build"
@@ -40,6 +40,7 @@
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/coverage-v8": "^3.2.6",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.0",
     "eslint": "^9.33.0",
