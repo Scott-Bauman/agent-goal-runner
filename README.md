@@ -73,6 +73,21 @@ Install dependencies:
 npm install
 ```
 
+For a GitHub clone intended to run the built app, install dependencies, build the app, install the bundled `goal-runner-framework` skill globally, then start the server:
+
+```sh
+npm install
+npm run build
+npm run install:skill:global
+npm start
+```
+
+Repo-local skill installation is the most reliable option when using the app across different selected repositories because Codex can load the skill directly from that repository:
+
+```sh
+npm run install:skill:repo -- "C:\path\to\target-repo"
+```
+
 Start the backend and frontend together:
 
 ```sh

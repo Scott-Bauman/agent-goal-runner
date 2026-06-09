@@ -12,6 +12,7 @@ import { isNodeErrorCode } from "../shared/nodeErrors.js";
 import type { ProcessSpawner } from "../shared/process.js";
 import type { RuntimeState } from "../shared/runtime.js";
 import type { SseHub } from "../sse/sseHub.js";
+import type { SkillPreflightStatus } from "../sse/types.js";
 import {
   getAgentProviderLabel,
   getAgentRunLabel,
@@ -31,6 +32,11 @@ import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { ParsedVerificationCommand } from "./verificationCommand.js";
 
 type ActiveRunProcessKind = "agent" | "review" | "verification" | "git";
+
+type SkillPreflightPathOptions = {
+  appRootPath?: string;
+  userHomePath?: string;
+};
 
 type AutoCommitPhase = "agent" | "review";
 
@@ -111,6 +117,7 @@ export class RunController {
     private readonly runtimeState: RuntimeState,
     private readonly sseHub: SseHub,
     private readonly spawnProcess: ProcessSpawner,
+    private readonly skillPreflightPathOptions: SkillPreflightPathOptions = {},
   ) {}
 
   // fallow-ignore-next-line unused-class-member
@@ -375,6 +382,7 @@ export class RunController {
       repositoryPath,
       agentPrompt,
       existsSync,
+      this.skillPreflightPathOptions,
     );
     const runner = getAgentRunner(provider);
     const startedRun = runner.startRun({
@@ -462,7 +470,7 @@ export class RunController {
     if (skillPreflight.missing.length > 0) {
       this.appendRunEvent(
         "warning",
-        `Skill preflight checked .agents/skills; missing ${skillPreflight.missing.map((skill) => `$${skill}`).join(", ")}.`,
+        formatMissingSkillPreflightWarning(skillPreflight),
       );
     }
   }
@@ -779,6 +787,7 @@ export class RunController {
         options.repositoryPath,
         reviewPrompt,
         existsSync,
+        this.skillPreflightPathOptions,
       );
       const runner = getAgentRunner(options.review.provider);
       const startedRun = runner.startRun({
@@ -898,7 +907,7 @@ export class RunController {
       if (skillPreflight.missing.length > 0) {
         this.appendRunEvent(
           "warning",
-          `Skill preflight checked .agents/skills; missing ${skillPreflight.missing.map((skill) => `$${skill}`).join(", ")}.`,
+          formatMissingSkillPreflightWarning(skillPreflight),
         );
       }
     });
@@ -1398,4 +1407,27 @@ export class RunController {
 
 function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function formatMissingSkillPreflightWarning(
+  skillPreflight: SkillPreflightStatus,
+): string {
+  const missingSkills = skillPreflight.missing
+    .map((skill) => `$${skill}`)
+    .join(", ");
+  const bundledMissing = skillPreflight.locations
+    .filter((location) => !location.installed && !location.bundled)
+    .map((location) => `$${location.name}`);
+
+  if (bundledMissing.length > 0) {
+    return (
+      `Skill preflight checked repo-local and user-global skills; missing ${missingSkills}. ` +
+      `Bundled source missing for ${bundledMissing.join(", ")}.`
+    );
+  }
+
+  return (
+    `Skill preflight checked repo-local and user-global skills; missing ${missingSkills}. ` +
+    "Install repo-local or user-global skill before relying on it."
+  );
 }

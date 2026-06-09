@@ -10,7 +10,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["*.config.js", "*.config.mjs", "postcss.config.js"],
+    files: ["*.config.js", "*.config.mjs", "postcss.config.js", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",

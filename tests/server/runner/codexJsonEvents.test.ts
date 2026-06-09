@@ -100,20 +100,84 @@ describe("Codex JSON event parsing", () => {
     ]);
   });
 
-  it("checks repo-local skill paths without failing missing skills", () => {
+  it("checks repo-local and user-global skill paths without failing missing skills", () => {
     const repositoryPath = "C:\\repo";
+    const userHomePath = "C:\\Users\\tester";
     const status = createSkillPreflightStatus(
       repositoryPath,
       "Use $review and $debug.",
       (skillPath) =>
         skillPath ===
-        path.join(repositoryPath, ".agents", "skills", "review", "SKILL.md"),
+          path.join(repositoryPath, ".agents", "skills", "review", "SKILL.md") ||
+        skillPath ===
+          path.join(userHomePath, ".agents", "skills", "debug", "SKILL.md"),
+      {
+        userHomePath,
+      },
     );
 
-    expect(status).toEqual({
+    expect(status).toMatchObject({
       checked: true,
-      found: ["review"],
-      missing: ["debug"],
+      found: ["debug", "review"],
+      missing: [],
+    });
+    expect(status.locations).toEqual([
+      expect.objectContaining({
+        name: "debug",
+        installed: true,
+        repoLocal: false,
+        userGlobal: true,
+      }),
+      expect.objectContaining({
+        name: "review",
+        installed: true,
+        repoLocal: true,
+        userGlobal: false,
+      }),
+    ]);
+  });
+
+  it("does not count bundled-only skills as installed", () => {
+    const repositoryPath = "C:\\repo";
+    const appRootPath = "C:\\app";
+    const status = createSkillPreflightStatus(
+      repositoryPath,
+      "Use $goal-runner-framework.",
+      (skillPath) =>
+        skillPath ===
+        path.join(
+          appRootPath,
+          "bundled-skills",
+          "goal-runner-framework",
+          "SKILL.md",
+        ),
+      {
+        appRootPath,
+      },
+    );
+
+    expect(status).toMatchObject({
+      checked: true,
+      found: [],
+      missing: ["goal-runner-framework"],
+      locations: [
+        expect.objectContaining({
+          bundled: true,
+          installed: false,
+          name: "goal-runner-framework",
+        }),
+      ],
+    });
+  });
+
+  it("skips preflight when no skills are referenced", () => {
+    expect(
+      createSkillPreflightStatus("C:\\repo", "Use goal.md.", () => true),
+    ).toEqual({
+      checked: false,
+      found: [],
+      locations: [],
+      missing: [],
     });
   });
 });

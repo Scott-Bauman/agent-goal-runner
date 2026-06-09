@@ -13,7 +13,9 @@
     "test": "vitest run --coverage --passWithNoTests",
     "build": "npm run build:web && npm run build:server",
     "build:server": "tsc -p tsconfig.server.json",
-    "build:web": "vite build"
+    "build:web": "vite build",
+    "install:skill:global": "node scripts/install-global-skill.mjs",
+    "install:skill:repo": "node scripts/install-repo-skill.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

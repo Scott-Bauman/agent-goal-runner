@@ -16,6 +16,8 @@ export type ServerRuntimeContext = {
   sseHub: SseHub;
   goalWatcher: GoalWatcherController;
   runController: RunController;
+  skillAppRootPath?: string;
+  skillUserHomePath?: string;
   openRepositoryFolderDialog: () => Promise<FolderDialogResult>;
   spawnProcess: ProcessSpawner;
 };

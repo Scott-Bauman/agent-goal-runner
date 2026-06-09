@@ -6,10 +6,55 @@ import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ControlsPanel } from "../../../../src/web/components/app/ControlsPanel";
+import type { SkillInstallStatusResponse } from "../../../../src/web/api/responses";
 
 import { jsonResponse } from "./componentTestUtils";
 
 const fetchMock = vi.fn();
+const defaultSkillStatus: SkillInstallStatusResponse = {
+  name: "goal-runner-framework",
+  repoLocal: false,
+  userGlobal: false,
+  bundled: true,
+  installed: false,
+  paths: {
+    repoLocal: "C:\\repo\\.agents\\skills\\goal-runner-framework\\SKILL.md",
+    userGlobal:
+      "C:\\Users\\tester\\.agents\\skills\\goal-runner-framework\\SKILL.md",
+    bundled:
+      "C:\\app\\bundled-skills\\goal-runner-framework\\SKILL.md",
+  },
+};
+
+function mockFetchRoutes(
+  routes: Record<string, unknown | { body: unknown; ok?: boolean; status?: number }>,
+) {
+  fetchMock.mockImplementation((input: string | URL | Request) => {
+    const url = String(input);
+    const route = routes[url];
+
+    if (!route) {
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    }
+
+    if (
+      typeof route === "object" &&
+      route !== null &&
+      "body" in route
+    ) {
+      const response = route as { body: unknown; ok?: boolean; status?: number };
+
+      return Promise.resolve(
+        jsonResponse(response.body, {
+          ok: response.ok,
+          status: response.status,
+        }),
+      );
+    }
+
+    return Promise.resolve(jsonResponse(route));
+  });
+}
 
 function renderControls(
   overrides: Partial<ComponentProps<typeof ControlsPanel>> = {},
@@ -33,6 +78,9 @@ function renderControls(
 describe("ControlsPanel", () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+    });
     vi.stubGlobal("fetch", fetchMock);
   });
 
@@ -61,12 +109,13 @@ describe("ControlsPanel", () => {
 
   it("selects a repository through the browse endpoint", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/repository/browse": {
         cancelled: false,
         repositoryPath: "C:\\repo\\selected",
-      }),
-    );
+      },
+    });
     const props = renderControls({
       repositorySelection: {
         repositoryPath: null,
@@ -86,17 +135,80 @@ describe("ControlsPanel", () => {
     });
   });
 
+  it("renders goal-runner-framework skill status", async () => {
+    renderControls();
+
+    expect(screen.getByText("Skill")).toBeTruthy();
+    expect(screen.getByText("Repo-local")).toBeTruthy();
+    expect(screen.getByText("User-global")).toBeTruthy();
+    expect(
+      await screen.findByText(/goal-runner-framework is not installed/i),
+    ).toBeTruthy();
+  });
+
+  it("installs the skill into the selected repository", async () => {
+    const user = userEvent.setup();
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/skills/goal-runner-framework/install/repo": {
+        ...defaultSkillStatus,
+        repoLocal: true,
+        installed: true,
+      },
+    });
+    renderControls();
+
+    await user.click(await screen.findByRole("button", { name: /repo/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/skills/goal-runner-framework/install/repo",
+        {
+          method: "POST",
+        },
+      );
+    });
+    expect(screen.getAllByText("Installed").length).toBeGreaterThan(0);
+  });
+
+  it("installs the skill globally", async () => {
+    const user = userEvent.setup();
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/skills/goal-runner-framework/install/global": {
+        ...defaultSkillStatus,
+        userGlobal: true,
+        installed: true,
+      },
+    });
+    renderControls();
+
+    await user.click(await screen.findByRole("button", { name: /global/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/skills/goal-runner-framework/install/global",
+        {
+          method: "POST",
+        },
+      );
+    });
+    expect(screen.getAllByText("Installed").length).toBeGreaterThan(0);
+  });
+
   it("shows repository browse validation errors", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(
-        {
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/repository/browse": {
+        body: {
           error: "Selection failed.",
           issues: [{ message: "Pick a Git repository.", path: "path" }],
         },
-        { ok: false, status: 400 },
-      ),
-    );
+        ok: false,
+        status: 400,
+      },
+    });
     renderControls();
 
     await user.click(screen.getByRole("button", { name: /choose folder/i }));
@@ -109,8 +221,9 @@ describe("ControlsPanel", () => {
 
   it("starts a run with normalized request settings", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/run/start": {
         model: "gpt-5.4",
         reasoningEffort: "high",
         review: {
@@ -121,8 +234,8 @@ describe("ControlsPanel", () => {
           reasoningEffort: null,
         },
         status: "running",
-      }),
-    );
+      },
+    });
     const props = renderControls();
 
     await user.type(
@@ -135,7 +248,9 @@ describe("ControlsPanel", () => {
       expect(props.onRunnerStatusChange).toHaveBeenCalledWith("running");
     });
 
-    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, requestInit] = fetchMock.mock.calls.find(
+      ([url]) => url === "/api/run/start",
+    ) as [string, RequestInit];
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/run/start",
       expect.objectContaining({
@@ -159,8 +274,9 @@ describe("ControlsPanel", () => {
 
   it("forces auto-commit and includes review settings when review is enabled", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/run/start": {
         model: "gpt-5.4",
         reasoningEffort: "high",
         review: {
@@ -171,8 +287,8 @@ describe("ControlsPanel", () => {
           reasoningEffort: "high",
         },
         status: "running",
-      }),
-    );
+      },
+    });
     renderControls();
 
     await user.click(screen.getByRole("switch", { name: "Review" }));
@@ -191,7 +307,9 @@ describe("ControlsPanel", () => {
       );
     });
 
-    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, requestInit] = fetchMock.mock.calls.find(
+      ([url]) => url === "/api/run/start",
+    ) as [string, RequestInit];
 
     expect(JSON.parse(String(requestInit.body))).toMatchObject({
       autoCommit: true,
@@ -206,7 +324,12 @@ describe("ControlsPanel", () => {
 
   it("stops a running run", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValueOnce(jsonResponse({ status: "stopped" }));
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/run/stop": {
+        status: "stopped",
+      },
+    });
     const props = renderControls({
       runnerStatus: "running",
     });

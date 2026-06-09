@@ -33,6 +33,19 @@ export type RepositoryBranchDeleteRequest = {
   branch: string;
 };
 
+export type SkillInstallStatusResponse = {
+  name: string;
+  repoLocal: boolean;
+  userGlobal: boolean;
+  bundled: boolean;
+  installed: boolean;
+  paths: {
+    repoLocal: string | null;
+    userGlobal: string;
+    bundled: string;
+  };
+};
+
 export type ValidationIssue = {
   path: string;
   message: string;

@@ -7,15 +7,19 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  AlertTriangle,
   BadgeCheck,
   Bot,
   BrainCircuit,
+  Download,
   FolderGit2,
   FolderOpen,
   GitCommitHorizontal,
+  Globe2,
   Info,
   ListChecks,
   MessageSquareText,
+  PackageCheck,
   Play,
   Plus,
   Repeat2,
@@ -30,6 +34,7 @@ import type {
   RepositoryBrowseResponse,
   RunStartResponse,
   RunStopResponse,
+  SkillInstallStatusResponse,
   ValidationIssue,
 } from "@/web/api/responses";
 import {
@@ -86,6 +91,11 @@ type RunControlFormState = {
   issues: ValidationIssue[];
 };
 
+type SkillInstallFormState = {
+  status: "idle" | "loading" | "installing-repo" | "installing-global";
+  error: string | null;
+};
+
 const DEFAULT_REPEAT_PROMPT = [
   "Use goal.md as the source of truth.",
   "",
@@ -118,6 +128,12 @@ export const RUN_SETUP_SECTIONS = [
     icon: FolderGit2,
     id: "run-setup-repository",
     title: "Repository",
+  },
+  {
+    icon: PackageCheck,
+    id: "run-setup-skill",
+    info: "Shows whether the goal-runner-framework skill is installed where Codex can load it for the selected repository.",
+    title: "Skill",
   },
   {
     icon: MessageSquareText,
@@ -170,6 +186,7 @@ export const RUN_SETUP_SECTIONS = [
 
 const [
   REPOSITORY_SECTION,
+  SKILL_SECTION,
   PROMPT_SECTION,
   PROVIDER_SECTION,
   MODEL_SECTION,
@@ -496,6 +513,130 @@ function RepositorySetupSection({
         issuesId="repository-path-issues"
       />
     </SetupArea>
+  );
+}
+
+function SkillStatusSection({
+  form,
+  onInstallGlobal,
+  onInstallRepo,
+  selectedRepositoryPath,
+  status,
+}: {
+  form: SkillInstallFormState;
+  onInstallGlobal: () => void;
+  onInstallRepo: () => void;
+  selectedRepositoryPath: string | null;
+  status: SkillInstallStatusResponse | null;
+}) {
+  const isBusy =
+    form.status === "loading" ||
+    form.status === "installing-global" ||
+    form.status === "installing-repo";
+  const bundledAvailable = status?.bundled ?? false;
+  const showWarning = status !== null && !status.installed;
+
+  return (
+    <SetupArea
+      icon={SKILL_SECTION.icon}
+      id={SKILL_SECTION.id}
+      info={SKILL_SECTION.info}
+      title={SKILL_SECTION.title}
+    >
+      <div className="grid gap-2">
+        <div className="grid gap-2 rounded-md border border-input bg-muted px-3 py-2">
+          <SkillStatusRow
+            installed={status?.repoLocal ?? false}
+            label="Repo-local"
+          />
+          <SkillStatusRow
+            installed={status?.userGlobal ?? false}
+            label="User-global"
+          />
+        </div>
+        {showWarning ? (
+          <div
+            className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-200"
+            role="status"
+          >
+            <AlertTriangle
+              aria-hidden="true"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              strokeWidth={2}
+            />
+            <span>
+              goal-runner-framework is not installed for Codex. Install it into
+              the selected repository or globally.
+            </span>
+          </div>
+        ) : null}
+        {form.error ? (
+          <div
+            className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
+            role="alert"
+          >
+            {form.error}
+          </div>
+        ) : null}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            disabled={
+              !selectedRepositoryPath ||
+              !bundledAvailable ||
+              isBusy
+            }
+            onClick={onInstallRepo}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Download
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+            {form.status === "installing-repo" ? "Installing..." : "Repo"}
+          </Button>
+          <Button
+            disabled={!bundledAvailable || isBusy}
+            onClick={onInstallGlobal}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Globe2
+              aria-hidden="true"
+              data-icon="inline-start"
+              strokeWidth={2}
+            />
+            {form.status === "installing-global" ? "Installing..." : "Global"}
+          </Button>
+        </div>
+      </div>
+    </SetupArea>
+  );
+}
+
+function SkillStatusRow({
+  installed,
+  label,
+}: {
+  installed: boolean;
+  label: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+      <span className="font-medium text-muted-foreground">{label}</span>
+      <span
+        className={
+          installed
+            ? "font-semibold text-emerald-700 dark:text-emerald-300"
+            : "font-semibold text-muted-foreground"
+        }
+      >
+        {installed ? "Installed" : "Not installed"}
+      </span>
+    </div>
   );
 }
 
@@ -1127,6 +1268,13 @@ export function ControlsPanel({
     error: null,
     issues: [],
   });
+  const [skillStatus, setSkillStatus] =
+    useState<SkillInstallStatusResponse | null>(null);
+  const [skillInstallForm, setSkillInstallForm] =
+    useState<SkillInstallFormState>({
+      status: "idle",
+      error: null,
+    });
   const selectedRepositoryPath = getSelectedRepositoryPath(repositorySelection);
   const repositoryPathErrorId = "repository-path-error";
   const repositoryPathIssuesId = "repository-path-issues";
@@ -1189,6 +1337,97 @@ export function ControlsPanel({
       issues: [],
     });
   }, [repositorySelection]);
+
+  useEffect(() => {
+    if (repositorySelection.status !== "ready") {
+      setSkillStatus(null);
+      return;
+    }
+
+    void refreshSkillStatus();
+  }, [repositorySelection.status, selectedRepositoryPath]);
+
+  async function refreshSkillStatus() {
+    setSkillInstallForm((currentForm) => ({
+      ...currentForm,
+      status: currentForm.status === "idle" ? "loading" : currentForm.status,
+      error: null,
+    }));
+
+    try {
+      const response = await fetch("/api/skills/goal-runner-framework");
+      const responseBody = (await response.json()) as
+        | SkillInstallStatusResponse
+        | ApiErrorResponse;
+
+      if (!response.ok) {
+        const formattedError = formatApiError(
+          responseBody as ApiErrorResponse,
+          "Failed to load skill status.",
+        );
+
+        setSkillInstallForm({
+          status: "idle",
+          error: formattedError.error,
+        });
+        return;
+      }
+
+      setSkillStatus(responseBody as SkillInstallStatusResponse);
+      setSkillInstallForm({
+        status: "idle",
+        error: null,
+      });
+    } catch {
+      setSkillInstallForm({
+        status: "idle",
+        error: "Failed to load skill status. Confirm the backend is running.",
+      });
+    }
+  }
+
+  async function handleSkillInstall(scope: "repo" | "global") {
+    setSkillInstallForm({
+      status: scope === "repo" ? "installing-repo" : "installing-global",
+      error: null,
+    });
+
+    try {
+      const response = await fetch(
+        `/api/skills/goal-runner-framework/install/${scope}`,
+        {
+          method: "POST",
+        },
+      );
+      const responseBody = (await response.json()) as
+        | SkillInstallStatusResponse
+        | ApiErrorResponse;
+
+      if (!response.ok) {
+        const formattedError = formatApiError(
+          responseBody as ApiErrorResponse,
+          `Failed to install ${scope === "repo" ? "repo-local" : "global"} skill.`,
+        );
+
+        setSkillInstallForm({
+          status: "idle",
+          error: formattedError.error,
+        });
+        return;
+      }
+
+      setSkillStatus(responseBody as SkillInstallStatusResponse);
+      setSkillInstallForm({
+        status: "idle",
+        error: null,
+      });
+    } catch {
+      setSkillInstallForm({
+        status: "idle",
+        error: "Failed to install skill. Confirm the backend is running.",
+      });
+    }
+  }
 
   async function handleRepositoryBrowse() {
     setRepositoryPathForm({
@@ -1418,6 +1657,17 @@ export function ControlsPanel({
           onBrowse={() => {
             void handleRepositoryBrowse();
           }}
+        />
+        <SkillStatusSection
+          form={skillInstallForm}
+          onInstallGlobal={() => {
+            void handleSkillInstall("global");
+          }}
+          onInstallRepo={() => {
+            void handleSkillInstall("repo");
+          }}
+          selectedRepositoryPath={selectedRepositoryPath}
+          status={skillStatus}
         />
         <PromptSetupSection
           onPromptChange={setRepeatPrompt}

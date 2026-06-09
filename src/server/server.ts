@@ -10,6 +10,7 @@ import { registerGoalRoutes } from "./routes/goalRoutes.js";
 import { registerHealthRoutes } from "./routes/healthRoutes.js";
 import { registerRepositoryRoutes } from "./routes/repositoryRoutes.js";
 import { registerRunRoutes } from "./routes/runRoutes.js";
+import { registerSkillRoutes } from "./routes/skillRoutes.js";
 import { RunController } from "./runner/runController.js";
 import type { ProcessSpawner } from "./shared/process.js";
 import type { RuntimeState, ServerRuntimeContext } from "./shared/runtime.js";
@@ -17,6 +18,8 @@ import { createInitialStreamState, SseHub } from "./sse/sseHub.js";
 
 export type BuildServerOptions = {
   openRepositoryFolderDialog?: () => Promise<FolderDialogResult>;
+  skillAppRootPath?: string;
+  skillUserHomePath?: string;
   spawnProcess?: ProcessSpawner;
 };
 
@@ -33,12 +36,17 @@ export async function buildServer(
   };
   const sseHub = new SseHub();
   const goalWatcher = new GoalWatcherController(sseHub);
-  const runController = new RunController(runtimeState, sseHub, spawnProcess);
+  const runController = new RunController(runtimeState, sseHub, spawnProcess, {
+    appRootPath: options.skillAppRootPath,
+    userHomePath: options.skillUserHomePath,
+  });
   const context: ServerRuntimeContext = {
     runtimeState,
     sseHub,
     goalWatcher,
     runController,
+    skillAppRootPath: options.skillAppRootPath,
+    skillUserHomePath: options.skillUserHomePath,
     openRepositoryFolderDialog:
       options.openRepositoryFolderDialog ?? openFolderDialog,
     spawnProcess,
@@ -57,6 +65,7 @@ export async function buildServer(
   registerRepositoryRoutes(server, context);
   registerEventsRoutes(server, context);
   registerGoalRoutes(server, context);
+  registerSkillRoutes(server, context);
   registerRunRoutes(server, context);
 
   return server;

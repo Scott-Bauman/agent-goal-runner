@@ -1,10 +1,12 @@
-import path from "node:path";
-
 import type {
   RunEventPayload,
   RunSummaryDetails,
   SkillPreflightStatus,
 } from "../sse/types.js";
+import {
+  getSkillInstallStatus,
+  type SkillPathOptions,
+} from "../skills/skillInstallation.js";
 
 export type ParsedCodexJsonEvent = {
   events: RunEventPayload[];
@@ -65,6 +67,7 @@ export function createSkillPreflightStatus(
   repositoryPath: string,
   prompt: string,
   skillExists: (skillPath: string) => boolean,
+  options: Omit<SkillPathOptions, "repositoryPath" | "skillExists"> = {},
 ): SkillPreflightStatus {
   const skillNames = extractReferencedSkillNames(prompt);
 
@@ -73,22 +76,24 @@ export function createSkillPreflightStatus(
       checked: false,
       missing: [],
       found: [],
+      locations: [],
     };
   }
 
   const found: string[] = [];
   const missing: string[] = [];
+  const locations: SkillPreflightStatus["locations"] = [];
 
   for (const skillName of skillNames) {
-    const skillPath = path.join(
+    const status = getSkillInstallStatus(skillName, {
+      ...options,
       repositoryPath,
-      ".agents",
-      "skills",
-      skillName,
-      "SKILL.md",
-    );
+      skillExists,
+    });
 
-    if (skillExists(skillPath)) {
+    locations.push(status);
+
+    if (status.installed) {
       found.push(skillName);
     } else {
       missing.push(skillName);
@@ -98,6 +103,7 @@ export function createSkillPreflightStatus(
   return {
     checked: true,
     found,
+    locations,
     missing,
   };
 }

@@ -219,6 +219,7 @@ describe("App", () => {
       skillPreflight: {
         checked: true,
         found: ["skill"],
+        locations: [],
         missing: [],
       },
       status: "running",

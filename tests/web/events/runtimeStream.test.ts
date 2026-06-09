@@ -46,6 +46,7 @@ describe("runtime stream helpers", () => {
         skillPreflight: {
           checked: false,
           found: [],
+          locations: [],
           missing: [],
         },
       },

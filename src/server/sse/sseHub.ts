@@ -24,6 +24,7 @@ function createInitialRunDetails(): RunSummaryDetails {
     skillPreflight: {
       checked: false,
       found: [],
+      locations: [],
       missing: [],
     },
   };

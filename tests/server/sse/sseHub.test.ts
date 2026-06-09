@@ -53,6 +53,7 @@ describe("SSE hub", () => {
           skillPreflight: {
             checked: false,
             found: [],
+            locations: [],
             missing: [],
           },
         },
@@ -101,7 +102,7 @@ describe("SSE hub", () => {
         'event: runEvents\ndata: {"entries":[{"id":1,"kind":"run_started","message":"Started.","receivedAt":123,"runNumber":2,"totalRuns":3}]}\n\n',
         'event: progress\ndata: {"currentRun":2,"totalRuns":3}\n\n',
         'event: summary\ndata: {"status":"running","message":"Still working."}\n\n',
-        'event: runDetails\ndata: {"status":"running","currentRun":2,"totalRuns":3,"model":null,"reasoningEffort":null,"tokenCount":null,"changedFiles":["goal.md"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":false,"found":[],"missing":[]}}\n\n',
+        'event: runDetails\ndata: {"status":"running","currentRun":2,"totalRuns":3,"model":null,"reasoningEffort":null,"tokenCount":null,"changedFiles":["goal.md"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":false,"found":[],"locations":[],"missing":[]}}\n\n',
       ].join(""),
     );
   });
@@ -179,7 +180,7 @@ describe("SSE hub", () => {
     );
     expect(write).toHaveBeenNthCalledWith(
       2,
-      'event: runDetails\ndata: {"status":"idle","currentRun":0,"totalRuns":null,"model":null,"reasoningEffort":null,"tokenCount":null,"changedFiles":["src/a.ts","src/b.ts"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":false,"found":[],"missing":[]}}\n\n',
+      'event: runDetails\ndata: {"status":"idle","currentRun":0,"totalRuns":null,"model":null,"reasoningEffort":null,"tokenCount":null,"changedFiles":["src/a.ts","src/b.ts"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":false,"found":[],"locations":[],"missing":[]}}\n\n',
     );
   });
 
@@ -227,6 +228,7 @@ describe("SSE hub", () => {
       skillPreflight: {
         checked: true,
         found: ["goal-runner-framework"],
+        locations: [],
         missing: [],
       },
     });
@@ -253,12 +255,13 @@ describe("SSE hub", () => {
       skillPreflight: {
         checked: true,
         found: ["goal-runner-framework"],
+        locations: [],
         missing: [],
       },
     });
     expect(write).toHaveBeenCalledTimes(3);
     expect(write).toHaveBeenLastCalledWith(
-      'event: runDetails\ndata: {"status":"running","currentRun":1,"totalRuns":2,"model":"gpt-5","reasoningEffort":null,"tokenCount":42,"changedFiles":["src/a.ts","src/m.ts","src/z.ts"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":true,"found":["goal-runner-framework"],"missing":[]}}\n\n',
+      'event: runDetails\ndata: {"status":"running","currentRun":1,"totalRuns":2,"model":"gpt-5","reasoningEffort":null,"tokenCount":42,"changedFiles":["src/a.ts","src/m.ts","src/z.ts"],"warningCount":0,"errorCount":0,"stopReason":null,"lastAssistantMessage":null,"skillPreflight":{"checked":true,"found":["goal-runner-framework"],"locations":[],"missing":[]}}\n\n',
     );
   });
 });

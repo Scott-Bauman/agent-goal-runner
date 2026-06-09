@@ -75,9 +75,23 @@ export type RunSummaryEvent = {
   message: string;
 } | null;
 
+export type SkillPreflightLocationStatus = {
+  name: string;
+  repoLocal: boolean;
+  userGlobal: boolean;
+  bundled: boolean;
+  installed: boolean;
+  paths: {
+    repoLocal: string | null;
+    userGlobal: string;
+    bundled: string;
+  };
+};
+
 export type SkillPreflightStatus = {
   checked: boolean;
   found: string[];
+  locations: SkillPreflightLocationStatus[];
   missing: string[];
 };
 
@@ -167,6 +181,7 @@ export const INITIAL_RUNTIME_STREAM_STATE: RuntimeStreamState = {
     skillPreflight: {
       checked: false,
       found: [],
+      locations: [],
       missing: [],
     },
   },
