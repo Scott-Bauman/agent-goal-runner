@@ -6,6 +6,7 @@ import {
   getSkillInstallStatus,
   GOAL_RUNNER_SKILL_NAME,
 } from "../skills/skillInstallation.js";
+import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
 import {
   emptyRequestSchema,
@@ -90,6 +91,12 @@ export function registerSkillRoutes(
             ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
           ]),
         );
+      }
+
+      if (ACTIVE_RUN_STATUSES.has(context.runtimeState.stream.runLoop.status)) {
+        return reply.code(409).send({
+          error: "Cannot install global skill while a run is active.",
+        });
       }
 
       try {

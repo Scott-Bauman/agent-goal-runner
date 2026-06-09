@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -518,12 +519,14 @@ function RepositorySetupSection({
 
 function SkillStatusSection({
   form,
+  isRunActive,
   onInstallGlobal,
   onInstallRepo,
   selectedRepositoryPath,
   status,
 }: {
   form: SkillInstallFormState;
+  isRunActive: boolean;
   onInstallGlobal: () => void;
   onInstallRepo: () => void;
   selectedRepositoryPath: string | null;
@@ -583,7 +586,8 @@ function SkillStatusSection({
             disabled={
               !selectedRepositoryPath ||
               !bundledAvailable ||
-              isBusy
+              isBusy ||
+              isRunActive
             }
             onClick={onInstallRepo}
             size="sm"
@@ -598,7 +602,7 @@ function SkillStatusSection({
             {form.status === "installing-repo" ? "Installing..." : "Repo"}
           </Button>
           <Button
-            disabled={!bundledAvailable || isBusy}
+            disabled={!bundledAvailable || isBusy || isRunActive}
             onClick={onInstallGlobal}
             size="sm"
             type="button"
@@ -1275,6 +1279,7 @@ export function ControlsPanel({
       status: "idle",
       error: null,
     });
+  const skillStatusRequestId = useRef(0);
   const selectedRepositoryPath = getSelectedRepositoryPath(repositorySelection);
   const repositoryPathErrorId = "repository-path-error";
   const repositoryPathIssuesId = "repository-path-issues";
@@ -1340,14 +1345,22 @@ export function ControlsPanel({
 
   useEffect(() => {
     if (repositorySelection.status !== "ready") {
+      skillStatusRequestId.current += 1;
       setSkillStatus(null);
+      setSkillInstallForm({
+        status: "idle",
+        error: null,
+      });
       return;
     }
 
-    void refreshSkillStatus();
+    const requestId = skillStatusRequestId.current + 1;
+    skillStatusRequestId.current = requestId;
+    setSkillStatus(null);
+    void refreshSkillStatus(requestId);
   }, [repositorySelection.status, selectedRepositoryPath]);
 
-  async function refreshSkillStatus() {
+  async function refreshSkillStatus(requestId: number) {
     setSkillInstallForm((currentForm) => ({
       ...currentForm,
       status: currentForm.status === "idle" ? "loading" : currentForm.status,
@@ -1366,10 +1379,19 @@ export function ControlsPanel({
           "Failed to load skill status.",
         );
 
+        if (requestId !== skillStatusRequestId.current) {
+          return;
+        }
+
+        setSkillStatus(null);
         setSkillInstallForm({
           status: "idle",
           error: formattedError.error,
         });
+        return;
+      }
+
+      if (requestId !== skillStatusRequestId.current) {
         return;
       }
 
@@ -1379,6 +1401,11 @@ export function ControlsPanel({
         error: null,
       });
     } catch {
+      if (requestId !== skillStatusRequestId.current) {
+        return;
+      }
+
+      setSkillStatus(null);
       setSkillInstallForm({
         status: "idle",
         error: "Failed to load skill status. Confirm the backend is running.",
@@ -1387,6 +1414,8 @@ export function ControlsPanel({
   }
 
   async function handleSkillInstall(scope: "repo" | "global") {
+    const requestId = skillStatusRequestId.current + 1;
+    skillStatusRequestId.current = requestId;
     setSkillInstallForm({
       status: scope === "repo" ? "installing-repo" : "installing-global",
       error: null,
@@ -1409,10 +1438,18 @@ export function ControlsPanel({
           `Failed to install ${scope === "repo" ? "repo-local" : "global"} skill.`,
         );
 
+        if (requestId !== skillStatusRequestId.current) {
+          return;
+        }
+
         setSkillInstallForm({
           status: "idle",
           error: formattedError.error,
         });
+        return;
+      }
+
+      if (requestId !== skillStatusRequestId.current) {
         return;
       }
 
@@ -1422,6 +1459,10 @@ export function ControlsPanel({
         error: null,
       });
     } catch {
+      if (requestId !== skillStatusRequestId.current) {
+        return;
+      }
+
       setSkillInstallForm({
         status: "idle",
         error: "Failed to install skill. Confirm the backend is running.",
@@ -1660,6 +1701,7 @@ export function ControlsPanel({
         />
         <SkillStatusSection
           form={skillInstallForm}
+          isRunActive={isRunActive}
           onInstallGlobal={() => {
             void handleSkillInstall("global");
           }}

@@ -236,4 +236,38 @@ describe("goal-runner-framework skill routes", () => {
       error: "Cannot install repo-local skill while a run is active.",
     });
   });
+
+  it("rejects global install while a run is active", async () => {
+    const skillAppRootPath = await createBundledSkillRoot();
+    const skillUserHomePath = await createTempPath();
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
+    const app = await createTestServer({
+      skillAppRootPath,
+      skillUserHomePath,
+      spawnProcess,
+    });
+
+    await browseRepository(app, repositoryPath);
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/skills/goal-runner-framework/install/global",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Cannot install global skill while a run is active.",
+    });
+  });
 });

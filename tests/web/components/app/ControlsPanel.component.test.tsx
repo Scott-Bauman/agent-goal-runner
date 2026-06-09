@@ -70,9 +70,12 @@ function renderControls(
     ...overrides,
   };
 
-  render(<ControlsPanel {...props} />);
+  const view = render(<ControlsPanel {...props} />);
 
-  return props;
+  return {
+    ...props,
+    ...view,
+  };
 }
 
 describe("ControlsPanel", () => {
@@ -194,6 +197,78 @@ describe("ControlsPanel", () => {
       );
     });
     expect(screen.getAllByText("Installed").length).toBeGreaterThan(0);
+  });
+
+  it("disables skill install actions while a run is active", async () => {
+    renderControls({
+      runnerStatus: "running",
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/skills/goal-runner-framework");
+    });
+
+    expect(screen.getByRole("button", { name: /repo/i })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(screen.getByRole("button", { name: /global/i })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  });
+
+  it("clears stale installed skill status when a repository refresh fails", async () => {
+    const firstStatus: SkillInstallStatusResponse = {
+      ...defaultSkillStatus,
+      installed: true,
+      repoLocal: true,
+      paths: {
+        ...defaultSkillStatus.paths,
+        repoLocal: "C:\\repo\\first\\.agents\\skills\\goal-runner-framework\\SKILL.md",
+      },
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(firstStatus))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: "Status unavailable.",
+          },
+          {
+            ok: false,
+            status: 500,
+          },
+        ),
+      );
+
+    const view = renderControls({
+      repositorySelection: {
+        repositoryPath: "C:\\repo\\first",
+        status: "ready",
+      },
+    });
+
+    expect(await screen.findByText("Installed")).toBeTruthy();
+
+    view.rerender(
+      <ControlsPanel
+        onRepositorySelected={view.onRepositorySelected}
+        onRunnerStatusChange={view.onRunnerStatusChange}
+        repositorySelection={{
+          repositoryPath: "C:\\repo\\second",
+          status: "ready",
+        }}
+        runnerStatus="idle"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Installed")).toBeNull();
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Status unavailable.",
+    );
   });
 
   it("shows repository browse validation errors", async () => {
