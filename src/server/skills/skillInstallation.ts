@@ -32,28 +32,28 @@ type SkillCopyOptions = {
   userHomePath?: string;
 };
 
-export function getRepoLocalSkillDirectory(
+function getRepoLocalSkillDirectory(
   repositoryPath: string,
   skillName: string,
 ): string {
   return path.join(repositoryPath, ".agents", "skills", skillName);
 }
 
-export function getUserGlobalSkillDirectory(
+function getUserGlobalSkillDirectory(
   skillName: string,
   userHomePath = os.homedir(),
 ): string {
   return path.join(userHomePath, ".agents", "skills", skillName);
 }
 
-export function getBundledSkillDirectory(
+function getBundledSkillDirectory(
   skillName: string,
   appRootPath = process.cwd(),
 ): string {
   return path.join(appRootPath, "bundled-skills", skillName);
 }
 
-export function getSkillFilePath(skillDirectory: string): string {
+function getSkillFilePath(skillDirectory: string): string {
   return path.join(skillDirectory, "SKILL.md");
 }
 
