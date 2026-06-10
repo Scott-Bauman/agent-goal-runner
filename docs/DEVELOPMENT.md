@@ -49,6 +49,12 @@ npm start
 
 By default, `npm start` runs the built backend on `http://127.0.0.1:4317`. The backend serves the built frontend from `dist/web`, so the app and API share the same localhost origin.
 
+After the package is published, users should be able to start the same built server with:
+
+```sh
+npx agent-goal-runner
+```
+
 Repo-local skill installation is often the most reliable option when using the app across different selected repositories because Codex can load the skill directly from that repository:
 
 ```sh
@@ -75,6 +81,7 @@ Scripts are defined in `package.json`.
 | `npm run build:web` | Builds the Vite frontend. |
 | `npm run install:skill:global` | Installs the bundled `goal-runner-framework` skill globally. |
 | `npm run install:skill:repo` | Installs the bundled skill into a target repository. |
+| `npm run prepublishOnly` | Runs the publish gate: typecheck, lint, tests, and build. |
 
 ## Project Structure
 
@@ -84,6 +91,24 @@ Scripts are defined in `package.json`.
 - `tests/web`: Frontend unit and component tests.
 - `bundled-skills/goal-runner-framework`: Skill bundled with the app for goal-driven Codex runs.
 - `scripts`: Local skill installation scripts.
+
+## Package Publishing Preparation
+
+The npm package is intended to contain only the built runtime, bundled skill files, README, license, and user-facing docs/assets. Source files, tests, coverage, logs, caches, and development-only config should not be published.
+
+Before publishing:
+
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm pack --dry-run
+```
+
+Inspect the `npm pack --dry-run` output before publishing. It should include `dist/server`, `dist/web`, `bundled-skills`, `README.md`, `LICENSE`, `docs/DEVELOPMENT.md`, `docs/TROUBLESHOOTING.md`, and `docs/assets`. It should not include `src`, `tests`, `coverage`, `node_modules`, `.codex-runner-logs`, or stale root-level Vite output under `dist/assets`.
+
+The current package metadata uses placeholder GitHub URLs under `YOUR_USERNAME/agent-goal-runner`. Replace those values in `package.json` before publishing if the final GitHub owner differs.
 
 ## Current Local Behavior
 

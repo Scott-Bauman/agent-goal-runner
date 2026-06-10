@@ -158,7 +158,11 @@ async function runGitCommand(
       stderrChunks.push(chunk);
     });
     childProcess.on("error", (error) => {
-      reject(new GitCommandError(error.message));
+      reject(
+        new GitCommandError(
+          `Failed to start git; ensure Git is installed and available on PATH. ${error.message}`,
+        ),
+      );
     });
     childProcess.on("close", (exitCode) => {
       const result = {

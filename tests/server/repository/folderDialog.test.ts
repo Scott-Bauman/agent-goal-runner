@@ -23,7 +23,9 @@ function enoentError(command: string) {
 
 describe("folder dialog helper", () => {
   it("parses a Windows folder selection", async () => {
-    const runCommand = vi.fn(async () => commandResult("C:\\repo\r\n"));
+    const runCommand = vi.fn<DialogCommandRunner>(async () =>
+      commandResult("C:\\repo\r\n"),
+    );
 
     await expect(
       openFolderDialog({

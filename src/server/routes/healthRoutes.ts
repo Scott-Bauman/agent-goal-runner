@@ -10,7 +10,7 @@ export function registerHealthRoutes(
 ): void {
   if (options.includeRootStatus ?? true) {
     server.get("/", async () => ({
-      name: "codex-goal-runner",
+      name: "agent-goal-runner",
       status: "ok",
     }));
   }

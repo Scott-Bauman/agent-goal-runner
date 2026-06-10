@@ -1,85 +1,116 @@
 # agent-goal-runner
 
-Run long agent coding tasks as a controlled series of fresh, goal-driven passes. Works with your Codex and Claude subscription!
+Run long agent coding tasks as a controlled series of fresh, goal-driven local CLI passes.
 
-`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. Select a repository, keep the goal visible, start a repeatable run loop, and watch each pass execute with live logs, progress, summaries, optional verification, and optional Git commits.
+`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. It starts a localhost server, lets you select a local Git repository, shows the current goal file, and runs repeatable Codex or Claude CLI passes with live logs, progress, summaries, optional verification commands, and optional Git commits.
 
 ![Agent Goal Runner UI](docs/assets/image.png)
 
-The core idea is simple: instead of asking one overloaded agent session to carry a long task forever, the app repeatedly starts focused CLI passes from the selected repository. Each pass can re-read the current `goal.md`, work on the next valid step, and stop when the goal says the task is complete or blocked. That keeps context fresh, makes progress easier to inspect, and gives you safer checkpoints during larger implementation work.
+The app is local-first. It does not host your repository, proxy agent requests through a service, or manage provider authentication. Agent runs execute in the repository you select on your machine and use your local filesystem, local Git, and locally installed agent CLIs.
 
-Use it when you want agent automation to stay tied to a local repo, a visible goal file, and the same checks you would run yourself.
+## What It Does
 
-## Why Use It
-
-- Keep long tasks moving without depending on one increasingly stale conversation context.
-- Use `goal.md` as a durable source of truth for what the agent should do next.
-- Watch runs from a local UI instead of stitching together terminal output by hand.
-- Add verification commands so a pass has to prove itself before the loop continues.
-- Optionally commit successful work between passes so progress has clear checkpoints.
-- Stop the loop when the goal is complete, blocked, failing, or no longer safe to continue.
-
-## Features
-
-- Local repository picker with `goal.md` viewing and default goal creation.
-- Controlled Codex or Claude run loop with configurable prompt, model options, and run count.
-- Live status, logs, progress, summaries, and `goal.md` refreshes while the loop runs.
-- Optional verification commands after successful agent passes.
-- Optional auto-commit for successful pass results.
-- Bundled `goal-runner-framework` skill installation helpers.
-- Local Git branch switch, create, merge, delete, and refresh controls.
-
-## What It Is Not
-
-- It is not a hosted service or multi-user web app.
-- It is not an agent provider; it shells out to locally installed CLI tools.
-- It is not a replacement for Git review, tests, or human judgment.
-- It is not published as an npm package; it is intended to run from a local clone.
+- Select a local Git repository and inspect or create its `goal.md`.
+- Run Codex or Claude CLI passes from that repository with a consistent prompt and run count.
+- Stream logs, run status, progress, and final summaries into a local UI.
+- Re-read `goal.md` between passes and stop on completion, blocked state, errors, or user stop.
+- Run optional verification commands after successful passes.
+- Optionally commit successful changes with generated commit messages.
+- Install the bundled `goal-runner-framework` skill globally or into the selected repository.
+- Manage local branches for the selected repository.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
-- Git
-- Codex CLI or Claude CLI 
+- Git available on `PATH`
+- Codex CLI installed and authenticated for Codex runs
+- Claude CLI installed and authenticated only if you use the Claude provider
 
-## Installation
+Codex CLI authentication is handled by the Codex CLI itself. Sign in with Codex from a terminal before using Codex runs in this app. `agent-goal-runner` does not store OpenAI credentials or perform Codex authentication.
 
-Clone the repository, then install dependencies:
+## Run With npx
+
+After this package is published to npm, start the local app with:
 
 ```sh
-npm install
+npx agent-goal-runner
 ```
 
-Then run locally:
+Then open:
+
+```text
+http://127.0.0.1:4317
+```
+
+By default the server binds to `127.0.0.1` on port `4317`. Override those values with `HOST` and `PORT` if needed:
+
+```sh
+HOST=127.0.0.1 PORT=4320 npx agent-goal-runner
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:PORT = "4320"
+npx agent-goal-runner
+```
+
+## Development From Source
+
+Clone the repository, install dependencies, and start the development servers:
+
+```sh
+git clone https://github.com/YOUR_USERNAME/agent-goal-runner.git
+cd agent-goal-runner
+npm install
+npm run dev
+```
+
+Development mode runs the Fastify backend and Vite frontend together. The backend listens on `http://127.0.0.1:4317`, and Vite prints the frontend URL, usually `http://127.0.0.1:5173`.
+
+To run the built app from a clone:
 
 ```sh
 npm run build
 npm start
 ```
 
-Open the app at `http://127.0.0.1:4317`. In the built app, the Fastify backend serves both the API and the built frontend from the same localhost server.
+The built backend serves both the API and the built frontend from `http://127.0.0.1:4317`.
 
-## Highly Recommended Skill 
+Before publishing or relying on the build, run:
 
-Install the bundled `goal-runner-framework` skill globally or into the repository you plan to automate:
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm pack --dry-run
+```
+
+## Bundled Goal Skill
+
+The package includes a bundled `goal-runner-framework` skill. The skill helps Codex create and maintain `goal.md` files in the structure expected by this app.
+
+You can install it from the UI after selecting a repository, or from a source checkout:
 
 ```sh
 npm run install:skill:global
 npm run install:skill:repo -- "C:\path\to\target-repo"
 ```
 
-There are also buttons in the UI that will run these scripts for you if you do not want to.
-
-This skill allows your agent to make goal.md files that align with this program.
-
-It is extremely highly recommended that you download this skill as the program relies on a semi-structured output for goal.md.
+Global install copies the skill to your user-level `.agents/skills` directory. Repo-local install copies it into the selected repository under `.agents/skills`, which is often the most reliable option when switching between repositories.
 
 ## Documentation
 
 - [Development guide](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
+## Publishing Status
+
+This repository is prepared for public GitHub and npm publishing, but publishing is a manual maintainer action. Before publishing, replace the placeholder GitHub metadata that uses `YOUR_USERNAME/agent-goal-runner` if the final owner differs.
+
+Do not publish with unreviewed local changes, generated logs, coverage output, or stale build artifacts.
 
 ## License
 

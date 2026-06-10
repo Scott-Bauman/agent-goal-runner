@@ -5,7 +5,9 @@ import type { FolderDialogResult } from "../../../src/server/repository/folderDi
 
 const folderDialogResults: FolderDialogResult[] = [];
 
-export const openRepositoryFolderDialogMock = vi.fn(async () => {
+export const openRepositoryFolderDialogMock = vi.fn<
+  () => Promise<FolderDialogResult>
+>(async () => {
   return folderDialogResults.shift() ?? { cancelled: true, path: null };
 });
 

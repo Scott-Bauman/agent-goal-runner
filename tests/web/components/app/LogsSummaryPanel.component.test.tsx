@@ -48,11 +48,23 @@ describe("LogsSummaryPanel", () => {
         totalRuns: 2,
       },
       runDetails: {
+        changedFiles: [],
         currentRun: 1,
+        errorCount: 0,
+        lastAssistantMessage: null,
         model: "gpt-5.4",
         reasoningEffort: "high",
+        skillPreflight: {
+          checked: false,
+          found: [],
+          locations: [],
+          missing: [],
+        },
         status: "running",
+        stopReason: null,
+        tokenCount: null,
         totalRuns: 2,
+        warningCount: 0,
       },
     });
 

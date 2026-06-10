@@ -17,6 +17,8 @@ npm run dev:server
 npm run dev:web
 ```
 
+After npm publishing, `npx agent-goal-runner` starts the same built local server. If `npx` starts successfully but the browser cannot connect, check the terminal for the host and port, then open the printed localhost URL.
+
 ## Repository Selection Fails
 
 The selected path must:
@@ -45,6 +47,8 @@ Claude runs require the Claude CLI to be installed, authenticated, and available
 
 If a run fails immediately with a start or spawn error, confirm the relevant CLI works from a terminal in the selected repository.
 
+For Codex, authenticate with the Codex CLI itself before starting a run. This app reuses the local CLI session and does not perform provider login.
+
 ## `goal-runner-framework` Skill Is Missing
 
 For Codex goal-driven runs, install the bundled skill globally:
@@ -60,6 +64,19 @@ npm run install:skill:repo -- "C:\path\to\target-repo"
 ```
 
 Repo-local installation can be more reliable when switching between selected repositories.
+
+When running from an installed npm package, the UI installs the bundled skill from the package installation directory. It should not depend on the directory where you launched `npx agent-goal-runner`.
+
+## `npx agent-goal-runner` Cannot Find Built Files
+
+The npm package must include `dist/server`, `dist/web`, and `bundled-skills`. If the CLI reports that `dist/web/index.html` is missing, the package was built or packed incorrectly. From a source checkout, run:
+
+```sh
+npm run build
+npm pack --dry-run
+```
+
+Confirm the dry-run output includes `dist/web/index.html` and `dist/server/index.js`.
 
 ## Verification Command Is Rejected
 

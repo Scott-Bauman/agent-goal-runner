@@ -1,16 +1,38 @@
 {
   "name": "agent-goal-runner",
   "version": "0.1.0",
-  "private": true,
+  "description": "Run goal-driven local agent CLI loops from a browser UI.",
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/server/index.js",
+  "types": "./dist/server/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    }
+  },
+  "bin": {
+    "agent-goal-runner": "./dist/server/index.js"
+  },
   "files": [
-    "dist/",
-    "src/",
-    "scripts/",
-    "docs/",
+    "dist/server/",
+    "dist/web/",
+    "bundled-skills/",
+    "docs/assets/",
+    "docs/DEVELOPMENT.md",
+    "docs/TROUBLESHOOTING.md",
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/agent-goal-runner.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/agent-goal-runner/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/agent-goal-runner#readme",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
     "start": "npm run start:server",
@@ -25,7 +47,8 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:web": "vite build",
     "install:skill:global": "node scripts/install-global-skill.mjs",
-    "install:skill:repo": "node scripts/install-repo-skill.mjs"
+    "install:skill:repo": "node scripts/install-repo-skill.mjs",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

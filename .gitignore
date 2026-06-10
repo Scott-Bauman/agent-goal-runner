@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 .vite/
+*.tgz
+.npm-cache/
 
 # Test and coverage output
 coverage/

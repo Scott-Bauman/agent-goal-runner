@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { cp, lstat, mkdir, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const GOAL_RUNNER_SKILL_NAME = "goal-runner-framework";
 
@@ -53,9 +54,18 @@ function getUserGlobalSkillDirectory(
   return path.join(userHomePath, ".agents", "skills", skillName);
 }
 
+function getDefaultAppRootPath(): string {
+  return path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "..",
+  );
+}
+
 function getBundledSkillDirectory(
   skillName: string,
-  appRootPath = process.cwd(),
+  appRootPath = getDefaultAppRootPath(),
 ): string {
   return path.join(appRootPath, "bundled-skills", skillName);
 }

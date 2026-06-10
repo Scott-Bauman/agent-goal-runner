@@ -16,7 +16,7 @@ describe("health routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      name: "codex-goal-runner",
+      name: "agent-goal-runner",
       status: "ok",
     });
   });

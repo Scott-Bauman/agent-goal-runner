@@ -731,6 +731,33 @@ describe("repository selection endpoint", () => {
     });
   });
 
+  it("surfaces missing Git while listing branches", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = vi.fn<ProcessSpawner>(() => {
+      const childProcess = createMockRunProcess();
+
+      queueMicrotask(() => {
+        childProcess.emit("error", new Error("spawn git ENOENT"));
+      });
+
+      return childProcess;
+    });
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/repository/branches",
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      error:
+        "Failed to start git; ensure Git is installed and available on PATH. spawn git ENOENT",
+    });
+  });
+
   it("does not replace the selected repository after cancellation", async () => {
     const repositoryPath = await createRepositoryPath();
     const app = await createTestServer();

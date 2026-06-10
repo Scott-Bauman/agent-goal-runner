@@ -30,6 +30,31 @@ async function createBundledSkillRoot(content = "# Skill\n"): Promise<string> {
 }
 
 describe("goal-runner-framework skill routes", () => {
+  it("reports the bundled skill from the app package root by default", async () => {
+    const skillUserHomePath = await createTempPath();
+    const app = await createTestServer({
+      skillUserHomePath,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/skills/goal-runner-framework",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      bundled: true,
+      paths: {
+        bundled: path.join(
+          process.cwd(),
+          "bundled-skills",
+          "goal-runner-framework",
+          "SKILL.md",
+        ),
+      },
+    });
+  });
+
   it(
     "reports global and bundled status without a selected repository",
     async () => {
