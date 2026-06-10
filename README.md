@@ -31,7 +31,7 @@ Codex CLI authentication is handled by the Codex CLI itself. Sign in with Codex 
 
 ## Run With npx
 
-After this package is published to npm, start the local app with:
+Start the local app with:
 
 ```sh
 npx agent-goal-runner
@@ -78,7 +78,7 @@ npm start
 
 The built backend serves both the API and the built frontend from `http://127.0.0.1:4317`.
 
-Before publishing or relying on the build, run:
+For source changes, validate the project with:
 
 ```sh
 npm run typecheck
@@ -105,12 +105,6 @@ Global install copies the skill to your user-level `.agents/skills` directory. R
 
 - [Development guide](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-
-## Publishing Status
-
-This repository is prepared for public GitHub and npm publishing, but publishing is a manual maintainer action.
-
-Do not publish with unreviewed local changes, generated logs, coverage output, or stale build artifacts.
 
 ## License
 

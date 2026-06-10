@@ -49,7 +49,7 @@ npm start
 
 By default, `npm start` runs the built backend on `http://127.0.0.1:4317`. The backend serves the built frontend from `dist/web`, so the app and API share the same localhost origin.
 
-After the package is published, users should be able to start the same built server with:
+The npm package starts the same built local server with:
 
 ```sh
 npx agent-goal-runner
@@ -81,7 +81,7 @@ Scripts are defined in `package.json`.
 | `npm run build:web` | Builds the Vite frontend. |
 | `npm run install:skill:global` | Installs the bundled `goal-runner-framework` skill globally. |
 | `npm run install:skill:repo` | Installs the bundled skill into a target repository. |
-| `npm run prepublishOnly` | Runs the publish gate: typecheck, lint, tests, and build. |
+| `npm run prepublishOnly` | Runs the full release gate: typecheck, lint, tests, and build. |
 
 ## Project Structure
 
@@ -92,11 +92,11 @@ Scripts are defined in `package.json`.
 - `bundled-skills/goal-runner-framework`: Skill bundled with the app for goal-driven Codex runs.
 - `scripts`: Local skill installation scripts.
 
-## Package Publishing Preparation
+## Package Contents
 
-The npm package is intended to contain only the built runtime, bundled skill files, README, license, and user-facing docs/assets. Source files, tests, coverage, logs, caches, and development-only config should not be published.
+The npm package contains only the built runtime, bundled skill files, README, license, and user-facing docs/assets. Source files, tests, coverage, logs, caches, and development-only config are excluded.
 
-Before publishing:
+To validate the package contents:
 
 ```sh
 npm run typecheck
@@ -106,9 +106,9 @@ npm run build
 npm pack --dry-run
 ```
 
-Inspect the `npm pack --dry-run` output before publishing. It should include `dist/server`, `dist/web`, `bundled-skills`, `README.md`, `LICENSE`, `docs/DEVELOPMENT.md`, `docs/TROUBLESHOOTING.md`, and `docs/assets`. It should not include `src`, `tests`, `coverage`, `node_modules`, `.codex-runner-logs`, or stale root-level Vite output under `dist/assets`.
+Inspect the `npm pack --dry-run` output. It should include `dist/server`, `dist/web`, `bundled-skills`, `README.md`, `LICENSE`, `docs/DEVELOPMENT.md`, `docs/TROUBLESHOOTING.md`, and `docs/assets`. It should not include `src`, `tests`, `coverage`, `node_modules`, `.codex-runner-logs`, or stale root-level Vite output under `dist/assets`.
 
-Before publishing, confirm `package.json` repository, bugs, and homepage metadata still point to the intended GitHub repository.
+Confirm `package.json` repository, bugs, and homepage metadata still point to the intended GitHub repository before cutting a release.
 
 ## Current Local Behavior
 
@@ -197,13 +197,6 @@ npm run build
 ```
 
 Browser automation is intentionally not part of normal verification for this project; visual checks are manual unless explicitly requested.
-
-## Maintainer Notes
-
-- Implementation work for this repository is controlled by `goal.md`.
-- Future agent runs should complete one valid unchecked checkbox or sub-checkbox at a time, verify the change, and update only the completed checkbox in `goal.md`.
-- Keep generated and runtime output out of source, including `dist/`, `.codex-runner-logs/`, and `codex-*.log`.
-- Backend code lives in `src/server`; frontend code lives in `src/web`; tests mirror under `tests/server` and `tests/web`.
 
 ## Local Development Caveats
 

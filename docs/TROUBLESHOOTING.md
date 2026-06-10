@@ -17,7 +17,7 @@ npm run dev:server
 npm run dev:web
 ```
 
-After npm publishing, `npx agent-goal-runner` starts the same built local server. If `npx` starts successfully but the browser cannot connect, check the terminal for the host and port, then open the printed localhost URL.
+`npx agent-goal-runner` starts the same built local server. If `npx` starts successfully but the browser cannot connect, check the terminal for the host and port, then open the printed localhost URL.
 
 ## Repository Selection Fails
 
