@@ -76,7 +76,7 @@ npm run build
 npm pack --dry-run
 ```
 
-Confirm the dry-run output includes `dist/web/index.html` and `dist/server/index.js`.
+Confirm the dry-run output includes `dist/web/index.html`, `dist/server/cli.js`, and `dist/server/index.js`.
 
 ## Verification Command Is Rejected
 

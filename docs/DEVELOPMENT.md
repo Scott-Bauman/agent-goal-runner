@@ -68,9 +68,9 @@ Scripts are defined in `package.json`.
 | Script | Behavior |
 | --- | --- |
 | `npm run dev` | Runs backend and frontend development servers together with `concurrently`. |
-| `npm start` | Starts the built backend from `dist/server/index.js`; the backend serves the built frontend from `dist/web`. |
-| `npm run start:server` | Starts the built backend from `dist/server/index.js`. |
-| `npm run dev:server` | Watches and runs `src/server/index.ts` with `tsx`. |
+| `npm start` | Starts the built backend from `dist/server/cli.js`; the backend serves the built frontend from `dist/web`. |
+| `npm run start:server` | Starts the built backend from `dist/server/cli.js`. |
+| `npm run dev:server` | Watches and runs `src/server/cli.ts` with `tsx`. |
 | `npm run dev:web` | Starts Vite on `127.0.0.1`. |
 | `npm run preview:web` | Serves only the built frontend with Vite preview for frontend-only inspection. |
 | `npm run typecheck` | Runs TypeScript checks for the web and server configs. |

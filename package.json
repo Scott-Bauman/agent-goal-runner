@@ -1,6 +1,6 @@
 {
   "name": "agent-goal-runner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run goal-driven local agent CLI loops from a browser UI.",
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,7 @@
     }
   },
   "bin": {
-    "agent-goal-runner": "./dist/server/index.js"
+    "agent-goal-runner": "./dist/server/cli.js"
   },
   "files": [
     "dist/server/",
@@ -36,8 +36,8 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
     "start": "npm run start:server",
-    "start:server": "node dist/server/index.js",
-    "dev:server": "tsx watch src/server/index.ts",
+    "start:server": "node dist/server/cli.js",
+    "dev:server": "tsx watch src/server/cli.ts",
     "dev:web": "vite --host 127.0.0.1",
     "preview:web": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
