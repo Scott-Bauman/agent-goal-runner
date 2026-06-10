@@ -1,6 +1,6 @@
 # agent-goal-runner
 
-Run long agent coding tasks as a controlled series of fresh, goal-driven local CLI passes.
+Run long agent coding tasks as a controlled series of fresh, goal-driven local CLI passes. This runs with your current codex or claude subscription.
 
 `agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. It starts a localhost server, lets you select a local Git repository, shows the current goal file, and runs repeatable Codex or Claude CLI passes with live logs, progress, summaries, optional verification commands, and optional Git commits.
 
