@@ -61,7 +61,7 @@ npx agent-goal-runner
 Clone the repository, install dependencies, and start the development servers:
 
 ```sh
-git clone https://github.com/YOUR_USERNAME/agent-goal-runner.git
+git clone https://github.com/Scott-Bauman/agent-goal-runner.git
 cd agent-goal-runner
 npm install
 npm run dev
@@ -108,7 +108,7 @@ Global install copies the skill to your user-level `.agents/skills` directory. R
 
 ## Publishing Status
 
-This repository is prepared for public GitHub and npm publishing, but publishing is a manual maintainer action. Before publishing, replace the placeholder GitHub metadata that uses `YOUR_USERNAME/agent-goal-runner` if the final owner differs.
+This repository is prepared for public GitHub and npm publishing, but publishing is a manual maintainer action.
 
 Do not publish with unreviewed local changes, generated logs, coverage output, or stale build artifacts.
 

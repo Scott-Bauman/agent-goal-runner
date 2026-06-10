@@ -108,7 +108,7 @@ npm pack --dry-run
 
 Inspect the `npm pack --dry-run` output before publishing. It should include `dist/server`, `dist/web`, `bundled-skills`, `README.md`, `LICENSE`, `docs/DEVELOPMENT.md`, `docs/TROUBLESHOOTING.md`, and `docs/assets`. It should not include `src`, `tests`, `coverage`, `node_modules`, `.codex-runner-logs`, or stale root-level Vite output under `dist/assets`.
 
-The current package metadata uses placeholder GitHub URLs under `YOUR_USERNAME/agent-goal-runner`. Replace those values in `package.json` before publishing if the final GitHub owner differs.
+Before publishing, confirm `package.json` repository, bugs, and homepage metadata still point to the intended GitHub repository.
 
 ## Current Local Behavior
 

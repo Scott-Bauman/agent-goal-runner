@@ -27,12 +27,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_USERNAME/agent-goal-runner.git"
+    "url": "git+https://github.com/Scott-Bauman/agent-goal-runner.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/agent-goal-runner/issues"
+    "url": "https://github.com/Scott-Bauman/agent-goal-runner/issues"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/agent-goal-runner#readme",
+  "homepage": "https://github.com/Scott-Bauman/agent-goal-runner#readme",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:web\"",
     "start": "npm run start:server",
