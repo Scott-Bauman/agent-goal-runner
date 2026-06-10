@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
@@ -168,6 +168,81 @@ describe("goal-runner-framework skill routes", () => {
         "utf8",
       ),
     ).resolves.toBe("# Bundled Skill\n");
+  });
+
+  it("rejects repo-local install when the skills parent is a link", async () => {
+    const skillAppRootPath = await createBundledSkillRoot("# Bundled Skill\n");
+    const skillUserHomePath = await createTempPath();
+    const repositoryPath = await createRepositoryPath();
+    const outsidePath = await createTempPath();
+    const app = await createTestServer({
+      skillAppRootPath,
+      skillUserHomePath,
+    });
+
+    await mkdir(path.join(repositoryPath, ".agents"), {
+      recursive: true,
+    });
+    await symlink(
+      outsidePath,
+      path.join(repositoryPath, ".agents", "skills"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/skills/goal-runner-framework/install/repo",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      error: "Repo-local skill destination must not include symlinks or junctions.",
+    });
+    await expect(
+      readFile(
+        path.join(outsidePath, "goal-runner-framework", "SKILL.md"),
+        "utf8",
+      ),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("rejects repo-local install when the skill destination is a link", async () => {
+    const skillAppRootPath = await createBundledSkillRoot("# Bundled Skill\n");
+    const skillUserHomePath = await createTempPath();
+    const repositoryPath = await createRepositoryPath();
+    const outsidePath = await createTempPath();
+    const app = await createTestServer({
+      skillAppRootPath,
+      skillUserHomePath,
+    });
+
+    await mkdir(path.join(repositoryPath, ".agents", "skills"), {
+      recursive: true,
+    });
+    await symlink(
+      outsidePath,
+      path.join(repositoryPath, ".agents", "skills", "goal-runner-framework"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/skills/goal-runner-framework/install/repo",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      error: "Repo-local skill destination must not include symlinks or junctions.",
+    });
+    await expect(readFile(path.join(outsidePath, "SKILL.md"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("installs the bundled skill globally", async () => {

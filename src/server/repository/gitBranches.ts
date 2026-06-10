@@ -60,7 +60,7 @@ export async function switchRepositoryBranch(
   repositoryPath: string,
   branch: string,
 ): Promise<RepositoryBranches> {
-  await runGitCommand(spawnProcess, repositoryPath, ["switch", branch]);
+  await runGitCommand(spawnProcess, repositoryPath, ["switch", "--", branch]);
 
   return getRepositoryBranches(spawnProcess, repositoryPath);
 }
@@ -83,6 +83,7 @@ export async function mergeRepositoryBranch(
   await runGitCommand(spawnProcess, repositoryPath, [
     "merge",
     "--no-edit",
+    "--",
     branch,
   ]);
 
@@ -94,7 +95,7 @@ export async function deleteRepositoryBranch(
   repositoryPath: string,
   branch: string,
 ): Promise<RepositoryBranches> {
-  await runGitCommand(spawnProcess, repositoryPath, ["branch", "-d", branch]);
+  await runGitCommand(spawnProcess, repositoryPath, ["branch", "-d", "--", branch]);
 
   return getRepositoryBranches(spawnProcess, repositoryPath);
 }

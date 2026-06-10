@@ -230,10 +230,41 @@ describe("repository selection endpoint", () => {
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
       ["status", "--porcelain"],
-      ["switch", "feature/top-bar"],
+      ["switch", "--", "feature/top-bar"],
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
       ["status", "--porcelain"],
+    ]);
+  });
+
+  it("passes option-like branch names as switch operands", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = createGitSpawner([
+      { stdout: "main\n" },
+      { stdout: "main\n--detach\n" },
+      {},
+      {},
+      { stdout: "--detach\n" },
+      { stdout: "main\n--detach\n" },
+      {},
+    ]);
+    const app = await createTestServer({ spawnProcess });
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/repository/branches/switch",
+      payload: {
+        branch: "--detach",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(spawnProcess.mock.calls.map(([, args]) => args)).toContainEqual([
+      "switch",
+      "--",
+      "--detach",
     ]);
   });
 
@@ -330,7 +361,7 @@ describe("repository selection endpoint", () => {
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
       ["status", "--porcelain"],
-      ["merge", "--no-edit", "feature/top-bar"],
+      ["merge", "--no-edit", "--", "feature/top-bar"],
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
       ["status", "--porcelain"],
@@ -508,7 +539,7 @@ describe("repository selection endpoint", () => {
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
       ["status", "--porcelain"],
-      ["branch", "-d", "feature/top-bar"],
+      ["branch", "-d", "--", "feature/top-bar"],
       ["branch", "--show-current"],
       ["branch", "--format=%(refname:short)"],
       ["status", "--porcelain"],

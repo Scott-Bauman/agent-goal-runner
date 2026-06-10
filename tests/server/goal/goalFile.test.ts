@@ -164,4 +164,24 @@ describe("goal path helpers", () => {
       assertResolvedGoalPathInsideRepository(repositoryPath, goalPath),
     ).rejects.toSatisfy(isGoalPathRestrictionError);
   });
+
+  it("rejects reading a symlinked goal.md", async () => {
+    const repositoryPath = await createRepositoryPath();
+
+    await createEscapingGoalPath(repositoryPath);
+
+    await expect(readGoalMarkdown(repositoryPath)).rejects.toSatisfy(
+      isGoalPathRestrictionError,
+    );
+  });
+
+  it("rejects updating a symlinked goal.md", async () => {
+    const repositoryPath = await createRepositoryPath();
+
+    await createEscapingGoalPath(repositoryPath);
+
+    await expect(
+      updateGoalMarkdown(repositoryPath, "# New Goal\n", "revision"),
+    ).rejects.toSatisfy(isGoalPathRestrictionError);
+  });
 });

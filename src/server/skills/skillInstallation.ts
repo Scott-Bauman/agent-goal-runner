@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { cp, mkdir, stat } from "node:fs/promises";
+import { cp, lstat, mkdir, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -31,6 +31,13 @@ type SkillCopyOptions = {
   appRootPath?: string;
   userHomePath?: string;
 };
+
+class SkillInstallPathRestrictionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SkillInstallPathRestrictionError";
+  }
+}
 
 function getRepoLocalSkillDirectory(
   repositoryPath: string,
@@ -96,11 +103,15 @@ export async function copyBundledSkillToRepository(
   repositoryPath: string,
   options: SkillCopyOptions = {},
 ): Promise<SkillInstallStatus> {
+  const destinationDirectory = getRepoLocalSkillDirectory(repositoryPath, skillName);
+
+  await assertSafeRepoLocalSkillDestination(repositoryPath, destinationDirectory);
   await copyBundledSkill(
     skillName,
-    getRepoLocalSkillDirectory(repositoryPath, skillName),
+    destinationDirectory,
     options,
   );
+  await assertSafeRepoLocalSkillDestination(repositoryPath, destinationDirectory);
 
   return getSkillInstallStatus(skillName, {
     appRootPath: options.appRootPath,
@@ -149,4 +160,81 @@ async function copyBundledSkill(
     force: true,
     recursive: true,
   });
+}
+
+function isPathInsideDirectory(
+  directoryPath: string,
+  targetPath: string,
+): boolean {
+  const relativePath = path.relative(directoryPath, targetPath);
+
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  );
+}
+
+async function assertNoExistingPathComponentIsLink(
+  rootPath: string,
+  targetPath: string,
+): Promise<void> {
+  const relativePath = path.relative(rootPath, targetPath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new SkillInstallPathRestrictionError(
+      "Repo-local skill destination resolves outside the selected repository.",
+    );
+  }
+
+  let currentPath = rootPath;
+
+  for (const part of relativePath.split(path.sep).filter(Boolean)) {
+    currentPath = path.join(currentPath, part);
+
+    try {
+      const stats = await lstat(currentPath);
+
+      if (stats.isSymbolicLink()) {
+        throw new SkillInstallPathRestrictionError(
+          "Repo-local skill destination must not include symlinks or junctions.",
+        );
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return;
+      }
+
+      throw error;
+    }
+  }
+}
+
+async function assertSafeRepoLocalSkillDestination(
+  repositoryPath: string,
+  destinationDirectory: string,
+): Promise<void> {
+  const repositoryRoot = await realpath(repositoryPath);
+  const parentDirectory = path.dirname(destinationDirectory);
+
+  await assertNoExistingPathComponentIsLink(repositoryRoot, parentDirectory);
+  await mkdir(parentDirectory, {
+    recursive: true,
+  });
+  await assertNoExistingPathComponentIsLink(repositoryRoot, parentDirectory);
+
+  try {
+    await assertNoExistingPathComponentIsLink(repositoryRoot, destinationDirectory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  const resolvedParent = await realpath(parentDirectory);
+
+  if (!isPathInsideDirectory(repositoryRoot, resolvedParent)) {
+    throw new SkillInstallPathRestrictionError(
+      "Repo-local skill destination resolves outside the selected repository.",
+    );
+  }
 }

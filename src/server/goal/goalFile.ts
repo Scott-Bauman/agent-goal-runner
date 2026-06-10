@@ -1,5 +1,6 @@
-import { lstat, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import type { Stats } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { constants, type Stats } from "node:fs";
+import { lstat, open, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { isNodeErrorCode } from "../shared/nodeErrors.js";
@@ -148,6 +149,15 @@ function getGoalRevision(goalFileStats: Stats): string {
   ].join("-");
 }
 
+function isSameFile(firstStats: Stats, secondStats: Stats): boolean {
+  return (
+    firstStats.dev === secondStats.dev &&
+    firstStats.ino === secondStats.ino &&
+    firstStats.size === secondStats.size &&
+    firstStats.mtimeMs === secondStats.mtimeMs
+  );
+}
+
 async function readGoalFileMetadata(
   repositoryPath: string,
   goalFilePath: string,
@@ -158,12 +168,47 @@ async function readGoalFileMetadata(
   return stat(goalFilePath);
 }
 
+async function readVerifiedGoalFile(
+  repositoryPath: string,
+  goalFilePath: string,
+): Promise<{
+  markdown: string;
+  stats: Stats;
+}> {
+  const checkedStats = await readGoalFileMetadata(repositoryPath, goalFilePath);
+  let goalFile;
+
+  try {
+    goalFile = await open(goalFilePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (isNodeErrorCode(error, "ELOOP")) {
+      throw new GoalPathRestrictionError();
+    }
+
+    throw error;
+  }
+
+  try {
+    const openedStats = await goalFile.stat();
+
+    if (!isSameFile(checkedStats, openedStats)) {
+      throw new GoalPathRestrictionError();
+    }
+
+    return {
+      markdown: await goalFile.readFile("utf8"),
+      stats: openedStats,
+    };
+  } finally {
+    await goalFile.close();
+  }
+}
+
 export async function readGoalMarkdown(repositoryPath: string): Promise<string> {
   const goalFilePath = getGoalFilePath(repositoryPath);
+  const goalFile = await readVerifiedGoalFile(repositoryPath, goalFilePath);
 
-  await readGoalFileMetadata(repositoryPath, goalFilePath);
-
-  return readFile(goalFilePath, "utf8");
+  return goalFile.markdown;
 }
 
 export async function readGoalMarkdownWithRevision(
@@ -174,13 +219,12 @@ export async function readGoalMarkdownWithRevision(
   revision: string;
 }> {
   const goalPath = getGoalFilePath(repositoryPath);
-  const goalFileStats = await readGoalFileMetadata(repositoryPath, goalPath);
-  const markdown = await readFile(goalPath, "utf8");
+  const goalFile = await readVerifiedGoalFile(repositoryPath, goalPath);
 
   return {
     goalPath,
-    markdown,
-    revision: getGoalRevision(goalFileStats),
+    markdown: goalFile.markdown,
+    revision: getGoalRevision(goalFile.stats),
   };
 }
 
@@ -236,7 +280,7 @@ export async function updateGoalMarkdown(
   revision: string;
 }> {
   const goalPath = getGoalFilePath(repositoryPath);
-  const currentGoalStats = await readGoalFileMetadata(repositoryPath, goalPath);
+  const currentGoalStats = (await readVerifiedGoalFile(repositoryPath, goalPath)).stats;
   const currentRevision = getGoalRevision(currentGoalStats);
 
   if (currentRevision !== expectedRevision) {
@@ -246,8 +290,26 @@ export async function updateGoalMarkdown(
     });
   }
 
-  await writeFile(goalPath, markdown, "utf8");
-  const updatedGoalStats = await stat(goalPath);
+  const tempGoalPath = path.join(
+    repositoryPath,
+    `.goal.md.${process.pid}.${randomUUID()}.tmp`,
+  );
+
+  await writeFile(tempGoalPath, markdown, {
+    encoding: "utf8",
+    flag: "wx",
+  });
+
+  try {
+    await rename(tempGoalPath, goalPath);
+  } catch (error) {
+    await rm(tempGoalPath, {
+      force: true,
+    });
+    throw error;
+  }
+
+  const updatedGoalStats = await readGoalFileMetadata(repositoryPath, goalPath);
 
   return {
     goalPath,
