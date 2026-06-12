@@ -1,10 +1,10 @@
 import {
   useEffect,
   useRef,
-  useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  useState,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -72,23 +72,28 @@ import {
 } from "@/web/runner/statuses";
 import {
   AGENT_PROVIDERS,
-  DEFAULT_AGENT_PROVIDER,
   type AgentProvider,
 } from "@/web/runner/agentProviders";
-import {
-  CLAUDE_MODELS,
-  type ClaudeModel,
-} from "@/web/runner/claudeOptions";
+import { CLAUDE_MODELS } from "@/web/runner/claudeOptions";
 import {
   CODEX_MODELS,
   CODEX_REASONING_EFFORTS,
-  type CodexModel,
-  type CodexReasoningEffort,
 } from "@/web/runner/codexOptions";
 import {
   PI_MODEL_INPUT_PLACEHOLDER,
   type PiModelSelection,
 } from "@/web/runner/piOptions";
+import {
+  CLI_DEFAULT_OPTION,
+  toRunClaudeModel,
+  toRunModel,
+  toRunPiModel,
+  toRunReasoningEffort,
+  type AgentRunSelection,
+  type ClaudeModelSelection,
+  type ModelSelection,
+  type ReasoningEffortSelection,
+} from "@/web/runner/runSelection";
 
 type RunControlFormState = {
   status: "idle" | "starting" | "stopping";
@@ -110,11 +115,6 @@ const DEFAULT_REVIEW_INTERVAL_COMMITS = 3;
 const DEFAULT_REVIEW_PROMPT = createDefaultReviewPrompt(
   DEFAULT_REVIEW_INTERVAL_COMMITS,
 );
-const CLI_DEFAULT_OPTION = "CLI default";
-
-type ModelSelection = CodexModel | typeof CLI_DEFAULT_OPTION;
-type ReasoningEffortSelection = CodexReasoningEffort | typeof CLI_DEFAULT_OPTION;
-type ClaudeModelSelection = ClaudeModel | typeof CLI_DEFAULT_OPTION;
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
 const PROVIDER_OPTIONS: AgentProvider[] = [...AGENT_PROVIDERS];
@@ -257,26 +257,6 @@ function SetupArea({
       {children}
     </div>
   );
-}
-
-function toRunModel(selection: ModelSelection): CodexModel | null {
-  return selection === CLI_DEFAULT_OPTION ? null : selection;
-}
-
-function toRunReasoningEffort(
-  selection: ReasoningEffortSelection,
-): CodexReasoningEffort | null {
-  return selection === CLI_DEFAULT_OPTION ? null : selection;
-}
-
-function toRunClaudeModel(selection: ClaudeModelSelection): ClaudeModel | null {
-  return selection === CLI_DEFAULT_OPTION ? null : selection;
-}
-
-function toRunPiModel(selection: PiModelSelection): PiModelSelection | null {
-  const trimmedSelection = selection.trim();
-
-  return trimmedSelection.length > 0 ? trimmedSelection : null;
 }
 
 function getSelectedRepositoryPath(
@@ -1281,34 +1261,29 @@ function ReviewIntervalInput({
 }
 
 export function ControlsPanel({
+  agentRunSelection,
   commandTargetId,
+  onAgentRunSelectionChange,
   onRepositorySelected,
   onRunnerStatusChange,
   repositorySelection,
   runnerStatus,
 }: {
+  agentRunSelection: AgentRunSelection;
   commandTargetId?: string;
+  onAgentRunSelectionChange: Dispatch<SetStateAction<AgentRunSelection>>;
   onRepositorySelected: (repositoryPath: string) => void;
   onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
   runnerStatus: RunnerStatus;
 }) {
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
-  const [provider, setProvider] = useState<AgentProvider>(
-    DEFAULT_AGENT_PROVIDER,
-  );
   const [runCount, setRunCount] = useState("1");
   const [verificationCommands, setVerificationCommands] = useState([""]);
   const [autoCommit, setAutoCommit] = useState(false);
-  const [model, setModel] = useState<ModelSelection>("gpt-5.4");
-  const [reasoningEffort, setReasoningEffort] =
-    useState<ReasoningEffortSelection>("high");
-  const [claudeModel, setClaudeModel] =
-    useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
-  const [piModel, setPiModel] = useState<PiModelSelection>("");
   const [reviewEnabled, setReviewEnabled] = useState(false);
   const [reviewProvider, setReviewProvider] = useState<AgentProvider>(
-    DEFAULT_AGENT_PROVIDER,
+    "codex",
   );
   const [reviewIntervalCommits, setReviewIntervalCommits] = useState(
     String(DEFAULT_REVIEW_INTERVAL_COMMITS),
@@ -1341,6 +1316,8 @@ export function ControlsPanel({
     });
   const skillStatusRequestId = useRef(0);
   const selectedRepositoryPath = getSelectedRepositoryPath(repositorySelection);
+  const { claudeModel, model, piModel, provider, reasoningEffort } =
+    agentRunSelection;
   const repositoryPathErrorId = "repository-path-error";
   const repositoryPathIssuesId = "repository-path-issues";
   const runControlErrorId = "run-control-error";
@@ -1381,6 +1358,25 @@ export function ControlsPanel({
     isRunControlPending,
     runnerStatus,
   });
+
+  function setAgentRunSelectionValue<Key extends keyof AgentRunSelection>(
+    key: Key,
+    valueOrUpdater: SetStateAction<AgentRunSelection[Key]>,
+  ) {
+    onAgentRunSelectionChange((currentSelection) => {
+      const nextValue =
+        typeof valueOrUpdater === "function"
+          ? (valueOrUpdater as (
+              previous: AgentRunSelection[Key],
+            ) => AgentRunSelection[Key])(currentSelection[key])
+          : valueOrUpdater;
+
+      return {
+        ...currentSelection,
+        [key]: nextValue,
+      };
+    });
+  }
 
   useEffect(() => {
     if (!commandTargetId) {
@@ -1779,16 +1775,26 @@ export function ControlsPanel({
           prompt={repeatPrompt}
         />
         <ProviderSetupSection
-          onProviderChange={setProvider}
+          onProviderChange={(nextProvider) => {
+            setAgentRunSelectionValue("provider", nextProvider);
+          }}
           provider={provider}
         />
         <ModelSetupSection
           claudeModel={claudeModel}
           model={model}
-          onClaudeModelChange={setClaudeModel}
-          onModelChange={setModel}
-          onPiModelChange={setPiModel}
-          onReasoningEffortChange={setReasoningEffort}
+          onClaudeModelChange={(valueOrUpdater) => {
+            setAgentRunSelectionValue("claudeModel", valueOrUpdater);
+          }}
+          onModelChange={(valueOrUpdater) => {
+            setAgentRunSelectionValue("model", valueOrUpdater);
+          }}
+          onPiModelChange={(valueOrUpdater) => {
+            setAgentRunSelectionValue("piModel", valueOrUpdater);
+          }}
+          onReasoningEffortChange={(valueOrUpdater) => {
+            setAgentRunSelectionValue("reasoningEffort", valueOrUpdater);
+          }}
           piModel={piModel}
           provider={provider}
           reasoningEffort={reasoningEffort}

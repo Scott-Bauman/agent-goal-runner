@@ -52,6 +52,13 @@ import {
   type GoalImplementationStep,
 } from "@/web/markdown";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
+import {
+  toRunClaudeModel,
+  toRunModel,
+  toRunPiModel,
+  toRunReasoningEffort,
+  type AgentRunSelection,
+} from "@/web/runner/runSelection";
 import type { RunnerStatus } from "@/web/runner/statuses";
 
 type GoalDraftState =
@@ -86,11 +93,13 @@ function toAvailableGoalState(goalFile: GoalFileResponse): GoalFileState {
 }
 
 export function GoalDocumentPanel({
+  agentRunSelection,
   goalRefreshToken,
   onRunnerStatusChange,
   repositorySelection,
   runnerStatus,
 }: {
+  agentRunSelection: AgentRunSelection;
   goalRefreshToken: number;
   onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
@@ -384,9 +393,24 @@ export function GoalDocumentPanel({
       const response = await fetch("/api/run/start", {
         body: JSON.stringify({
           autoCommit: false,
-          model: null,
+          provider: agentRunSelection.provider,
+          model:
+            agentRunSelection.provider === "codex"
+              ? toRunModel(agentRunSelection.model)
+              : null,
           prompt: buildAgentGoalPrompt(draftState.prompt),
-          reasoningEffort: null,
+          reasoningEffort:
+            agentRunSelection.provider === "codex"
+              ? toRunReasoningEffort(agentRunSelection.reasoningEffort)
+              : null,
+          claudeModel:
+            agentRunSelection.provider === "claude"
+              ? toRunClaudeModel(agentRunSelection.claudeModel)
+              : null,
+          piModel:
+            agentRunSelection.provider === "pi"
+              ? toRunPiModel(agentRunSelection.piModel)
+              : null,
           review: {
             enabled: false,
           },

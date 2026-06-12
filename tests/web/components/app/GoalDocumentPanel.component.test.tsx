@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoalDocumentPanel } from "../../../../src/web/components/app/GoalDocumentPanel";
 import { DEFAULT_MANUAL_GOAL_MARKDOWN } from "../../../../src/web/goal/goalEditing";
+import { createDefaultAgentRunSelection } from "../../../../src/web/runner/runSelection";
 
 import { jsonResponse } from "./componentTestUtils";
 
@@ -25,6 +26,7 @@ function renderGoalPanel(
   overrides: Partial<ComponentProps<typeof GoalDocumentPanel>> = {},
 ) {
   const props: ComponentProps<typeof GoalDocumentPanel> = {
+    agentRunSelection: createDefaultAgentRunSelection(),
     goalRefreshToken: 0,
     onRunnerStatusChange: vi.fn(),
     repositorySelection: {
@@ -190,8 +192,11 @@ describe("GoalDocumentPanel", () => {
     expect(fetchMock.mock.calls[1][0]).toBe("/api/run/start");
     expect(requestBody).toMatchObject({
       autoCommit: false,
-      model: null,
-      reasoningEffort: null,
+      provider: "codex",
+      model: "gpt-5.4",
+      reasoningEffort: "high",
+      claudeModel: null,
+      piModel: null,
       review: {
         enabled: false,
       },
@@ -202,6 +207,63 @@ describe("GoalDocumentPanel", () => {
       "Use the `goal-runner-framework` skill.",
     );
     expect(requestBody.prompt).toContain("User request:\nDraft goal.md");
+  });
+
+  it("starts an agent goal run with the selected Pi provider", async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            code: "GOAL_MISSING",
+            error: "No goal.md found.",
+          },
+          { ok: false, status: 404 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          provider: "pi",
+          model: null,
+          reasoningEffort: null,
+          claudeModel: null,
+          piModel: "local/llama-3.1",
+          review: {
+            enabled: false,
+          },
+          status: "running",
+        }),
+      );
+
+    renderGoalPanel({
+      agentRunSelection: {
+        ...createDefaultAgentRunSelection(),
+        provider: "pi",
+        piModel: " local/llama-3.1 ",
+      },
+    });
+
+    expect(await screen.findByText("No goal.md found")).toBeTruthy();
+
+    await user.click(screen.getAllByRole("button", { name: "Agent Add" })[0]);
+    await user.click(screen.getByRole("button", { name: "Start Agent" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/run/start",
+        expect.any(Object),
+      );
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      provider: "pi",
+      model: null,
+      reasoningEffort: null,
+      claudeModel: null,
+      piModel: "local/llama-3.1",
+    });
   });
 
   it("shows a load error when goal.md cannot be fetched", async () => {

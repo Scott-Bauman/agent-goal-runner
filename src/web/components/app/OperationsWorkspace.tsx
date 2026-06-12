@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   ControlsPanel,
   RUN_SETUP_SECTIONS,
@@ -20,6 +22,7 @@ import {
 import { useSidebar } from "@/web/components/ui/sidebarContext";
 import type { RuntimeStreamState } from "@/web/events/runtimeStream";
 import type { RepositorySelectionState } from "@/web/repository/repositorySelection";
+import { createDefaultAgentRunSelection } from "@/web/runner/runSelection";
 import type { RunnerStatus } from "@/web/runner/statuses";
 
 function CollapsedSetupNav() {
@@ -80,6 +83,9 @@ export function OperationsWorkspace({
 }) {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const [agentRunSelection, setAgentRunSelection] = useState(
+    createDefaultAgentRunSelection,
+  );
 
   return (
     <>
@@ -106,7 +112,9 @@ export function OperationsWorkspace({
           >
             <SidebarGroupContent className="min-h-0 flex-1">
               <ControlsPanel
+                agentRunSelection={agentRunSelection}
                 commandTargetId={commandActionsTargetId}
+                onAgentRunSelectionChange={setAgentRunSelection}
                 onRepositorySelected={onRepositorySelected}
                 onRunnerStatusChange={onRunnerStatusChange}
                 repositorySelection={repositorySelection}
@@ -122,6 +130,7 @@ export function OperationsWorkspace({
         <div className="grid h-full min-h-0 w-full grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
           <div className="min-h-0 min-w-0 overflow-hidden">
             <GoalDocumentPanel
+              agentRunSelection={agentRunSelection}
               goalRefreshToken={goalRefreshToken}
               onRunnerStatusChange={onRunnerStatusChange}
               repositorySelection={repositorySelection}

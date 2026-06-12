@@ -3,10 +3,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ControlsPanel } from "../../../../src/web/components/app/ControlsPanel";
 import type { SkillInstallStatusResponse } from "../../../../src/web/api/responses";
+import { createDefaultAgentRunSelection } from "../../../../src/web/runner/runSelection";
 
 import { jsonResponse } from "./componentTestUtils";
 
@@ -60,7 +62,9 @@ function renderControls(
   overrides: Partial<ComponentProps<typeof ControlsPanel>> = {},
 ) {
   const props: ComponentProps<typeof ControlsPanel> = {
+    agentRunSelection: createDefaultAgentRunSelection(),
     onRepositorySelected: vi.fn(),
+    onAgentRunSelectionChange: vi.fn(),
     onRunnerStatusChange: vi.fn(),
     repositorySelection: {
       repositoryPath: "C:\\repo\\agent-goal-runner",
@@ -70,7 +74,21 @@ function renderControls(
     ...overrides,
   };
 
-  const view = render(<ControlsPanel {...props} />);
+  function ControlsHarness() {
+    const [agentRunSelection, setAgentRunSelection] = useState(
+      props.agentRunSelection,
+    );
+
+    return (
+      <ControlsPanel
+        {...props}
+        agentRunSelection={agentRunSelection}
+        onAgentRunSelectionChange={setAgentRunSelection}
+      />
+    );
+  }
+
+  const view = render(<ControlsHarness />);
 
   return {
     ...props,
@@ -253,6 +271,8 @@ describe("ControlsPanel", () => {
 
     view.rerender(
       <ControlsPanel
+        agentRunSelection={view.agentRunSelection}
+        onAgentRunSelectionChange={view.onAgentRunSelectionChange}
         onRepositorySelected={view.onRepositorySelected}
         onRunnerStatusChange={view.onRunnerStatusChange}
         repositorySelection={{
