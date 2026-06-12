@@ -339,6 +339,7 @@ describe("ControlsPanel", () => {
       prompt: "Use goal.md as the source of truth.\n\nComplete the next valid unchecked item.",
       reasoningEffort: "high",
       claudeModel: null,
+      piModel: null,
       review: {
         enabled: false,
       },
@@ -392,7 +393,57 @@ describe("ControlsPanel", () => {
         enabled: true,
         intervalCommits: 3,
         model: "gpt-5.4",
+        piModel: null,
         reasoningEffort: "high",
+      },
+    });
+  });
+
+  it("starts a Pi run with a free-text model", async () => {
+    const user = userEvent.setup();
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/run/start": {
+        provider: "pi",
+        model: null,
+        reasoningEffort: null,
+        claudeModel: null,
+        piModel: "local/llama-3.1",
+        review: {
+          enabled: false,
+          intervalCommits: 0,
+          model: null,
+          prompt: "",
+          reasoningEffort: null,
+          claudeModel: null,
+          piModel: null,
+        },
+        status: "running",
+      },
+    });
+    const props = renderControls();
+
+    await user.click(screen.getByLabelText("Provider"));
+    await user.click(await screen.findByRole("option", { name: "pi" }));
+    await user.type(screen.getByLabelText("Pi model"), " local/llama-3.1 ");
+    await user.click(screen.getByRole("button", { name: /^start$/i }));
+
+    await waitFor(() => {
+      expect(props.onRunnerStatusChange).toHaveBeenCalledWith("running");
+    });
+
+    const [, requestInit] = fetchMock.mock.calls.find(
+      ([url]) => url === "/api/run/start",
+    ) as [string, RequestInit];
+
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      provider: "pi",
+      model: null,
+      reasoningEffort: null,
+      claudeModel: null,
+      piModel: "local/llama-3.1",
+      review: {
+        enabled: false,
       },
     });
   });

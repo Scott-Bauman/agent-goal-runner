@@ -78,6 +78,7 @@ describe("run controller orchestration", () => {
       model: "gpt-5.4",
       reasoningEffort: "medium",
       claudeModel: null,
+      piModel: null,
       review: DEFAULT_REVIEW_RUN_OPTIONS,
     });
     firstRunProcess.emit("close", 0, null);
@@ -125,6 +126,7 @@ describe("run controller orchestration", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: null,
+      piModel: null,
       review: DEFAULT_REVIEW_RUN_OPTIONS,
     });
     runProcess.emit("close", 0, null);
@@ -161,6 +163,7 @@ describe("run controller orchestration", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: "sonnet",
+      piModel: null,
       review: DEFAULT_REVIEW_RUN_OPTIONS,
     });
 
@@ -192,6 +195,64 @@ describe("run controller orchestration", () => {
     );
   });
 
+  it("completes a Pi run and records stdout as the final assistant message", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Goal\n\n- [ ] Next\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess(321);
+    const spawnProcess = vi.fn(() => runProcess);
+    const runtimeState: RuntimeState = {
+      selectedRepositoryPath: repositoryPath,
+      stream: createInitialStreamState(),
+    };
+    const controller = new RunController(runtimeState, new SseHub(), spawnProcess);
+
+    controller.start({
+      repositoryPath,
+      provider: "pi",
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommandsToRun: [],
+      autoCommit: false,
+      model: null,
+      reasoningEffort: null,
+      claudeModel: null,
+      piModel: "local-llama",
+      review: DEFAULT_REVIEW_RUN_OPTIONS,
+    });
+
+    expect(spawnProcess).toHaveBeenCalledWith(
+      "pi",
+      [
+        "-p",
+        "Use goal.md as the source of truth.",
+        "--model",
+        "local-llama",
+      ],
+      {
+        cwd: repositoryPath,
+        windowsHide: true,
+      },
+    );
+    expect(runtimeState.stream.runLoop.details).toMatchObject({
+      model: "local-llama",
+      reasoningEffort: null,
+    });
+
+    runProcess.stdout.write("Pi final answer\n");
+    runProcess.emit("close", 0, null);
+
+    await vi.waitFor(() => {
+      expect(runtimeState.stream.runLoop.latestSummary).toEqual({
+        status: "complete",
+        message: `Completed Pi run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      });
+    });
+    expect(runtimeState.stream.runLoop.details.lastAssistantMessage).toBe(
+      "Pi final answer",
+    );
+  });
+
   it("does not run review when auto-commit skips a no-change normal run", async () => {
     const repositoryPath = await createRepositoryPath();
     const goalMarkdown = "# Goal\n\n- [ ] Next\n";
@@ -220,6 +281,7 @@ describe("run controller orchestration", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: null,
+      piModel: null,
       review: {
         enabled: true,
         provider: "codex",
@@ -228,6 +290,7 @@ describe("run controller orchestration", () => {
         model: null,
         reasoningEffort: null,
         claudeModel: null,
+        piModel: null,
       },
     });
     runProcess.emit("close", 0, null);
@@ -286,6 +349,7 @@ describe("run controller orchestration", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: null,
+      piModel: null,
       review: {
         enabled: true,
         provider: "claude",
@@ -294,6 +358,7 @@ describe("run controller orchestration", () => {
         model: null,
         reasoningEffort: null,
         claudeModel: "opus",
+        piModel: null,
       },
     });
 
@@ -405,6 +470,7 @@ describe("run controller orchestration", () => {
       model: "gpt-5.4",
       reasoningEffort: "medium",
       claudeModel: null,
+      piModel: null,
       review: {
         enabled: true,
         provider: "codex",
@@ -413,6 +479,7 @@ describe("run controller orchestration", () => {
         model: "gpt-5.4-nano",
         reasoningEffort: "low",
         claudeModel: null,
+        piModel: null,
       },
     });
 

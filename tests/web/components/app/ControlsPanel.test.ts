@@ -59,6 +59,7 @@ describe("ControlsPanel review setup helpers", () => {
       prompt: "Use $review.",
       reasoningEffort: "low",
       claudeModel: null,
+      piModel: null,
     });
   });
 
@@ -81,6 +82,31 @@ describe("ControlsPanel review setup helpers", () => {
       prompt: "Review recent commits.",
       reasoningEffort: null,
       claudeModel: "opus",
+      piModel: null,
+    });
+  });
+
+  it("creates an enabled Pi review request with the Pi model only", () => {
+    expect(
+      createReviewRunRequest({
+        intervalCommits: 2,
+        provider: "pi",
+        model: "gpt-5.4",
+        prompt: "Review recent commits.",
+        reasoningEffort: "high",
+        claudeModel: "opus",
+        piModel: "llama-3.1",
+        reviewEnabled: true,
+      }),
+    ).toEqual({
+      enabled: true,
+      provider: "pi",
+      intervalCommits: 2,
+      model: null,
+      prompt: "Review recent commits.",
+      reasoningEffort: null,
+      claudeModel: null,
+      piModel: "llama-3.1",
     });
   });
 });

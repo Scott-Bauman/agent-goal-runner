@@ -113,15 +113,19 @@ export async function copyBundledSkillToRepository(
   repositoryPath: string,
   options: SkillCopyOptions = {},
 ): Promise<SkillInstallStatus> {
-  const destinationDirectory = getRepoLocalSkillDirectory(repositoryPath, skillName);
+  const repositoryRoot = await realpath(repositoryPath);
+  const destinationDirectory = getRepoLocalSkillDirectory(
+    repositoryRoot,
+    skillName,
+  );
 
-  await assertSafeRepoLocalSkillDestination(repositoryPath, destinationDirectory);
+  await assertSafeRepoLocalSkillDestination(repositoryRoot, destinationDirectory);
   await copyBundledSkill(
     skillName,
     destinationDirectory,
     options,
   );
-  await assertSafeRepoLocalSkillDestination(repositoryPath, destinationDirectory);
+  await assertSafeRepoLocalSkillDestination(repositoryRoot, destinationDirectory);
 
   return getSkillInstallStatus(skillName, {
     appRootPath: options.appRootPath,

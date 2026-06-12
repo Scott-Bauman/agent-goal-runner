@@ -85,6 +85,10 @@ import {
   type CodexModel,
   type CodexReasoningEffort,
 } from "@/web/runner/codexOptions";
+import {
+  PI_MODEL_INPUT_PLACEHOLDER,
+  type PiModelSelection,
+} from "@/web/runner/piOptions";
 
 type RunControlFormState = {
   status: "idle" | "starting" | "stopping";
@@ -267,6 +271,12 @@ function toRunReasoningEffort(
 
 function toRunClaudeModel(selection: ClaudeModelSelection): ClaudeModel | null {
   return selection === CLI_DEFAULT_OPTION ? null : selection;
+}
+
+function toRunPiModel(selection: PiModelSelection): PiModelSelection | null {
+  const trimmedSelection = selection.trim();
+
+  return trimmedSelection.length > 0 ? trimmedSelection : null;
 }
 
 function getSelectedRepositoryPath(
@@ -709,7 +719,9 @@ function ModelSetupSection({
   model,
   onClaudeModelChange,
   onModelChange,
+  onPiModelChange,
   onReasoningEffortChange,
+  piModel,
   provider,
   reasoningEffort,
 }: {
@@ -717,7 +729,9 @@ function ModelSetupSection({
   model: ModelSelection;
   onClaudeModelChange: (model: ClaudeModelSelection) => void;
   onModelChange: (model: ModelSelection) => void;
+  onPiModelChange: (model: PiModelSelection) => void;
   onReasoningEffortChange: (reasoningEffort: ReasoningEffortSelection) => void;
+  piModel: PiModelSelection;
   provider: AgentProvider;
   reasoningEffort: ReasoningEffortSelection;
 }) {
@@ -737,6 +751,23 @@ function ModelSetupSection({
             onValueChange={onClaudeModelChange}
             value={claudeModel}
           />
+        ) : provider === "pi" ? (
+          <div className="flex flex-col gap-2">
+            <label
+              className="text-xs font-medium text-foreground"
+              htmlFor="pi-model"
+            >
+              Pi model
+            </label>
+            <Input
+              id="pi-model"
+              onChange={(event) => {
+                onPiModelChange(event.target.value);
+              }}
+              placeholder={PI_MODEL_INPUT_PLACEHOLDER}
+              value={piModel}
+            />
+          </div>
         ) : (
           <>
             <SelectionCombobox
@@ -962,6 +993,7 @@ function CommitSetupSection({
 
 function ReviewSetupSection({
   reviewClaudeModel,
+  reviewPiModel,
   isPromptValid,
   isReviewIntervalValid,
   onReviewEnabledChange,
@@ -976,11 +1008,13 @@ function ReviewSetupSection({
   setReviewClaudeModel,
   setReviewIntervalCommits,
   setReviewModel,
+  setReviewPiModel,
   setReviewPrompt,
   setReviewProvider,
   setReviewReasoningEffort,
 }: {
   reviewClaudeModel: ClaudeModelSelection;
+  reviewPiModel: PiModelSelection;
   isPromptValid: boolean;
   isReviewIntervalValid: boolean;
   onReviewEnabledChange: StateSetter<boolean>;
@@ -995,6 +1029,7 @@ function ReviewSetupSection({
   setReviewClaudeModel: StateSetter<ClaudeModelSelection>;
   setReviewIntervalCommits: StateSetter<string>;
   setReviewModel: StateSetter<ModelSelection>;
+  setReviewPiModel: StateSetter<PiModelSelection>;
   setReviewPrompt: StateSetter<string>;
   setReviewProvider: StateSetter<AgentProvider>;
   setReviewReasoningEffort: StateSetter<ReasoningEffortSelection>;
@@ -1052,6 +1087,7 @@ function ReviewSetupSection({
         {isReviewSettingsVisible(reviewEnabled) ? (
           <ReviewSettings
             reviewClaudeModel={reviewClaudeModel}
+            reviewPiModel={reviewPiModel}
             isPromptValid={isPromptValid}
             isReviewIntervalValid={isReviewIntervalValid}
             parsedReviewIntervalCommits={parsedReviewIntervalCommits}
@@ -1063,6 +1099,7 @@ function ReviewSetupSection({
             setReviewClaudeModel={setReviewClaudeModel}
             setReviewIntervalCommits={setReviewIntervalCommits}
             setReviewModel={setReviewModel}
+            setReviewPiModel={setReviewPiModel}
             setReviewPrompt={setReviewPrompt}
             setReviewProvider={setReviewProvider}
             setReviewReasoningEffort={setReviewReasoningEffort}
@@ -1075,6 +1112,7 @@ function ReviewSetupSection({
 
 function ReviewSettings({
   reviewClaudeModel,
+  reviewPiModel,
   isPromptValid,
   isReviewIntervalValid,
   parsedReviewIntervalCommits,
@@ -1086,11 +1124,13 @@ function ReviewSettings({
   setReviewClaudeModel,
   setReviewIntervalCommits,
   setReviewModel,
+  setReviewPiModel,
   setReviewPrompt,
   setReviewProvider,
   setReviewReasoningEffort,
 }: {
   reviewClaudeModel: ClaudeModelSelection;
+  reviewPiModel: PiModelSelection;
   isPromptValid: boolean;
   isReviewIntervalValid: boolean;
   parsedReviewIntervalCommits: number;
@@ -1102,6 +1142,7 @@ function ReviewSettings({
   setReviewClaudeModel: StateSetter<ClaudeModelSelection>;
   setReviewIntervalCommits: StateSetter<string>;
   setReviewModel: StateSetter<ModelSelection>;
+  setReviewPiModel: StateSetter<PiModelSelection>;
   setReviewPrompt: StateSetter<string>;
   setReviewProvider: StateSetter<AgentProvider>;
   setReviewReasoningEffort: StateSetter<ReasoningEffortSelection>;
@@ -1130,6 +1171,23 @@ function ReviewSettings({
             onValueChange={setReviewClaudeModel}
             value={reviewClaudeModel}
           />
+        ) : reviewProvider === "pi" ? (
+          <div className="flex flex-col gap-2">
+            <label
+              className="text-xs font-medium text-foreground"
+              htmlFor="review-pi-model"
+            >
+              Review Pi model
+            </label>
+            <Input
+              id="review-pi-model"
+              onChange={(event) => {
+                setReviewPiModel(event.target.value);
+              }}
+              placeholder={PI_MODEL_INPUT_PLACEHOLDER}
+              value={reviewPiModel}
+            />
+          </div>
         ) : (
           <>
             <SelectionCombobox
@@ -1247,6 +1305,7 @@ export function ControlsPanel({
     useState<ReasoningEffortSelection>("high");
   const [claudeModel, setClaudeModel] =
     useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
+  const [piModel, setPiModel] = useState<PiModelSelection>("");
   const [reviewEnabled, setReviewEnabled] = useState(false);
   const [reviewProvider, setReviewProvider] = useState<AgentProvider>(
     DEFAULT_AGENT_PROVIDER,
@@ -1260,6 +1319,7 @@ export function ControlsPanel({
     useState<ReasoningEffortSelection>("high");
   const [reviewClaudeModel, setReviewClaudeModel] =
     useState<ClaudeModelSelection>(CLI_DEFAULT_OPTION);
+  const [reviewPiModel, setReviewPiModel] = useState<PiModelSelection>("");
   const [commandTarget, setCommandTarget] = useState<HTMLElement | null>(null);
   const [repositoryPathForm, setRepositoryPathForm] =
     useState<RepositoryPathFormState>({
@@ -1551,6 +1611,7 @@ export function ControlsPanel({
             provider === "codex" ? toRunReasoningEffort(reasoningEffort) : null,
           claudeModel:
             provider === "claude" ? toRunClaudeModel(claudeModel) : null,
+          piModel: provider === "pi" ? toRunPiModel(piModel) : null,
           review: createReviewRunRequest({
             claudeModel:
               reviewProvider === "claude"
@@ -1559,6 +1620,8 @@ export function ControlsPanel({
             intervalCommits: parsedReviewIntervalCommits,
             provider: reviewProvider,
             model: reviewProvider === "codex" ? toRunModel(reviewModel) : null,
+            piModel:
+              reviewProvider === "pi" ? toRunPiModel(reviewPiModel) : null,
             prompt: reviewPrompt,
             reasoningEffort:
               reviewProvider === "codex"
@@ -1724,7 +1787,9 @@ export function ControlsPanel({
           model={model}
           onClaudeModelChange={setClaudeModel}
           onModelChange={setModel}
+          onPiModelChange={setPiModel}
           onReasoningEffortChange={setReasoningEffort}
+          piModel={piModel}
           provider={provider}
           reasoningEffort={reasoningEffort}
         />
@@ -1744,6 +1809,7 @@ export function ControlsPanel({
         />
         <ReviewSetupSection
           reviewClaudeModel={reviewClaudeModel}
+          reviewPiModel={reviewPiModel}
           isPromptValid={isReviewPromptValid}
           isReviewIntervalValid={isReviewIntervalValid}
           onReviewEnabledChange={setReviewEnabled}
@@ -1758,6 +1824,7 @@ export function ControlsPanel({
           setReviewClaudeModel={setReviewClaudeModel}
           setReviewIntervalCommits={setReviewIntervalCommits}
           setReviewModel={setReviewModel}
+          setReviewPiModel={setReviewPiModel}
           setReviewPrompt={setReviewPrompt}
           setReviewProvider={setReviewProvider}
           setReviewReasoningEffort={setReviewReasoningEffort}

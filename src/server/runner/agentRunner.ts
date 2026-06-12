@@ -10,6 +10,7 @@ import { getCodexExecSpawnCommand } from "./codexCommand.js";
 import { CodexJsonEventParser } from "./codexJsonEvents.js";
 import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { AgentProvider } from "./agentProviders.js";
+import { getPiPrintSpawnCommand } from "./piCommand.js";
 
 export type AgentRunSettings =
   | {
@@ -21,6 +22,10 @@ export type AgentRunSettings =
   | {
       provider: "claude";
       model: ClaudeModel | null;
+    }
+  | {
+      provider: "pi";
+      piModel: string | null;
     };
 
 type AgentRunHooks = {
@@ -51,7 +56,15 @@ export type AgentRunner = {
 };
 
 export function getAgentRunner(provider: AgentProvider): AgentRunner {
-  return provider === "claude" ? claudeRunner : codexRunner;
+  if (provider === "claude") {
+    return claudeRunner;
+  }
+
+  if (provider === "pi") {
+    return piRunner;
+  }
+
+  return codexRunner;
 }
 
 const codexRunner: AgentRunner = {
@@ -143,6 +156,45 @@ const claudeRunner: AgentRunner = {
         };
       },
       provider: "claude",
+    };
+  },
+};
+
+const piRunner: AgentRunner = {
+  provider: "pi",
+  startRun({ hooks, prompt, repositoryPath, settings, spawnProcess }) {
+    if (settings.provider !== "pi") {
+      throw new Error("Pi runner received non-Pi settings.");
+    }
+
+    let stdout = "";
+    const piCommand = getPiPrintSpawnCommand(prompt, {
+      model: settings.piModel,
+    });
+    const childProcess = spawnProcess(piCommand.command, piCommand.args, {
+      cwd: repositoryPath,
+      windowsHide: true,
+    });
+
+    childProcess.stdout.on("data", (chunk: Buffer | string) => {
+      stdout += chunk.toString();
+      hooks.onStdout(chunk);
+    });
+    childProcess.stderr.on("data", hooks.onStderr);
+    childProcess.stdin.end();
+
+    return {
+      childProcess,
+      commandDisplay: "pi -p",
+      complete() {
+        const finalAssistantMessage = stdout.trim();
+
+        return {
+          finalAssistantMessage:
+            finalAssistantMessage.length > 0 ? finalAssistantMessage : null,
+        };
+      },
+      provider: "pi",
     };
   },
 };

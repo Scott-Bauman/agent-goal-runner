@@ -13,6 +13,12 @@ export default defineConfig({
     include: ["tests/**/*.test.{ts,tsx}"],
     clearMocks: true,
     restoreMocks: true,
+    setupFiles: ["tests/setup/localStorage.ts"],
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost/",
+      },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

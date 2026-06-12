@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getClaudePrintSpawnCommand,
   getCodexExecSpawnCommand,
+  getPiPrintSpawnCommand,
 } from "../../../src/server/index";
 import { createTestServer, listenOnRandomPort, trackTestServer } from "../helpers/fastify";
 import { createMockRunProcess } from "../helpers/process";
@@ -217,6 +218,16 @@ describe("run start endpoint", () => {
       "Invalid enum value. Expected 'low' | 'medium' | 'high' | 'xhigh', received 'extreme'",
     ],
     [
+      "Pi model with Codex provider",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        piModel: "local-llama",
+      },
+      "piModel",
+      "Pi model is only supported when provider is pi.",
+    ],
+    [
       "verification command with shell operator",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -351,6 +362,7 @@ describe("run start endpoint", () => {
       model: null,
       reasoningEffort: null,
       claudeModel: null,
+      piModel: null,
       review: {
         enabled: false,
         provider: "codex",
@@ -359,6 +371,7 @@ describe("run start endpoint", () => {
         model: null,
         reasoningEffort: null,
         claudeModel: null,
+        piModel: null,
       },
     });
   });
@@ -748,6 +761,53 @@ describe("run start endpoint", () => {
     expect(runProcess.stdin.writableEnded).toBe(true);
   });
 
+  it("spawns pi print in the selected repository with model", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const runProcess = createMockRunProcess();
+    const spawnProcess = vi.fn(() => runProcess);
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "pi",
+        prompt: "  Use goal.md as the source of truth.  ",
+        runCount: 1,
+        piModel: "  local-llama  ",
+      },
+    });
+    const expectedPiCommand = getPiPrintSpawnCommand(
+      "Use goal.md as the source of truth.",
+      {
+        model: "local-llama",
+      },
+    );
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      provider: "pi",
+      model: null,
+      reasoningEffort: null,
+      claudeModel: null,
+      piModel: "local-llama",
+    });
+    expect(spawnProcess).toHaveBeenCalledWith(
+      expectedPiCommand.command,
+      expectedPiCommand.args,
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+    expect(runProcess.stdin.writableEnded).toBe(true);
+  });
+
   it("rejects Codex settings when provider is Claude", async () => {
     const repositoryPath = await createRepositoryPath();
     const spawnProcess = vi.fn(() => createMockRunProcess());
@@ -781,6 +841,89 @@ describe("run start endpoint", () => {
           path: "reasoningEffort",
           message:
             "Codex reasoning effort is only supported when provider is codex.",
+        },
+      ]),
+    );
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it("rejects Codex and Claude settings when provider is Pi", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = vi.fn(() => createMockRunProcess());
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "pi",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        model: "gpt-5.4",
+        reasoningEffort: "high",
+        claudeModel: "opus",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: "model",
+          message: "Codex model is only supported when provider is codex.",
+        },
+        {
+          path: "reasoningEffort",
+          message:
+            "Codex reasoning effort is only supported when provider is codex.",
+        },
+        {
+          path: "claudeModel",
+          message: "Claude model is only supported when provider is claude.",
+        },
+      ]),
+    );
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it("rejects Pi review model when review provider is Codex", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const spawnProcess = vi.fn(() => createMockRunProcess());
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        autoCommit: true,
+        review: {
+          enabled: true,
+          provider: "codex",
+          intervalCommits: 1,
+          prompt: "Review recent commits.",
+          piModel: "local-llama",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: "review.piModel",
+          message: "Pi model is only supported when provider is pi.",
         },
       ]),
     );
@@ -910,13 +1053,13 @@ describe("run start endpoint", () => {
     await readSseChunk(reader);
 
     runProcess.stdout.write("stdout line\n");
-    const stdoutChunk = await readSseChunk(reader);
+    const stdoutPayloads = await readUntilSsePayloads(reader, "logs");
 
     runProcess.stderr.write("stderr line\n");
-    const stderrChunk = await readSseChunk(reader);
+    const stderrPayloads = await readUntilSsePayloads(reader, "logs");
     await reader.cancel();
 
-    expect(parseSsePayloads(stdoutChunk, "logs")).toEqual([
+    expect(stdoutPayloads).toEqual([
       {
         entries: [
           {
@@ -927,7 +1070,7 @@ describe("run start endpoint", () => {
         ],
       },
     ]);
-    expect(parseSsePayloads(stderrChunk, "logs")).toEqual([
+    expect(stderrPayloads).toEqual([
       {
         entries: [
           {
@@ -1501,30 +1644,35 @@ describe("run start endpoint", () => {
         autoCommit: true,
       },
     });
-    await readUntilSsePayloads(reader, "summary");
 
     runProcess.emit("close", 0, null);
-    await readUntilSsePayloads(reader, "summary");
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+    });
 
     gitAddProcess.emit("close", 0, null);
-    await readUntilSsePayloads(reader, "summary");
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(3);
+    });
 
     gitStatusProcess.stdout.write(" M goal.md\n");
-    await readUntilSsePayloads(reader, "logs");
     gitStatusProcess.emit("close", 0, null);
-    await readUntilSsePayloads(reader, "summary");
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(4);
+    });
 
     gitCommitProcess.emit("close", 1, null);
-    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
     await reader.cancel();
+    await vi.waitFor(async () => {
+      expect(parseSsePayloads(await readSseSnapshot(origin), "summary")).toEqual([
+        {
+          status: "failed",
+          message: "Auto-commit after Codex run 1 exited with code 1.",
+        },
+      ]);
+    });
 
     expect(spawnProcess).toHaveBeenCalledTimes(4);
-    expect(summaryPayloads).toEqual([
-      {
-        status: "failed",
-        message: "Auto-commit after Codex run 1 exited with code 1.",
-      },
-    ]);
   });
 
   it("streams verification stdout and stderr to connected SSE clients", async () => {
@@ -1569,13 +1717,13 @@ describe("run start endpoint", () => {
     await readUntilSsePayloads(reader, "summary");
 
     verificationProcess.stdout.write("verification stdout\n");
-    const stdoutChunk = await readSseChunk(reader);
+    const stdoutPayloads = await readUntilSsePayloads(reader, "logs");
 
     verificationProcess.stderr.write("verification stderr\n");
-    const stderrChunk = await readSseChunk(reader);
+    const stderrPayloads = await readUntilSsePayloads(reader, "logs");
     await reader.cancel();
 
-    expect(parseSsePayloads(stdoutChunk, "logs")).toEqual([
+    expect(stdoutPayloads).toEqual([
       {
         entries: [
           {
@@ -1586,7 +1734,7 @@ describe("run start endpoint", () => {
         ],
       },
     ]);
-    expect(parseSsePayloads(stderrChunk, "logs")).toEqual([
+    expect(stderrPayloads).toEqual([
       {
         entries: [
           {
@@ -1638,22 +1786,24 @@ describe("run start endpoint", () => {
         autoCommit: true,
       },
     });
-    await readUntilSsePayloads(reader, "summary");
 
     runProcess.emit("close", 0, null);
-    await readUntilSsePayloads(reader, "summary");
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+    });
 
     verificationProcess.emit("close", 1, null);
-    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
     await reader.cancel();
+    await vi.waitFor(async () => {
+      expect(parseSsePayloads(await readSseSnapshot(origin), "summary")).toEqual([
+        {
+          status: "failed",
+          message: "Verification command 1 of 2 after Codex run 1 exited with code 1.",
+        },
+      ]);
+    });
 
     expect(spawnProcess).toHaveBeenCalledTimes(2);
-    expect(summaryPayloads).toEqual([
-      {
-        status: "failed",
-        message: "Verification command 1 of 2 after Codex run 1 exited with code 1.",
-      },
-    ]);
   });
 
   it("does not run verification after a failed Codex run", async () => {
@@ -1906,18 +2056,17 @@ describe("run start endpoint", () => {
         runCount: 1,
       },
     });
-    await readUntilSsePayloads(reader, "summary");
 
     runProcess.emit("close", 0, null);
-    const summaryPayloads = await readUntilSsePayloads(reader, "summary");
     await reader.cancel();
-
-    expect(summaryPayloads).toEqual([
-      {
-        status: "failed",
-        message: "goal.md became unavailable after Codex run 1.",
-      },
-    ]);
+    await vi.waitFor(async () => {
+      expect(parseSsePayloads(await readSseSnapshot(origin), "summary")).toEqual([
+        {
+          status: "failed",
+          message: "goal.md became unavailable after Codex run 1.",
+        },
+      ]);
+    });
   });
 
   it("rejects a second run start request while a run is active", async () => {

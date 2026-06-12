@@ -66,6 +66,7 @@ export type ReviewRunOptions = {
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel: ClaudeModel | null;
+  piModel: string | null;
 };
 
 export const DEFAULT_REVIEW_RUN_OPTIONS: ReviewRunOptions = {
@@ -76,6 +77,7 @@ export const DEFAULT_REVIEW_RUN_OPTIONS: ReviewRunOptions = {
   model: null,
   reasoningEffort: null,
   claudeModel: null,
+  piModel: null,
 };
 
 export function createReviewPromptPrefix(intervalCommits: number): string {
@@ -105,6 +107,7 @@ export type StartRunOptions = {
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel: ClaudeModel | null;
+  piModel: string | null;
   review: ReviewRunOptions;
 };
 
@@ -259,6 +262,13 @@ export class RunController {
       };
     }
 
+    if (options.provider === "pi") {
+      return {
+        provider: "pi",
+        piModel: options.piModel,
+      };
+    }
+
     return {
       provider: "codex",
       model: options.model,
@@ -275,6 +285,13 @@ export class RunController {
       return {
         provider: "claude",
         model: review.claudeModel,
+      };
+    }
+
+    if (review.provider === "pi") {
+      return {
+        provider: "pi",
+        piModel: review.piModel,
       };
     }
 
@@ -297,6 +314,13 @@ export class RunController {
       };
     }
 
+    if (options.provider === "pi") {
+      return {
+        model: options.piModel,
+        reasoningEffort: null,
+      };
+    }
+
     return {
       model: options.model,
       reasoningEffort: options.reasoningEffort,
@@ -310,6 +334,13 @@ export class RunController {
     if (review.provider === "claude") {
       return {
         model: review.claudeModel,
+        reasoningEffort: null,
+      };
+    }
+
+    if (review.provider === "pi") {
+      return {
+        model: review.piModel,
         reasoningEffort: null,
       };
     }
@@ -329,8 +360,16 @@ export class RunController {
       return "Claude Code is not installed or is not available on PATH.";
     }
 
+    if (provider === "pi" && isNodeErrorCode(error, "ENOENT")) {
+      return "Pi is not installed or is not available on PATH.";
+    }
+
     if (provider === "claude") {
       return `Failed to start Claude run ${runNumber}; ensure Claude Code is installed and available on PATH.`;
+    }
+
+    if (provider === "pi") {
+      return `Failed to start Pi run ${runNumber}; ensure Pi is installed and available on PATH.`;
     }
 
     return `Failed to start Codex run ${runNumber}; ensure the Codex CLI is installed and available on PATH.`;
@@ -347,8 +386,16 @@ export class RunController {
       return "Claude Code is not installed or is not available on PATH.";
     }
 
+    if (options.review.provider === "pi" && isNodeErrorCode(error, "ENOENT")) {
+      return "Pi is not installed or is not available on PATH.";
+    }
+
     if (options.review.provider === "claude") {
       return `Failed to start review after ${runLabel} ${runNumber}; ensure Claude Code is installed and available on PATH.`;
+    }
+
+    if (options.review.provider === "pi") {
+      return `Failed to start review after ${runLabel} ${runNumber}; ensure Pi is installed and available on PATH.`;
     }
 
     return `Failed to start review after ${runLabel} ${runNumber}; ensure the Codex CLI is installed and available on PATH.`;

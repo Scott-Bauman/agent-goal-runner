@@ -5,6 +5,7 @@ import {
   AGENT_PROVIDERS,
   DEFAULT_AGENT_PROVIDER,
 } from "../runner/agentProviders.js";
+import type { AgentProvider } from "../runner/agentProviders.js";
 import { CLAUDE_MODELS } from "../runner/claudeOptions.js";
 import {
   CODEX_MODELS,
@@ -20,6 +21,13 @@ import {
   validationError,
 } from "../shared/validation.js";
 import { getRepositoryPathForInactiveRun } from "./routeGuards.js";
+
+const piModelSchema = z
+  .string()
+  .trim()
+  .transform((model) => (model.length > 0 ? model : null))
+  .nullable()
+  .default(null);
 
 const disabledReviewSchema = z
   .object({
@@ -43,6 +51,7 @@ const enabledReviewSchema = z
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
     claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
+    piModel: piModelSchema,
   })
   .strict();
 
@@ -100,6 +109,7 @@ const runStartSchema = z
     model: z.enum(CODEX_MODELS).nullable().default(null),
     reasoningEffort: z.enum(CODEX_REASONING_EFFORTS).nullable().default(null),
     claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
+    piModel: piModelSchema,
     review: reviewSchema,
   })
   .strict()
@@ -123,7 +133,8 @@ function addProviderSettingIssues(
   requestBody: {
     claudeModel: unknown;
     model: unknown;
-    provider: "codex" | "claude";
+    piModel: unknown;
+    provider: AgentProvider;
     reasoningEffort: unknown;
   },
   context: z.RefinementCtx,
@@ -146,6 +157,42 @@ function addProviderSettingIssues(
       });
     }
 
+    if (requestBody.piModel !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Pi model is only supported when provider is pi.",
+        path: [...pathPrefix, "piModel"],
+      });
+    }
+
+    return;
+  }
+
+  if (requestBody.provider === "pi") {
+    if (requestBody.model !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Codex model is only supported when provider is codex.",
+        path: [...pathPrefix, "model"],
+      });
+    }
+
+    if (requestBody.reasoningEffort !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Codex reasoning effort is only supported when provider is codex.",
+        path: [...pathPrefix, "reasoningEffort"],
+      });
+    }
+
+    if (requestBody.claudeModel !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Claude model is only supported when provider is claude.",
+        path: [...pathPrefix, "claudeModel"],
+      });
+    }
+
     return;
   }
 
@@ -157,6 +204,13 @@ function addProviderSettingIssues(
     });
   }
 
+  if (requestBody.piModel !== null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pi model is only supported when provider is pi.",
+      path: [...pathPrefix, "piModel"],
+    });
+  }
 }
 
 export function registerRunRoutes(
@@ -192,6 +246,7 @@ export function registerRunRoutes(
       model,
       reasoningEffort,
       claudeModel,
+      piModel,
       review: parsedReview,
     } = parsedBody.data;
     const review = parsedReview.enabled ? parsedReview : DEFAULT_REVIEW_RUN_OPTIONS;
@@ -226,6 +281,7 @@ export function registerRunRoutes(
       model,
       reasoningEffort,
       claudeModel,
+      piModel,
       review,
     });
 
@@ -240,6 +296,7 @@ export function registerRunRoutes(
       model,
       reasoningEffort,
       claudeModel,
+      piModel,
       review,
     });
   });

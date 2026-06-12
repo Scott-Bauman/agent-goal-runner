@@ -2,6 +2,7 @@ import type { RunnerStatus } from "@/web/runner/statuses";
 import type { AgentProvider } from "@/web/runner/agentProviders";
 import type { ClaudeModel } from "@/web/runner/claudeOptions";
 import type { CodexModel, CodexReasoningEffort } from "@/web/runner/codexOptions";
+import type { PiModelSelection } from "@/web/runner/piOptions";
 
 export type RepositorySelectionResponse = {
   repositoryPath: string | null;
@@ -64,6 +65,7 @@ export type RunStartResponse = {
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
   claudeModel: ClaudeModel | null;
+  piModel: PiModelSelection | null;
   review: {
     enabled: boolean;
     provider: AgentProvider;
@@ -72,6 +74,7 @@ export type RunStartResponse = {
     model: CodexModel | null;
     reasoningEffort: CodexReasoningEffort | null;
     claudeModel: ClaudeModel | null;
+    piModel: PiModelSelection | null;
   };
 };
 
