@@ -16,7 +16,7 @@ import { parseVerificationCommand } from "../runner/verificationCommand.js";
 import type { ParsedVerificationCommand } from "../runner/verificationCommand.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
 import {
-  emptyRequestSchema,
+  formatEmptyRequestIssues,
   formatZodIssues,
   validationError,
 } from "../shared/validation.js";
@@ -302,15 +302,11 @@ export function registerRunRoutes(
   });
 
   server.post("/api/run/stop", async (request, reply) => {
-    const parsedQuery = emptyRequestSchema.safeParse(request.query);
-    const parsedBody = emptyRequestSchema.safeParse(request.body ?? {});
+    const requestIssues = formatEmptyRequestIssues(request.query, request.body);
 
-    if (!parsedQuery.success || !parsedBody.success) {
+    if (requestIssues.length > 0) {
       return reply.code(400).send(
-        validationError("Invalid run stop request.", [
-          ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
-          ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
-        ]),
+        validationError("Invalid run stop request.", requestIssues),
       );
     }
 

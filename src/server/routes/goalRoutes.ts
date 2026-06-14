@@ -13,6 +13,7 @@ import { isNodeErrorCode } from "../shared/nodeErrors.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
 import {
   emptyRequestSchema,
+  formatParsedRequestIssues,
   formatZodIssues,
   validationError,
 } from "../shared/validation.js";
@@ -107,10 +108,10 @@ export function registerGoalRoutes(
 
     if (!parsedQuery.success || !parsedBody.success) {
       return reply.code(400).send(
-        validationError("Invalid goal creation request.", [
-          ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
-          ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
-        ]),
+        validationError(
+          "Invalid goal creation request.",
+          formatParsedRequestIssues(parsedQuery, parsedBody),
+        ),
       );
     }
 
@@ -166,10 +167,10 @@ export function registerGoalRoutes(
 
     if (!parsedQuery.success || !parsedBody.success) {
       return reply.code(400).send(
-        validationError("Invalid goal update request.", [
-          ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
-          ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
-        ]),
+        validationError(
+          "Invalid goal update request.",
+          formatParsedRequestIssues(parsedQuery, parsedBody),
+        ),
       );
     }
 

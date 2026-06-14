@@ -120,6 +120,7 @@ export class CodexJsonEventParser {
     return this.parseLines(lines);
   }
 
+  // fallow-ignore-next-line unused-class-member
   flush(): ParsedCodexJsonEvent {
     if (this.buffer.trim().length === 0) {
       this.buffer = "";

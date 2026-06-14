@@ -37,6 +37,16 @@ type AgentRunHooks = {
   onStdout: (chunk: Buffer | string) => void;
 };
 
+type ParsedAgentJsonEvent = {
+  events: RunEventPayload[];
+  metadata: Partial<RunSummaryDetails>;
+};
+
+type AgentSpawnCommand = {
+  args: string[];
+  command: string;
+};
+
 export type StartedAgentRun = {
   childProcess: ChildProcessWithoutNullStreams;
   commandDisplay: string;
@@ -82,44 +92,19 @@ const codexRunner: AgentRunner = {
       outputLastMessagePath: settings.outputLastMessagePath,
       reasoningEffort: settings.reasoningEffort,
     });
-    const childProcess = spawnProcess(codexCommand.command, codexCommand.args, {
-      cwd: repositoryPath,
-      windowsHide: true,
-    });
 
-    childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      hooks.onStdout(chunk);
-      const parsedChunk = parser.push(chunk);
-
-      for (const event of parsedChunk.events) {
-        hooks.onRunEvent(event);
-      }
-
-      hooks.onMetadata(parsedChunk.metadata);
-    });
-    childProcess.stderr.on("data", hooks.onStderr);
-    childProcess.stdin.end();
-
-    return {
-      childProcess,
+    return startJsonAgentRun({
+      command: codexCommand,
       commandDisplay: "codex exec",
-      complete() {
-        const parsedRemainder = parser.flush();
-
-        for (const event of parsedRemainder.events) {
-          hooks.onRunEvent(event);
-        }
-
-        hooks.onMetadata(parsedRemainder.metadata);
-
-        return {
-          finalAssistantMessage: readFinalMessageFile(
-            settings.outputLastMessagePath,
-          ),
-        };
-      },
+      finalAssistantMessage: () =>
+        readFinalMessageFile(settings.outputLastMessagePath),
+      flushParser: () => parser.flush(),
+      hooks,
+      parseChunk: (chunk) => parser.push(chunk),
       provider: "codex",
-    };
+      repositoryPath,
+      spawnProcess,
+    });
   },
 };
 
@@ -134,42 +119,18 @@ const claudeRunner: AgentRunner = {
     const claudeCommand = getClaudeStreamJsonSpawnCommand(prompt, {
       model: settings.model,
     });
-    const childProcess = spawnProcess(claudeCommand.command, claudeCommand.args, {
-      cwd: repositoryPath,
-      windowsHide: true,
-    });
 
-    childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      hooks.onStdout(chunk);
-      const parsedChunk = parser.push(chunk);
-
-      for (const event of parsedChunk.events) {
-        hooks.onRunEvent(event);
-      }
-
-      hooks.onMetadata(parsedChunk.metadata);
-    });
-    childProcess.stderr.on("data", hooks.onStderr);
-    childProcess.stdin.end();
-
-    return {
-      childProcess,
+    return startJsonAgentRun({
+      command: claudeCommand,
       commandDisplay: "claude -p --output-format stream-json",
-      complete() {
-        const parsedRemainder = parser.flush();
-
-        for (const event of parsedRemainder.events) {
-          hooks.onRunEvent(event);
-        }
-
-        hooks.onMetadata(parsedRemainder.metadata);
-
-        return {
-          finalAssistantMessage: parser.getFinalAssistantMessage(),
-        };
-      },
+      finalAssistantMessage: () => parser.getFinalAssistantMessage(),
+      flushParser: () => parser.flush(),
+      hooks,
+      parseChunk: (chunk) => parser.push(chunk),
       provider: "claude",
-    };
+      repositoryPath,
+      spawnProcess,
+    });
   },
 };
 
@@ -184,44 +145,79 @@ const piRunner: AgentRunner = {
     const piCommand = getPiJsonSpawnCommand(prompt, {
       model: settings.piModel,
     });
-    const childProcess = spawnProcess(piCommand.command, piCommand.args, {
-      cwd: repositoryPath,
-      windowsHide: true,
-    });
 
-    childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      hooks.onStdout(chunk);
-      const parsedChunk = parser.push(chunk);
-
-      for (const event of parsedChunk.events) {
-        hooks.onRunEvent(event);
-      }
-
-      hooks.onMetadata(parsedChunk.metadata);
-    });
-    childProcess.stderr.on("data", hooks.onStderr);
-    childProcess.stdin.end();
-
-    return {
-      childProcess,
+    return startJsonAgentRun({
+      command: piCommand,
       commandDisplay: "pi --mode json",
-      complete() {
-        const parsedRemainder = parser.flush();
-
-        for (const event of parsedRemainder.events) {
-          hooks.onRunEvent(event);
-        }
-
-        hooks.onMetadata(parsedRemainder.metadata);
-
-        return {
-          finalAssistantMessage: parser.getFinalAssistantMessage(),
-        };
-      },
+      finalAssistantMessage: () => parser.getFinalAssistantMessage(),
+      flushParser: () => parser.flush(),
+      hooks,
+      parseChunk: (chunk) => parser.push(chunk),
       provider: "pi",
-    };
+      repositoryPath,
+      spawnProcess,
+    });
   },
 };
+
+function startJsonAgentRun(options: {
+  command: AgentSpawnCommand;
+  commandDisplay: string;
+  finalAssistantMessage: () => string | null;
+  flushParser: () => ParsedAgentJsonEvent;
+  hooks: AgentRunHooks;
+  parseChunk: (chunk: Buffer | string) => ParsedAgentJsonEvent;
+  provider: AgentProvider;
+  repositoryPath: string;
+  spawnProcess: ProcessSpawner;
+}): StartedAgentRun {
+  const {
+    command,
+    commandDisplay,
+    finalAssistantMessage,
+    flushParser,
+    hooks,
+    parseChunk,
+    provider,
+    repositoryPath,
+    spawnProcess,
+  } = options;
+  const childProcess = spawnProcess(command.command, command.args, {
+    cwd: repositoryPath,
+    windowsHide: true,
+  });
+
+  childProcess.stdout.on("data", (chunk: Buffer | string) => {
+    hooks.onStdout(chunk);
+    emitParsedAgentJsonEvent(parseChunk(chunk), hooks);
+  });
+  childProcess.stderr.on("data", hooks.onStderr);
+  childProcess.stdin.end();
+
+  return {
+    childProcess,
+    commandDisplay,
+    complete() {
+      emitParsedAgentJsonEvent(flushParser(), hooks);
+
+      return {
+        finalAssistantMessage: finalAssistantMessage(),
+      };
+    },
+    provider,
+  };
+}
+
+function emitParsedAgentJsonEvent(
+  parsedEvent: ParsedAgentJsonEvent,
+  hooks: AgentRunHooks,
+): void {
+  for (const event of parsedEvent.events) {
+    hooks.onRunEvent(event);
+  }
+
+  hooks.onMetadata(parsedEvent.metadata);
+}
 
 function readFinalMessageFile(outputPath: string): string | null {
   if (!existsSync(outputPath)) {

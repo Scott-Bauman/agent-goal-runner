@@ -10,6 +10,7 @@ import { ACTIVE_RUN_STATUSES } from "../runner/statuses.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
 import {
   emptyRequestSchema,
+  formatEmptyRequestIssues,
   formatZodIssues,
   validationError,
 } from "../shared/validation.js";
@@ -39,15 +40,11 @@ export function registerSkillRoutes(
   server.post(
     "/api/skills/goal-runner-framework/install/repo",
     async (request, reply) => {
-      const parsedQuery = emptyRequestSchema.safeParse(request.query);
-      const parsedBody = emptyRequestSchema.safeParse(request.body ?? {});
+      const requestIssues = formatEmptyRequestIssues(request.query, request.body);
 
-      if (!parsedQuery.success || !parsedBody.success) {
+      if (requestIssues.length > 0) {
         return reply.code(400).send(
-          validationError("Invalid repo skill install request.", [
-            ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
-            ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
-          ]),
+          validationError("Invalid repo skill install request.", requestIssues),
         );
       }
 
@@ -81,15 +78,11 @@ export function registerSkillRoutes(
   server.post(
     "/api/skills/goal-runner-framework/install/global",
     async (request, reply) => {
-      const parsedQuery = emptyRequestSchema.safeParse(request.query);
-      const parsedBody = emptyRequestSchema.safeParse(request.body ?? {});
+      const requestIssues = formatEmptyRequestIssues(request.query, request.body);
 
-      if (!parsedQuery.success || !parsedBody.success) {
+      if (requestIssues.length > 0) {
         return reply.code(400).send(
-          validationError("Invalid global skill install request.", [
-            ...(!parsedQuery.success ? formatZodIssues(parsedQuery.error) : []),
-            ...(!parsedBody.success ? formatZodIssues(parsedBody.error) : []),
-          ]),
+          validationError("Invalid global skill install request.", requestIssues),
         );
       }
 
