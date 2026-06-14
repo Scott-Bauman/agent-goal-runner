@@ -20,8 +20,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - Show one canonical final assistant row and one canonical completion row in the user-facing transcript.
 - Keep print-mode fallback behavior only if a provider has no usable streaming JSON mode at runtime.
 - Preserve Pi's current project trust behavior by default; do not pass `--approve` or `--no-approve` automatically.
-- Add an approval path for Pi runtime requests that require user confirmation, including install/download/web-fetch actions when Pi emits an approval event or blocks for approval.
-- Add a pre-run approval policy setting for provider approval requests: Ask every time, Always approve for this run, or Always deny for this run.
+- Add a compact pre-run notice that provider runs are non-interactive and approvals, trust, sandboxing, and credentials must be configured before starting a loop.
 - Use a hybrid assistant-text MVP: show live tool/command/file/status activity, avoid token-by-token transcript spam, and render final assistant output once.
 - Add tests for command construction, parser behavior, run controller wiring, SSE payloads, and visible transcript behavior.
 
@@ -29,7 +28,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 - Displaying hidden chain-of-thought, private reasoning tokens, or simulated internal thinking.
 - Building a PTY scraper for interactive TUIs unless streaming JSON is proven unusable.
-- Implementing Pi RPC mode as the default path; a narrow RPC adapter is allowed only if JSON mode cannot answer runtime approval requests.
+- Mediating provider approval prompts from the browser during an active run.
 - Auto-discovering local Pi models from `~/.pi/agent/models.json`.
 - Adding new credentials, telemetry, hosted services, or remote log upload.
 - Automatically approving Pi trust prompts, install commands, downloads, or web access without an explicit user choice.
@@ -42,8 +41,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - Main workflow: user starts a provider run and can see public activity within seconds, not only at final completion.
 - UX priority: observability, low duplication, clear status, and graceful fallback when a CLI emits little or no stream data.
 - Raw Logs remain collapsible debugging detail; the transcript remains the clean human-readable feed.
-- Approval UX: when a provider requests confirmation, show a clear pending approval state with Approve, Deny, Always approve for this run, and Always deny for this run actions when supported by the provider.
-- Pre-run approval UX: Run setup includes an approval policy control with Ask every time as the default; Always approve and Always deny apply only to provider approval requests in that run.
+- Run setup includes a compact notice near provider selection: provider runs are non-interactive, so users should configure provider approvals, trust, sandboxing, and credentials before starting the loop.
 
 ## Execution Rules
 
@@ -58,8 +56,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - Split oversized checklist items before implementing them.
 - Do not rename public APIs, persisted keys, routes, SSE event names, exported functions, props, or files unless explicitly required by the selected item.
 - Preserve existing behavior for Codex, Claude print output, Pi print output, verification commands, review runs, and auto-commit unless the selected item explicitly changes it.
-- Do not auto-approve Pi project trust, package installs, downloads, web access, or other provider approval requests.
-- Before running install/download commands, request approval and state what will be installed.
+- Do not pass provider trust or approval-bypass flags automatically.
 
 ## Scope Inventory
 
@@ -72,8 +69,8 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - `src/server/sse/types.ts` and `src/server/sse/sseHub.ts`: shared event payload contract and run detail updates.
 - `src/web/events/runtimeStream.ts`: transcript normalization, raw-log filtering, duplicate suppression.
 - `src/web/components/app/LogConsole.tsx`: visible transcript rendering and active-run affordances.
-- `src/web/components/app/ControlsPanel.tsx`: pre-run approval policy control.
-- `src/server/routes/runRoutes.ts`: run start approval policy validation and response shape.
+- `src/web/components/app/ControlsPanel.tsx`: provider selection and non-interactive-run notice.
+- `src/server/routes/runRoutes.ts`: run start validation and response shape.
 - `tests/server/runner/*`: command builder and parser tests.
 - `tests/server/routes/runRoutes.test.ts` and `tests/server/runner/runController.test.ts`: provider wiring and SSE behavior tests.
 - `tests/web/events/runtimeStream.test.ts` and component tests: transcript behavior tests.
@@ -156,22 +153,9 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - [x] Add run controller tests proving Pi emits live run events before process close.
 - [x] Add fallback behavior for missing/unsupported JSON mode only if a concrete runtime failure mode is observed or documented.
 
-### Phase 10: Provider Approval Requests
+### Phase 10: Non-Interactive Provider Guidance
 
-- [x] Research Pi JSON/RPC event shapes for approval requests, especially install/download/web access prompts.
-- [ ] Document that `pi --mode json` cannot receive active approval decisions through a documented protocol, and keep JSON mode as the default Pi streaming path.
-- [ ] Add the smallest Pi RPC adapter needed for prompt submission, event streaming, and `extension_ui_request` / `extension_ui_response` approval responses.
-- [ ] Add shared request/response contract for a provider approval policy with allowed values `ask`, `alwaysApprove`, and `alwaysDeny` for provider or extension approval prompts.
-- [ ] Add Run setup UI control for the provider approval policy, defaulting to Ask every time.
-- [ ] Send the selected provider approval policy in run start requests and preserve it in active run state.
-- [ ] Add normalized server state for a pending provider or extension approval request with provider, run id, RPC request id, method, message, requested action, and available choices.
-- [ ] Broadcast pending approval state over SSE and include it in initial SSE snapshots for reconnects.
-- [ ] Add backend route(s) to approve, deny, always approve for this run, and always deny for this run when the active provider or extension prompt supports those actions.
-- [ ] Apply the pre-run policy before surfacing a pending request: ask shows UI, always approve submits approval, and always deny submits denial.
-- [ ] Ensure approval choices are scoped to the active run and cleared on run completion, failure, stop, or provider process exit.
-- [ ] Add UI controls in Agent Output for pending approvals without blocking log streaming.
-- [ ] Add tests for Pi RPC approval request parsing, approval policy request validation, SSE snapshots, approval route validation, run-scoped always approve/deny behavior, pre-run policy behavior, and cleanup after process close.
-- [ ] Add tests proving review runs either use the same approval handling or explicitly reject unsupported provider approval prompts with a clear error.
+- [ ] Add a compact notice near the provider selector explaining that provider runs are non-interactive and users must configure approvals, trust, sandboxing, and credentials before starting the loop.
 
 ### Phase 11: Transcript UX and Duplicate Control
 
@@ -188,9 +172,6 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - [ ] Run a mocked Codex JSONL stream through the server and verify SSE emits raw logs, run events, run details, and transcript rows in expected order.
 - [ ] Run a mocked Claude JSONL stream through the server and verify SSE emits live activity before process close.
 - [ ] Run a mocked Pi JSONL stream through the server and verify SSE emits live activity before process close.
-- [ ] Run a mocked Pi RPC approval request through the server and verify the UI can approve and deny it.
-- [ ] Run a mocked pre-run always approve policy through the server and verify the approval UI is skipped.
-- [ ] Run a mocked pre-run always deny policy through the server and verify the approval UI is skipped.
 - [ ] If local CLIs and credentials are available, manually run one small real Codex job and inspect the Agent Output panel.
 - [ ] If local Claude Code is installed and authenticated, manually run one small real Claude job and inspect the Agent Output panel.
 - [ ] If local Pi is installed and authenticated, manually run one small real Pi job and inspect the Agent Output panel.
@@ -237,19 +218,13 @@ Run broader verification at phase boundaries and before `GOAL_COMPLETE`.
 - Claude Code was not installed on PATH during Phase 1. Official docs document `claude -p "<prompt>" --output-format stream-json --verbose --include-partial-messages` for streaming JSONL token/tool events.
 - Claude Code docs list stream output message types including `system/init`, `system/api_retry`, `stream_event`, final assistant/result messages, and raw API events such as `message_start`, `content_block_start`, `content_block_delta`, `content_block_stop`, `message_delta`, and `message_stop`.
 - Pi installed package `@earendil-works/pi-coding-agent@0.79.3` documents `pi --mode json` JSONL events in `docs/json.md`; Phase 1 captured installed `pi --version` as `0.79.3`.
-- Phase 1 captured `pi --help`: `--mode <mode>` supports `text`, `json`, or `rpc`; `--model <pattern>` is available; `--approve` and `--no-approve` are explicit trust flags and should remain omitted by default.
+- Phase 1 captured `pi --help`: `--mode json` is available for JSONL event output; `--model <pattern>` is available; `--approve` and `--no-approve` are explicit trust flags and should remain omitted by default.
 - Pi JSON docs list events including `session`, `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, `turn_end`, and `agent_end`.
 - Pi project trust behavior should be preserved by default; do not pass `--approve` or `--no-approve` automatically.
 - Phase 1 fixture notes and available sample JSONL shapes live at `tests/server/runner/fixtures/provider-stream-contracts.md`.
 - Phase 2 audit: existing `command_started`, `command_succeeded`, `command_failed`, `file_changed`, `patch_applied`, `warning`, `error`, `final_assistant_message`, and `run_completed` cover shell command lifecycle, file/patch changes, warning/error counts, final assistant text, stop reason, and completion.
 - Phase 2 added provider-agnostic `agent_session_started`, `tool_started`, `tool_succeeded`, and `tool_failed`; `toolName` labels provider tools while `files`, `stopReason`, and message handling reuse the existing SSE/transcript pipeline.
-- Pi install/download/web approvals need explicit user controls: Approve, Deny, Always approve for this run, and Always deny for this run when supported by the provider.
-- Run setup should also allow choosing Ask every time, Always approve for this run, or Always deny for this run before the run starts; default is Ask every time.
-- Verify whether Pi JSON mode is bidirectional enough for approvals. Use Pi RPC only if JSON mode cannot submit approval decisions during an active run.
-- Phase 10 research against installed Pi `@earendil-works/pi-coding-agent@0.79.3`: `docs/json.md` lists no approval-specific JSON event type; JSON mode emits session/agent/message/tool/queue/compaction/retry events only.
-- Phase 10 research: Pi install/download/web access is not represented by native approval events in JSON mode. Package installs are normal package-manager commands guarded by project trust, and runtime command/web/package policy must come from ordinary tool events or user/global/CLI extensions.
-- Phase 10 research: Pi extension docs state JSON mode has `ctx.hasUI: false` and UI methods are no-ops, while RPC mode has `ctx.hasUI: true` and supports dialogs/notifications through an extension UI sub-protocol.
-- Phase 10 research: Pi RPC approval-like prompts use `extension_ui_request` with `method: "select"` or `"confirm"` and an `id`; clients answer on stdin with `extension_ui_response` using matching `id` plus `value`, `confirmed`, or `cancelled`.
-- Phase 10 research: Pi project trust is separate from runtime approvals. Non-interactive modes (`-p`, `--mode json`, `--mode rpc`) do not show the built-in trust prompt; without a saved decision they follow `defaultProjectTrust`, and `--approve`/`--no-approve` remain explicit one-run overrides that this app should not add automatically.
+- Provider runs use non-interactive/headless modes. The app streams public output but does not answer provider prompts during an active run; users must configure provider approvals, trust, sandboxing, and credentials before starting a loop.
+- Pi JSON mode has no documented active approval response channel. Pi project trust is separate from runtime work; non-interactive Pi runs follow saved decisions or `defaultProjectTrust`, and `--approve`/`--no-approve` remain explicit one-run overrides that this app should not add automatically.
 - MVP assistant text behavior is hybrid: live activity rows plus one final assistant message, not token-by-token transcript rows.
 - Prefer streaming JSON over PTY scraping. Use PTY only if documented JSON modes are unavailable or unusable after explicit user approval.

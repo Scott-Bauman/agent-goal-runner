@@ -22,10 +22,11 @@ Captured for Phase 1 of `goal.md`.
 
 - Local CLI: `pi --version` reports `0.79.3`.
 - Streaming command shape: `pi --mode json [--model <id>] <prompt>`.
-- `pi --help` documents `--mode <mode>` with `text`, `json`, or `rpc`; `--model <pattern>`; and trust flags `--approve` / `--no-approve`.
+- `pi --help` documents `--mode json`, `--model <pattern>`, and trust flags `--approve` / `--no-approve`.
 - Preserve current trust behavior by not passing either trust flag automatically.
 - Installed docs at `/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/docs/json.md` describe JSONL on stdout.
 - Documented Pi event types include `session`, `agent_start`, `turn_start`, `message_start`, `message_update`, `message_end`, `turn_end`, `agent_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, `queue_update`, `compaction_start`, `compaction_end`, `auto_retry_start`, and `auto_retry_end`.
+- Pi JSON mode has no documented active approval response channel. Runs are non-interactive, so provider approvals, trust, sandboxing, and credentials must be configured before the loop starts.
 
 Small documented JSONL shape:
 
