@@ -77,6 +77,7 @@ function RunSummary({ details }: { details: RunSummaryDetails }) {
 }
 
 export function LogsSummaryPanel({
+  runnerStatus,
   runtimeStream,
 }: {
   runnerStatus: RunnerStatus;
@@ -113,6 +114,7 @@ export function LogsSummaryPanel({
         <LogConsole
           logs={runtimeStream.logs}
           rawLogs={runtimeStream.rawLogs}
+          runnerStatus={runnerStatus}
         />
       </CardContent>
     </Card>

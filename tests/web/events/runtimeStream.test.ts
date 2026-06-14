@@ -220,6 +220,34 @@ describe("runtime stream helpers", () => {
     ).toBe(transcript);
   });
 
+  it("replaces duplicated stdout with the final assistant run event", () => {
+    const stdoutTranscript = appendLogEntriesToTranscript(
+      [],
+      [{ id: 1, message: "Done.\n\nUpdated goal.md", stream: "stdout" }],
+      runningProgress,
+      100,
+    );
+    const finalTranscript = appendRunEventsToTranscript(stdoutTranscript, [
+      {
+        id: 1,
+        kind: "final_assistant_message",
+        message: "Done.\n\nUpdated goal.md",
+        receivedAt: 200,
+        runNumber: 1,
+        totalRuns: 2,
+      },
+    ]);
+
+    expect(finalTranscript).toEqual([
+      expect.objectContaining({
+        eventKind: "final_assistant_message",
+        id: "event:1",
+        message: "Done.\n\nUpdated goal.md",
+        type: "run-event",
+      }),
+    ]);
+  });
+
   it("dedupes duplicate snapshot log entries by stable backend id", () => {
     const snapshot = appendLogEntriesToTranscript(
       [],
@@ -246,6 +274,38 @@ describe("runtime stream helpers", () => {
         .filter((entry) => entry.type === "log")
         .map((entry) => entry.sourceLogId),
     ).toEqual([1, 2, 3]);
+  });
+
+  it("keeps structured Codex JSON stdout out of the visible transcript", () => {
+    const transcript = appendLogEntriesToTranscript(
+      [],
+      [
+        {
+          id: 1,
+          message: JSON.stringify({
+            type: "command.started",
+            command: "npm test",
+          }),
+          stream: "stdout",
+        },
+        {
+          id: 2,
+          message: "human-readable stderr",
+          stream: "stderr",
+        },
+      ],
+      runningProgress,
+      100,
+    );
+
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        id: "log:2",
+        message: "human-readable stderr",
+        stream: "stderr",
+        type: "log",
+      }),
+    ]);
   });
 
   it("keeps existing transcript rows when a log snapshot is empty", () => {
@@ -313,5 +373,33 @@ describe("runtime stream helpers", () => {
       "agent",
       "done",
     ]);
+  });
+
+  it("does not add a terminal summary when the completion event is already visible", () => {
+    const completedTranscript = appendRunEventsToTranscript([], [
+      {
+        id: 1,
+        kind: "run_completed",
+        message: "Completed Pi run 1 of 1 and refreshed goal.md.",
+        receivedAt: 100,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+    ]);
+    const summarizedTranscript = appendSummarySeparatorToTranscript(
+      completedTranscript,
+      {
+        message: "Completed Pi run 1 of 1 and refreshed goal.md.",
+        status: "complete",
+      },
+      {
+        currentRun: 1,
+        totalRuns: 1,
+      },
+      200,
+    );
+
+    expect(summarizedTranscript).toBe(completedTranscript);
+    expect(summarizedTranscript).toHaveLength(1);
   });
 });

@@ -345,12 +345,18 @@ export function appendRunEventsToTranscript(
   );
   const appendedEntries: RuntimeTranscriptRunEventEntry[] = [];
 
+  let nextTranscript = transcript;
+
   for (const entry of entries) {
     if (seenEventIds.has(entry.id)) {
       continue;
     }
 
     seenEventIds.add(entry.id);
+    nextTranscript = removeTranscriptRowsDuplicatedByRunEvent(
+      nextTranscript,
+      entry,
+    );
     appendedEntries.push({
       command: entry.command,
       displayId: `#${entry.id}`,
@@ -369,8 +375,8 @@ export function appendRunEventsToTranscript(
   }
 
   return appendedEntries.length > 0
-    ? [...transcript, ...appendedEntries]
-    : transcript;
+    ? [...nextTranscript, ...appendedEntries]
+    : nextTranscript;
 }
 
 export function appendLogEntriesToTranscript(
@@ -379,7 +385,9 @@ export function appendLogEntriesToTranscript(
   progress: RunProgressEvent,
   receivedAt = Date.now(),
 ): RuntimeTranscriptEntry[] {
-  if (entries.length === 0) {
+  const visibleEntries = entries.filter(shouldShowLogEntryInTranscript);
+
+  if (visibleEntries.length === 0) {
     return transcript;
   }
 
@@ -390,8 +398,11 @@ export function appendLogEntriesToTranscript(
   );
   const appendedEntries: RuntimeTranscriptLogEntry[] = [];
 
-  for (const [index, entry] of entries.entries()) {
-    if (seenLogIds.has(entry.id)) {
+  for (const [index, entry] of visibleEntries.entries()) {
+    if (
+      seenLogIds.has(entry.id) ||
+      isLogEntryDuplicatedByTranscript(entry, transcript)
+    ) {
       continue;
     }
 
@@ -413,6 +424,95 @@ export function appendLogEntriesToTranscript(
   return appendedEntries.length > 0
     ? [...transcript, ...appendedEntries]
     : transcript;
+}
+
+function shouldShowLogEntryInTranscript(entry: LogEntry): boolean {
+  if (entry.stream !== "stdout") {
+    return true;
+  }
+
+  return !isStructuredAgentJsonLog(entry.message);
+}
+
+function removeTranscriptRowsDuplicatedByRunEvent(
+  transcript: RuntimeTranscriptEntry[],
+  event: RunEventEntry,
+): RuntimeTranscriptEntry[] {
+  if (
+    event.kind !== "final_assistant_message" &&
+    event.kind !== "run_completed"
+  ) {
+    return transcript;
+  }
+
+  const eventMessage = normalizeTranscriptMessage(event.message);
+
+  return transcript.filter((entry) => {
+    const entryMessage = normalizeTranscriptMessage(entry.message);
+
+    if (entryMessage !== eventMessage) {
+      return true;
+    }
+
+    if (event.kind === "final_assistant_message") {
+      return entry.type !== "log";
+    }
+
+    return (
+      entry.type !== "separator" ||
+      entry.separatorKind !== "completion"
+    );
+  });
+}
+
+function isLogEntryDuplicatedByTranscript(
+  logEntry: LogEntry,
+  transcript: RuntimeTranscriptEntry[],
+): boolean {
+  const logMessage = normalizeTranscriptMessage(logEntry.message);
+
+  return transcript.some((entry) => {
+    if (normalizeTranscriptMessage(entry.message) !== logMessage) {
+      return false;
+    }
+
+    return (
+      (entry.type === "run-event" &&
+        entry.eventKind === "final_assistant_message") ||
+      (entry.type === "separator" && entry.separatorKind === "completion")
+    );
+  });
+}
+
+function normalizeTranscriptMessage(message: string): string {
+  return message.trim().replace(/\s+/g, " ");
+}
+
+function isStructuredAgentJsonLog(message: string): boolean {
+  const lines = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  return (
+    lines.length > 0 &&
+    lines.every((line) => {
+      try {
+        const parsed = JSON.parse(line) as unknown;
+
+        return (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          ("type" in parsed ||
+            "event" in parsed ||
+            "name" in parsed ||
+            "kind" in parsed)
+        );
+      } catch {
+        return false;
+      }
+    })
+  );
 }
 
 function transcriptKindForRunEvent(kind: RunEventKind): TranscriptEventKind {
@@ -486,6 +586,10 @@ export function appendSummarySeparatorToTranscript(
 
   const completion = isTerminalSummary(summary);
 
+  if (completion && hasMatchingRunCompletedEvent(transcript, summary.message)) {
+    return transcript;
+  }
+
   return [
     ...transcript,
     {
@@ -501,4 +605,18 @@ export function appendSummarySeparatorToTranscript(
       type: "separator",
     },
   ];
+}
+
+function hasMatchingRunCompletedEvent(
+  transcript: RuntimeTranscriptEntry[],
+  message: string,
+): boolean {
+  const normalizedMessage = normalizeTranscriptMessage(message);
+
+  return transcript.some(
+    (entry) =>
+      entry.type === "run-event" &&
+      entry.eventKind === "run_completed" &&
+      normalizeTranscriptMessage(entry.message) === normalizedMessage,
+  );
 }

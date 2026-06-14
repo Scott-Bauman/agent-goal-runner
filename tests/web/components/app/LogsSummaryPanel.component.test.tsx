@@ -96,17 +96,18 @@ describe("LogConsole", () => {
       },
     ];
 
-    render(<LogConsole logs={[]} rawLogs={rawLogs} />);
+    render(<LogConsole logs={[]} rawLogs={rawLogs} runnerStatus="idle" />);
 
     expect(screen.getByText("waiting for agent run")).toBeTruthy();
     expect(screen.getByText("Raw logs (1)")).toBeTruthy();
     expect(screen.getByText("raw backend line")).toBeTruthy();
   });
 
-  it("renders path highlights and hides final assistant run events", () => {
+  it("renders path highlights and final assistant run events", () => {
     render(
       <LogConsole
         rawLogs={[]}
+        runnerStatus="complete"
         logs={[
           logEntry({
             id: "log:1",
@@ -121,7 +122,7 @@ describe("LogConsole", () => {
             files: [],
             id: "event:2",
             kind: "agent",
-            message: "This final message should stay out of the console",
+            message: "Final assistant response",
             receivedAt: 1_001,
             runIndex: 1,
             sourceEventId: 2,
@@ -137,13 +138,24 @@ describe("LogConsole", () => {
     expect(path.getAttribute("title")).toBe(
       "C:\\repo\\agent-goal-runner\\src\\web\\App.tsx",
     );
-    expect(
-      screen.queryByText("This final message should stay out of the console"),
-    ).toBeNull();
+    expect(screen.getByText("Final assistant response")).toBeTruthy();
+  });
+
+  it("shows a visible running pulse while the agent process is active", () => {
+    render(<LogConsole logs={[]} rawLogs={[]} runnerStatus="running" />);
+
+    expect(screen.getByRole("status", { name: "agent process running" })).toBeTruthy();
+    expect(screen.queryByText("waiting for agent run")).toBeNull();
   });
 
   it("lets the user jump back to the latest log after scrolling away", async () => {
-    render(<LogConsole logs={[logEntry({})]} rawLogs={[]} />);
+    render(
+      <LogConsole
+        logs={[logEntry({})]}
+        rawLogs={[]}
+        runnerStatus="running"
+      />,
+    );
 
     const scrollContainer = screen.getAllByRole("list")[0]?.parentElement;
 

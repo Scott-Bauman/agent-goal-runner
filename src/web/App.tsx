@@ -5,6 +5,7 @@ import { TopBar } from "@/web/components/app/TopBar";
 import { SidebarProvider } from "@/web/components/ui/sidebar";
 import {
   appendProgressSeparatorToTranscript,
+  appendLogEntriesToTranscript,
   appendRawLogEntries,
   appendRunEventsToTranscript,
   appendSummarySeparatorToTranscript,
@@ -125,6 +126,11 @@ export function App() {
 
       setRuntimeStream((currentStream) => ({
         ...currentStream,
+        logs: appendLogEntriesToTranscript(
+          currentStream.logs,
+          logsEvent.entries,
+          currentStream.progress,
+        ),
         rawLogs: appendRawLogEntries(currentStream.rawLogs, logsEvent.entries),
       }));
     }

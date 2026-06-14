@@ -10,6 +10,10 @@ import type {
 } from "@/web/events/runtimeStream";
 import { cn } from "@/web/lib/utils";
 import {
+  isActiveRunnerStatus,
+  type RunnerStatus,
+} from "@/web/runner/statuses";
+import {
   parseFencedMessage,
   splitTextByPaths,
   type MessageSegment,
@@ -98,13 +102,6 @@ function isNearBottom(element: HTMLDivElement): boolean {
   return (
     element.scrollHeight - element.scrollTop - element.clientHeight <=
     AUTO_SCROLL_THRESHOLD_PX
-  );
-}
-
-function shouldDisplayTranscriptEntry(entry: RuntimeTranscriptEntry): boolean {
-  return (
-    entry.type !== "run-event" ||
-    entry.eventKind !== "final_assistant_message"
   );
 }
 
@@ -262,6 +259,19 @@ function LogConsoleIdleState() {
   );
 }
 
+function LogConsoleRunningState() {
+  return (
+    <div
+      aria-label="agent process running"
+      className="mb-3 flex items-center gap-2 border-l-2 border-zinc-700 bg-zinc-900/35 px-3 py-2 font-mono text-xs leading-5 text-zinc-200"
+      role="status"
+    >
+      <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+      <span>agent process running</span>
+    </div>
+  );
+}
+
 function RawLogsDebug({ rawLogs }: { rawLogs: LogEntry[] }) {
   return (
     <details className="mt-3 border-t border-zinc-800 pt-3 font-mono text-xs">
@@ -290,9 +300,11 @@ function RawLogsDebug({ rawLogs }: { rawLogs: LogEntry[] }) {
 export function LogConsole({
   logs,
   rawLogs,
+  runnerStatus,
 }: {
   logs: RuntimeTranscriptEntry[];
   rawLogs: LogEntry[];
+  runnerStatus: RunnerStatus;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -302,7 +314,7 @@ export function LogConsole({
 
   const displayLogs = useMemo<DisplayLog[]>(
     () =>
-      visibleLogs.filter(shouldDisplayTranscriptEntry).map((entry) => {
+      visibleLogs.map((entry) => {
         const style = eventStyle[entry.kind];
 
         return {
@@ -315,6 +327,7 @@ export function LogConsole({
       }),
     [firstReceivedAt, visibleLogs],
   );
+  const isRunnerActive = isActiveRunnerStatus(runnerStatus);
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -360,6 +373,7 @@ export function LogConsole({
       >
         {displayLogs.length > 0 ? (
           <>
+            {isRunnerActive ? <LogConsoleRunningState /> : null}
             <ol className="grid content-start gap-2">
               {displayLogs.map((log) => (
                 <LogBlock key={log.entry.id} log={log} />
@@ -369,7 +383,7 @@ export function LogConsole({
           </>
         ) : (
           <>
-            <LogConsoleIdleState />
+            {isRunnerActive ? <LogConsoleRunningState /> : <LogConsoleIdleState />}
             {rawLogs.length > 0 ? <RawLogsDebug rawLogs={rawLogs} /> : null}
           </>
         )}
