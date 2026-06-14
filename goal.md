@@ -110,14 +110,14 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 5: Claude Streaming JSON Parser
 
-- [ ] Create `src/server/runner/claudeJsonEvents.ts` with an incremental JSONL parser that tolerates chunk boundaries and ignores invalid/empty lines.
-- [ ] Parse Claude session/system lifecycle events into normalized run events where useful.
-- [ ] Parse Claude assistant text/final result events into a single final assistant message without duplicating streamed deltas.
-- [ ] Parse Claude tool/command start events into normalized command/tool start rows with useful labels.
-- [ ] Parse Claude tool/command result events into success/failure rows, including stderr/error text when available.
-- [ ] Parse Claude file edit indicators into changed-file or patch-applied rows only when file paths are available.
-- [ ] Extract model, stop reason, and token usage metadata when emitted.
-- [ ] Add parser tests using representative JSONL objects for text, tool use, tool result, failure, and metadata.
+- [x] Create `src/server/runner/claudeJsonEvents.ts` with an incremental JSONL parser that tolerates chunk boundaries and ignores invalid/empty lines.
+- [x] Parse Claude session/system lifecycle events into normalized run events where useful.
+- [x] Parse Claude assistant text/final result events into a single final assistant message without duplicating streamed deltas.
+- [x] Parse Claude tool/command start events into normalized command/tool start rows with useful labels.
+- [x] Parse Claude tool/command result events into success/failure rows, including stderr/error text when available.
+- [x] Parse Claude file edit indicators into changed-file or patch-applied rows only when file paths are available.
+- [x] Extract model, stop reason, and token usage metadata when emitted.
+- [x] Add parser tests using representative JSONL objects for text, tool use, tool result, failure, and metadata.
 
 ### Phase 6: Wire Claude Runner
 
