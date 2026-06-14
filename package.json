@@ -1,6 +1,6 @@
 {
   "name": "agent-goal-runner",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Run goal-driven local agent CLI loops from a browser UI.",
   "license": "MIT",
   "type": "module",
