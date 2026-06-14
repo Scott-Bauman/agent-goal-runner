@@ -13,7 +13,7 @@
     }
   },
   "bin": {
-    "agent-goal-runner": "./dist/server/cli.js"
+    "agent-goal-runner": "dist/server/cli.js"
   },
   "files": [
     "dist/server/",
