@@ -11,7 +11,8 @@ import { getCodexExecSpawnCommand } from "./codexCommand.js";
 import { CodexJsonEventParser } from "./codexJsonEvents.js";
 import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { AgentProvider } from "./agentProviders.js";
-import { getPiPrintSpawnCommand } from "./piCommand.js";
+import { getPiJsonSpawnCommand } from "./piCommand.js";
+import { PiJsonEventParser } from "./piJsonEvents.js";
 
 export type AgentRunSettings =
   | {
@@ -179,8 +180,8 @@ const piRunner: AgentRunner = {
       throw new Error("Pi runner received non-Pi settings.");
     }
 
-    let stdout = "";
-    const piCommand = getPiPrintSpawnCommand(prompt, {
+    const parser = new PiJsonEventParser();
+    const piCommand = getPiJsonSpawnCommand(prompt, {
       model: settings.piModel,
     });
     const childProcess = spawnProcess(piCommand.command, piCommand.args, {
@@ -189,21 +190,32 @@ const piRunner: AgentRunner = {
     });
 
     childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
       hooks.onStdout(chunk);
+      const parsedChunk = parser.push(chunk);
+
+      for (const event of parsedChunk.events) {
+        hooks.onRunEvent(event);
+      }
+
+      hooks.onMetadata(parsedChunk.metadata);
     });
     childProcess.stderr.on("data", hooks.onStderr);
     childProcess.stdin.end();
 
     return {
       childProcess,
-      commandDisplay: "pi -p",
+      commandDisplay: "pi --mode json",
       complete() {
-        const finalAssistantMessage = stdout.trim();
+        const parsedRemainder = parser.flush();
+
+        for (const event of parsedRemainder.events) {
+          hooks.onRunEvent(event);
+        }
+
+        hooks.onMetadata(parsedRemainder.metadata);
 
         return {
-          finalAssistantMessage:
-            finalAssistantMessage.length > 0 ? finalAssistantMessage : null,
+          finalAssistantMessage: parser.getFinalAssistantMessage(),
         };
       },
       provider: "pi",

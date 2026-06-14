@@ -265,7 +265,7 @@ describe("run controller orchestration", () => {
     ).toHaveLength(1);
   });
 
-  it("completes a Pi run and records stdout as the final assistant message", async () => {
+  it("streams Pi JSON events before close and records the parsed final assistant message", async () => {
     const repositoryPath = await createRepositoryPath();
     const goalMarkdown = "# Goal\n\n- [ ] Next\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
@@ -294,10 +294,11 @@ describe("run controller orchestration", () => {
     expect(spawnProcess).toHaveBeenCalledWith(
       "pi",
       [
-        "-p",
-        "Use goal.md as the source of truth.",
+        "--mode",
+        "json",
         "--model",
         "local-llama",
+        "Use goal.md as the source of truth.",
       ],
       {
         cwd: repositoryPath,
@@ -309,7 +310,67 @@ describe("run controller orchestration", () => {
       reasoningEffort: null,
     });
 
-    runProcess.stdout.write("Pi final answer\n");
+    const sessionEvent = JSON.stringify({
+      type: "session",
+      id: "session-1",
+      model: "local-llama-v2",
+    });
+    const toolStartEvent = JSON.stringify({
+      type: "tool_execution_start",
+      toolCallId: "tool-1",
+      toolName: "bash",
+      args: {
+        command: "npm test",
+      },
+    });
+    const messageEndEvent = JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: "Pi final answer",
+        usage: {
+          input_tokens: 3,
+          output_tokens: 4,
+        },
+      },
+      stopReason: "end_turn",
+    });
+
+    runProcess.stdout.write(`${sessionEvent}\n`);
+    runProcess.stdout.write(`${toolStartEvent}\n`);
+    runProcess.stdout.write(`${messageEndEvent}\n`);
+
+    expect(runtimeState.stream.logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stream: "stdout",
+          message: `${sessionEvent}\n`,
+        }),
+      ]),
+    );
+    expect(runtimeState.stream.runEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent_session_started",
+          message: "Pi session started: session-1",
+        }),
+        expect.objectContaining({
+          command: "npm test",
+          kind: "command_started",
+          message: "Command started: npm test",
+        }),
+        expect.objectContaining({
+          kind: "final_assistant_message",
+          message: "Pi final answer",
+        }),
+      ]),
+    );
+    expect(runtimeState.stream.runLoop.details).toMatchObject({
+      lastAssistantMessage: "Pi final answer",
+      model: "local-llama-v2",
+      stopReason: "end_turn",
+      tokenCount: 7,
+    });
     runProcess.emit("close", 0, null);
 
     await vi.waitFor(() => {
@@ -321,6 +382,13 @@ describe("run controller orchestration", () => {
     expect(runtimeState.stream.runLoop.details.lastAssistantMessage).toBe(
       "Pi final answer",
     );
+    expect(
+      runtimeState.stream.runEvents.filter(
+        (event) =>
+          event.kind === "final_assistant_message" &&
+          event.message === "Pi final answer",
+      ),
+    ).toHaveLength(1);
   });
 
   it("does not run review when auto-commit skips a no-change normal run", async () => {

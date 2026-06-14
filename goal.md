@@ -149,12 +149,12 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 9: Wire Pi Runner
 
-- [ ] Update `piRunner` to spawn JSON mode by default.
-- [ ] Feed Pi stdout to raw logs and the Pi JSON parser; emit parsed run events and metadata through existing hooks.
-- [ ] Keep stderr visible as raw/process logs and warnings/errors where appropriate.
-- [ ] Ensure `complete()` flushes parser remainder and returns the final assistant message captured from stream state.
-- [ ] Add run controller tests proving Pi emits live run events before process close.
-- [ ] Add fallback behavior for missing/unsupported JSON mode only if a concrete runtime failure mode is observed or documented.
+- [x] Update `piRunner` to spawn JSON mode by default.
+- [x] Feed Pi stdout to raw logs and the Pi JSON parser; emit parsed run events and metadata through existing hooks.
+- [x] Keep stderr visible as raw/process logs and warnings/errors where appropriate.
+- [x] Ensure `complete()` flushes parser remainder and returns the final assistant message captured from stream state.
+- [x] Add run controller tests proving Pi emits live run events before process close.
+- [x] Add fallback behavior for missing/unsupported JSON mode only if a concrete runtime failure mode is observed or documented.
 
 ### Phase 10: Provider Approval Requests
 
