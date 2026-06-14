@@ -148,6 +148,19 @@ describe("LogConsole", () => {
     expect(screen.queryByText("waiting for agent run")).toBeNull();
   });
 
+  it("keeps the running pulse visible when an active run has gone quiet", () => {
+    render(
+      <LogConsole
+        logs={[logEntry({ message: "Started Claude run 1 of 1." })]}
+        rawLogs={[]}
+        runnerStatus="running"
+      />,
+    );
+
+    expect(screen.getByRole("status", { name: "agent process running" })).toBeTruthy();
+    expect(screen.getByText("Started Claude run 1 of 1.")).toBeTruthy();
+  });
+
   it("lets the user jump back to the latest log after scrolling away", async () => {
     render(
       <LogConsole

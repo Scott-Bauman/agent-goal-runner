@@ -166,6 +166,46 @@ describe("runtime stream helpers", () => {
     ]);
   });
 
+  it("hides provider JSONL stdout from the transcript while retaining it in raw logs", () => {
+    const providerJsonl: LogEntry[] = [
+      {
+        id: 1,
+        message: JSON.stringify({
+          type: "command.started",
+          command: "npm test",
+        }),
+        stream: "stdout",
+      },
+      {
+        id: 2,
+        message: JSON.stringify({
+          type: "stream_event",
+          event: {
+            type: "content_block_delta",
+            delta: {
+              text: "partial Claude text",
+              type: "text_delta",
+            },
+          },
+        }),
+        stream: "stdout",
+      },
+      {
+        id: 3,
+        message: JSON.stringify({
+          event: "message_update",
+          text: "partial Pi text",
+        }),
+        stream: "stdout",
+      },
+    ];
+
+    expect(appendRawLogEntries([], providerJsonl)).toEqual(providerJsonl);
+    expect(
+      appendLogEntriesToTranscript([], providerJsonl, runningProgress, 100),
+    ).toEqual([]);
+  });
+
   it("appends structured run events as the primary transcript rows", () => {
     const transcript = appendRunEventsToTranscript([], [
       {
@@ -344,7 +384,7 @@ describe("runtime stream helpers", () => {
     ).toEqual([1, 2, 3]);
   });
 
-  it("keeps structured Codex JSON stdout out of the visible transcript", () => {
+  it("keeps structured JSON stdout hidden while human-readable stderr stays visible", () => {
     const transcript = appendLogEntriesToTranscript(
       [],
       [
@@ -373,6 +413,126 @@ describe("runtime stream helpers", () => {
         stream: "stderr",
         type: "log",
       }),
+    ]);
+  });
+
+  it("shows live activity rows and one final assistant row without streamed delta spam", () => {
+    const hiddenDeltas = appendLogEntriesToTranscript(
+      [],
+      [
+        {
+          id: 1,
+          message: JSON.stringify({
+            type: "stream_event",
+            event: {
+              type: "content_block_delta",
+              delta: { text: "The", type: "text_delta" },
+            },
+          }),
+          stream: "stdout",
+        },
+        {
+          id: 2,
+          message: JSON.stringify({
+            event: "message_update",
+            delta: " final answer is coming",
+          }),
+          stream: "stdout",
+        },
+      ],
+      runningProgress,
+      100,
+    );
+    const transcript = appendRunEventsToTranscript(hiddenDeltas, [
+      {
+        id: 10,
+        kind: "tool_started",
+        message: "Started Read tool.",
+        receivedAt: 200,
+        runNumber: 1,
+        toolName: "Read",
+        totalRuns: 2,
+      },
+      {
+        files: ["src/web/events/runtimeStream.ts"],
+        id: 11,
+        kind: "file_changed",
+        message: "Updated src/web/events/runtimeStream.ts",
+        receivedAt: 300,
+        runNumber: 1,
+        totalRuns: 2,
+      },
+      {
+        id: 12,
+        kind: "final_assistant_message",
+        message: "The final answer is here.",
+        receivedAt: 400,
+        runNumber: 1,
+        totalRuns: 2,
+      },
+    ]);
+
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        eventKind: "tool_started",
+        kind: "tool",
+        message: "Started Read tool.",
+      }),
+      expect.objectContaining({
+        eventKind: "file_changed",
+        kind: "edit",
+        message: "Updated src/web/events/runtimeStream.ts",
+      }),
+      expect.objectContaining({
+        eventKind: "final_assistant_message",
+        kind: "agent",
+        message: "The final answer is here.",
+      }),
+    ]);
+  });
+
+  it("suppresses duplicate final assistant and run completion events by content", () => {
+    const firstBatch = appendRunEventsToTranscript([], [
+      {
+        id: 1,
+        kind: "final_assistant_message",
+        message: "Done.\n\nUpdated goal.md",
+        receivedAt: 100,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+      {
+        id: 2,
+        kind: "run_completed",
+        message: "Completed run loop.",
+        receivedAt: 200,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+    ]);
+    const secondBatch = appendRunEventsToTranscript(firstBatch, [
+      {
+        id: 3,
+        kind: "final_assistant_message",
+        message: "Done. Updated goal.md",
+        receivedAt: 300,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+      {
+        id: 4,
+        kind: "run_completed",
+        message: "Completed run loop.",
+        receivedAt: 400,
+        runNumber: 1,
+        totalRuns: 1,
+      },
+    ]);
+
+    expect(secondBatch).toBe(firstBatch);
+    expect(secondBatch.map((entry) => entry.message)).toEqual([
+      "Done.\n\nUpdated goal.md",
+      "Completed run loop.",
     ]);
   });
 

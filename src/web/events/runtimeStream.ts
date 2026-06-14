@@ -355,7 +355,10 @@ export function appendRunEventsToTranscript(
   let nextTranscript = transcript;
 
   for (const entry of entries) {
-    if (seenEventIds.has(entry.id)) {
+    if (
+      seenEventIds.has(entry.id) ||
+      isRunEventDuplicatedByTranscript(entry, nextTranscript)
+    ) {
       continue;
     }
 
@@ -490,6 +493,27 @@ function isLogEntryDuplicatedByTranscript(
       (entry.type === "separator" && entry.separatorKind === "completion")
     );
   });
+}
+
+function isRunEventDuplicatedByTranscript(
+  runEvent: RunEventEntry,
+  transcript: RuntimeTranscriptEntry[],
+): boolean {
+  if (
+    runEvent.kind !== "final_assistant_message" &&
+    runEvent.kind !== "run_completed"
+  ) {
+    return false;
+  }
+
+  const runEventMessage = normalizeTranscriptMessage(runEvent.message);
+
+  return transcript.some(
+    (entry) =>
+      entry.type === "run-event" &&
+      entry.eventKind === runEvent.kind &&
+      normalizeTranscriptMessage(entry.message) === runEventMessage,
+  );
 }
 
 function normalizeTranscriptMessage(message: string): string {

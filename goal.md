@@ -159,13 +159,13 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 11: Transcript UX and Duplicate Control
 
-- [ ] Confirm structured JSONL stdout from Codex, Claude, and Pi is hidden from the visible transcript and retained in Raw Logs.
-- [ ] Confirm human-readable stderr remains visible in the transcript.
-- [ ] Confirm hybrid assistant text behavior: live tool/command/file/status rows appear, streamed text deltas do not create dozens of noisy rows, and final assistant output appears once.
-- [ ] Confirm final assistant output appears once.
-- [ ] Confirm run completion appears once.
-- [ ] Confirm the active running indicator remains visible during long quiet periods.
-- [ ] Add or update web tests for all duplicate-suppression and active-running cases.
+- [x] Confirm structured JSONL stdout from Codex, Claude, and Pi is hidden from the visible transcript and retained in Raw Logs.
+- [x] Confirm human-readable stderr remains visible in the transcript.
+- [x] Confirm hybrid assistant text behavior: live tool/command/file/status rows appear, streamed text deltas do not create dozens of noisy rows, and final assistant output appears once.
+- [x] Confirm final assistant output appears once.
+- [x] Confirm run completion appears once.
+- [x] Confirm the active running indicator remains visible during long quiet periods.
+- [x] Add or update web tests for all duplicate-suppression and active-running cases.
 
 ### Phase 12: End-to-End Behavior
 
