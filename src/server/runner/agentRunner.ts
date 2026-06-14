@@ -4,7 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import type { RunSummaryDetails } from "../sse/types.js";
 import type { ProcessSpawner } from "../shared/process.js";
 import type { RunEventPayload } from "../sse/types.js";
-import { getClaudePrintSpawnCommand } from "./claudeCommand.js";
+import { getClaudeStreamJsonSpawnCommand } from "./claudeCommand.js";
+import { ClaudeJsonEventParser } from "./claudeJsonEvents.js";
 import type { ClaudeModel } from "./claudeOptions.js";
 import { getCodexExecSpawnCommand } from "./codexCommand.js";
 import { CodexJsonEventParser } from "./codexJsonEvents.js";
@@ -128,8 +129,8 @@ const claudeRunner: AgentRunner = {
       throw new Error("Claude runner received non-Claude settings.");
     }
 
-    let stdout = "";
-    const claudeCommand = getClaudePrintSpawnCommand(prompt, {
+    const parser = new ClaudeJsonEventParser();
+    const claudeCommand = getClaudeStreamJsonSpawnCommand(prompt, {
       model: settings.model,
     });
     const childProcess = spawnProcess(claudeCommand.command, claudeCommand.args, {
@@ -138,21 +139,32 @@ const claudeRunner: AgentRunner = {
     });
 
     childProcess.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
       hooks.onStdout(chunk);
+      const parsedChunk = parser.push(chunk);
+
+      for (const event of parsedChunk.events) {
+        hooks.onRunEvent(event);
+      }
+
+      hooks.onMetadata(parsedChunk.metadata);
     });
     childProcess.stderr.on("data", hooks.onStderr);
     childProcess.stdin.end();
 
     return {
       childProcess,
-      commandDisplay: "claude -p",
+      commandDisplay: "claude -p --output-format stream-json",
       complete() {
-        const finalAssistantMessage = stdout.trim();
+        const parsedRemainder = parser.flush();
+
+        for (const event of parsedRemainder.events) {
+          hooks.onRunEvent(event);
+        }
+
+        hooks.onMetadata(parsedRemainder.metadata);
 
         return {
-          finalAssistantMessage:
-            finalAssistantMessage.length > 0 ? finalAssistantMessage : null,
+          finalAssistantMessage: parser.getFinalAssistantMessage(),
         };
       },
       provider: "claude",

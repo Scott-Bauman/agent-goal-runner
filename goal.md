@@ -121,12 +121,11 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 6: Wire Claude Runner
 
-- [ ] Update `claudeRunner` to spawn the streaming JSON command by default.
-- [ ] Feed Claude stdout to raw logs and the Claude JSON parser; emit parsed run events and metadata through existing hooks.
-- [ ] Keep stderr visible as raw/process logs and warnings/errors where appropriate.
-- [ ] Ensure `complete()` flushes parser remainder and returns the final assistant message captured from stream state.
-- [ ] Add run controller tests proving Claude emits live run events before process close.
-- [ ] Add fallback behavior for missing/unsupported streaming JSON only if a concrete runtime failure mode is observed or documented.
+- [x] Update `claudeRunner` to spawn the streaming JSON command by default.
+- [x] Feed Claude stdout to raw logs and the Claude JSON parser; emit parsed run events and metadata through existing hooks.
+- [x] Keep stderr visible as raw/process logs and warnings/errors where appropriate.
+- [x] Ensure `complete()` flushes parser remainder and returns the final assistant message captured from stream state.
+- [x] Add run controller tests proving Claude emits live run events before process close.
 
 ### Phase 7: Pi JSON Command
 

@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  getClaudePrintSpawnCommand,
+  getClaudeStreamJsonSpawnCommand,
   getCodexExecSpawnCommand,
   getPiPrintSpawnCommand,
 } from "../../../src/server/index";
@@ -715,7 +715,7 @@ describe("run start endpoint", () => {
     expect(runProcess.stdin.writableEnded).toBe(true);
   });
 
-  it("spawns claude print in the selected repository with model", async () => {
+  it("spawns claude streaming JSON in the selected repository with model", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
@@ -736,7 +736,7 @@ describe("run start endpoint", () => {
         claudeModel: "opus",
       },
     });
-    const expectedClaudeCommand = getClaudePrintSpawnCommand(
+    const expectedClaudeCommand = getClaudeStreamJsonSpawnCommand(
       "Use goal.md as the source of truth.",
       {
         model: "opus",

@@ -141,7 +141,7 @@ describe("run controller orchestration", () => {
     });
   });
 
-  it("completes a Claude run and records stdout as the final assistant message", async () => {
+  it("streams Claude JSON events before close and records the parsed final assistant message", async () => {
     const repositoryPath = await createRepositoryPath();
     const goalMarkdown = "# Goal\n\n- [ ] Next\n";
     await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
@@ -172,6 +172,10 @@ describe("run controller orchestration", () => {
       [
         "-p",
         "Use goal.md as the source of truth.",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--include-partial-messages",
         "--model",
         "sonnet",
       ],
@@ -181,7 +185,66 @@ describe("run controller orchestration", () => {
       },
     );
 
-    runProcess.stdout.write("Claude final answer\n");
+    runProcess.stdout.write(
+      `${JSON.stringify({
+        type: "system",
+        subtype: "init",
+        session_id: "session-1",
+        model: "claude-sonnet-4-5",
+      })}\n`,
+    );
+    runProcess.stdout.write(
+      `${JSON.stringify({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: {
+              command: "npm test",
+            },
+          },
+        },
+      })}\n`,
+    );
+    runProcess.stdout.write(
+      `${JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Claude final answer",
+        usage: {
+          input_tokens: 4,
+          output_tokens: 6,
+        },
+      })}\n`,
+    );
+
+    expect(runtimeState.stream.runEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent_session_started",
+          message: "Claude session started: session-1",
+        }),
+        expect.objectContaining({
+          command: "npm test",
+          kind: "command_started",
+          message: "Command started: npm test",
+        }),
+        expect.objectContaining({
+          kind: "final_assistant_message",
+          message: "Claude final answer",
+        }),
+      ]),
+    );
+    expect(runtimeState.stream.runLoop.details).toMatchObject({
+      lastAssistantMessage: "Claude final answer",
+      model: "claude-sonnet-4-5",
+      tokenCount: 10,
+    });
     runProcess.emit("close", 0, null);
 
     await vi.waitFor(() => {
@@ -193,6 +256,13 @@ describe("run controller orchestration", () => {
     expect(runtimeState.stream.runLoop.details.lastAssistantMessage).toBe(
       "Claude final answer",
     );
+    expect(
+      runtimeState.stream.runEvents.filter(
+        (event) =>
+          event.kind === "final_assistant_message" &&
+          event.message === "Claude final answer",
+      ),
+    ).toHaveLength(1);
   });
 
   it("completes a Pi run and records stdout as the final assistant message", async () => {
@@ -386,6 +456,10 @@ describe("run controller orchestration", () => {
       [
         "-p",
         "Review the last 1 commit for bugs, regressions, and missed requirements. Fix any issues you find, then report what you changed.\n\nReview recent commits.",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--include-partial-messages",
         "--model",
         "opus",
       ],
