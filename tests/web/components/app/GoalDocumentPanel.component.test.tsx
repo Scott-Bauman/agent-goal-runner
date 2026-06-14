@@ -133,6 +133,7 @@ describe("GoalDocumentPanel", () => {
     renderGoalPanel();
 
     expect(await screen.findByText("Build the runner.")).toBeTruthy();
+    expect(screen.getByText("Total Steps: 2")).toBeTruthy();
 
     await user.click(
       screen.getByRole("button", { name: "Show implementation steps" }),

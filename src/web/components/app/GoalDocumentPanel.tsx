@@ -837,6 +837,11 @@ export function GoalDocumentPanel({
           >
             goal.md
           </CardTitle>
+          {goalFileState.status === "available" ? (
+            <span className="shrink-0 text-xs font-medium text-muted-foreground">
+              Total Steps: {implementationSteps.length}
+            </span>
+          ) : null}
         </div>
         {renderHeaderActions() ?? (
           <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
