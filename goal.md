@@ -1,30 +1,42 @@
-# Local Model Support via Pi Headless
+# Agent Output Streaming Goal
 
 ## Goal
 
-Add a "Pi" provider option so users can run local models (LM Studio, Ollama, vLLM) through Pi's headless print mode (`pi -p`). The user configures their local model server in `~/.pi/agent/models.json`; the goal runner UI exposes Pi as a selectable provider alongside Codex and Claude.
+Implement TUI-like public agent activity in the browser Agent Output panel for Codex, Claude Code, and Pi.
 
-MVP: Pi provider spawns `pi -p <prompt>` (optionally `--model <id>`), captures stdout as the final response, and streams stderr for logging. Model selection is free-text because the available models depend on the user's local `models.json`.
+The browser should show live, useful progress while a run is active: session starts, partial assistant text when available, tool/command starts and completions, file edits, warnings, errors, compaction/retry events, final assistant output, and run completion. Hidden chain-of-thought is not available and must not be exposed or simulated.
+
+MVP: Codex continues using `codex exec --json`; Claude Code uses documented streaming JSON output; Pi uses documented JSON event mode. All three providers feed normalized run events into the existing SSE and transcript pipeline without duplicate final/completion rows.
 
 ## Scope
 
 ### In Scope
 
-- New `pi` provider in the shared `agentProviders` contract
-- `piCommand.ts` — builds `pi -p` spawn command with optional `--model`
-- `piRunner` in `agentRunner.ts` — spawns Pi print mode, captures stdout as final message
-- UI: "Pi" option in provider combobox; free-text model input when Pi is selected
-- API: `piModel` field in run start request (nullable string, not an enum)
-- Run controller: Pi settings in `AgentRunSettings` union and `StartRunOptions`
-- Tests: mirror `claudeCommand.test.ts` pattern for Pi command; update run controller and route tests
+- Preserve the current run loop, SSE route, run status, progress, summary, and raw log architecture.
+- Keep provider-specific CLI argument construction under `src/server/runner/*Command.ts`.
+- Add provider-specific JSONL parsers for Claude Code and Pi, modeled after the existing Codex parser pattern.
+- Expand normalized run event handling only as needed to represent public live activity from Claude Code and Pi.
+- Continue storing raw stdout/stderr logs for debugging, while keeping structured JSONL out of the main transcript.
+- Show one canonical final assistant row and one canonical completion row in the user-facing transcript.
+- Keep print-mode fallback behavior only if a provider has no usable streaming JSON mode at runtime.
+- Add tests for command construction, parser behavior, run controller wiring, SSE payloads, and visible transcript behavior.
 
 ### Out of Scope
 
-- Pi JSON mode (`--mode json`) event parsing
-- Auto-discovering models from `~/.pi/agent/models.json`
-- Pi-specific reasoning effort or thinking controls
-- Skill preflight for Pi
-- Pi-specific review behavior beyond the shared provider/model wiring
+- Displaying hidden chain-of-thought, private reasoning tokens, or simulated internal thinking.
+- Building a PTY scraper for interactive TUIs unless streaming JSON is proven unusable.
+- Implementing Pi RPC mode as the default path.
+- Auto-discovering local Pi models from `~/.pi/agent/models.json`.
+- Adding new credentials, telemetry, hosted services, or remote log upload.
+- Redesigning the whole Agent Output UI beyond controls/states needed for live activity.
+- Changing goal execution, auto-commit, review cadence, branch handling, or verification behavior except where provider event streaming requires it.
+
+## Product Shape
+
+- Primary surface: existing browser Agent Output panel.
+- Main workflow: user starts a provider run and can see public activity within seconds, not only at final completion.
+- UX priority: observability, low duplication, clear status, and graceful fallback when a CLI emits little or no stream data.
+- Raw Logs remain collapsible debugging detail; the transcript remains the clean human-readable feed.
 
 ## Execution Rules
 
@@ -37,50 +49,133 @@ MVP: Pi provider spawns `pi -p <prompt>` (optionally `--model <id>`), captures s
 - Update only the relevant checkbox state after verified completion.
 - Do not add run logs, reasoning traces, or routine progress notes to this file.
 - Split oversized checklist items before implementing them.
-- Do not rename public APIs, routes, or exported functions unless explicitly required by the selected item.
+- Do not rename public APIs, persisted keys, routes, SSE event names, exported functions, props, or files unless explicitly required by the selected item.
+- Preserve existing behavior for Codex, Claude print output, Pi print output, verification commands, review runs, and auto-commit unless the selected item explicitly changes it.
+- Before running install/download commands, request approval and state what will be installed.
+
+## Scope Inventory
+
+- `src/server/runner/codexCommand.ts`: existing Codex `exec --json` command builder; preserve and polish only if needed.
+- `src/server/runner/codexJsonEvents.ts`: existing Codex JSONL parser and useful normalization pattern.
+- `src/server/runner/claudeCommand.ts`: change Claude command construction from print-only to streaming JSON when enabled.
+- `src/server/runner/piCommand.ts`: change Pi command construction from print-only to JSON mode when enabled.
+- `src/server/runner/agentRunner.ts`: provider runner orchestration, stdout/stderr handling, parser hookup, final-message extraction.
+- `src/server/runner/runController.ts`: run event publication, final assistant handling, process close behavior.
+- `src/server/sse/types.ts` and `src/server/sse/sseHub.ts`: shared event payload contract and run detail updates.
+- `src/web/events/runtimeStream.ts`: transcript normalization, raw-log filtering, duplicate suppression.
+- `src/web/components/app/LogConsole.tsx`: visible transcript rendering and active-run affordances.
+- `tests/server/runner/*`: command builder and parser tests.
+- `tests/server/routes/runRoutes.test.ts` and `tests/server/runner/runController.test.ts`: provider wiring and SSE behavior tests.
+- `tests/web/events/runtimeStream.test.ts` and component tests: transcript behavior tests.
 
 ## Implementation Plan
 
-### Phase 1: Server — provider contract and command
+### Phase 1: Confirm Provider Stream Contracts
 
-- [x] Add `"pi"` to `AGENT_PROVIDERS` in `src/server/runner/agentProviders.ts`; update `getAgentProviderLabel` / `getAgentRunLabel`
-- [x] Create `src/server/runner/piCommand.ts` — `getPiPrintSpawnCommand(prompt, { model })` returning `SpawnCommand` for `pi -p <prompt>` with optional `--model`
-- [x] Export `getPiPrintSpawnCommand` from `src/server/index.ts`
-- [x] Add `piModel: string | null` to `AgentRunSettings` union variant in `src/server/runner/agentRunner.ts`
-- [x] Add `piRunner` constant in `agentRunner.ts` (print-mode pattern matching `claudeRunner`; stdout accumulated, emitted as `finalAssistantMessage`)
-- [x] Wire `piRunner` into `getAgentRunner()` discriminator
+- [ ] Capture the installed Codex CLI version and `codex exec --help` options relevant to `--json` and `--output-last-message`.
+- [ ] Capture Claude Code streaming options from official docs or installed `claude --help`; record the exact flags needed for JSON streaming in Durable Notes.
+- [ ] Capture Pi JSON mode options from installed docs or `pi --help`; record the exact flags needed for JSON streaming in Durable Notes.
+- [ ] Add small parser fixture notes or sample JSONL snippets for Codex, Claude, and Pi under tests if real samples are available without credentials.
 
-### Phase 2: Server — run controller and API routes
+### Phase 2: Normalize Public Activity Events
 
-- [x] Add `piModel: string | null` to `StartRunOptions` and `ReviewRunOptions` in `runController.ts`
-- [x] Update `createAgentRunSettings` / `createReviewAgentRunSettings` to handle `provider === "pi"`
-- [x] Update `getAgentRunDetails` / `getReviewRunDetails` for Pi
-- [x] Update `formatAgentSpawnError` / `formatReviewSpawnError` with Pi-specific ENOENT message
-- [x] Add `piModel` field to `runStartSchema` in `runRoutes.ts` (nullable string, not enum)
-- [x] Add `piModel` field to enabled review request schema and accepted response shape
-- [x] Add Pi-specific validation in `addProviderSettingIssues` (piModel only valid when provider is "pi"; codex/claude fields invalid when provider is "pi")
-- [x] Update `DEFAULT_REVIEW_RUN_OPTIONS` to include `piModel: null`
+- [ ] Audit current `RunEventKind` values and list which existing kinds can represent command/tool starts, command/tool completions, file changes, warnings, errors, final assistant messages, and run completion.
+- [ ] Add only the minimal new `RunEventKind` values needed for provider-agnostic live activity that cannot be represented today.
+- [ ] Update `RunEventPayload`, SSE serialization, run details aggregation, and transcript kind mapping for any new event kinds.
+- [ ] Add tests proving old event kinds and any new event kinds update changed files, warning/error counts, stop reason, and last assistant message correctly.
 
-### Phase 3: Web — shared contract and UI
+### Phase 3: Codex Parser Polish
 
-- [x] Add `"pi"` to `AGENT_PROVIDERS` in `src/web/runner/agentProviders.ts`
-- [x] Add `PiModelSelection` type and `PI_MODEL_INPUT_PLACEHOLDER` in `src/web/runner/codexOptions.ts` (or new `piOptions.ts`)
-- [x] Add `piModel` state to `ControlsPanel` component
-- [x] Show free-text `<Input>` for Pi model when provider is "pi" (replaces model combobox)
-- [x] Add `piModel` to `controlsPanelReview.ts` request shaping and the review settings form when review provider is "pi"
-- [x] Send `piModel` in `handleRunStart` request body (only when provider is "pi")
-- [x] Update `RunStartResponse` type in `src/web/api/responses.ts` to include top-level and review `piModel`
+- [ ] Review `CodexJsonEventParser` against current Codex JSONL samples and identify any public activity currently ignored that should appear in the transcript.
+- [ ] Extend Codex parsing only for concrete observed fields or documented event shapes.
+- [ ] Preserve filtering of raw structured Codex JSONL from the visible transcript while keeping it in Raw Logs.
+- [ ] Add focused Codex parser tests for any newly supported event shapes.
 
-### Phase 4: Tests
+### Phase 4: Claude Streaming JSON Command
 
-- [x] Create `tests/server/runner/piCommand.test.ts` — mirrors `claudeCommand.test.ts` pattern (prompt, optional model, platform resolution)
-- [x] Update `tests/server/runner/runController.test.ts` — Pi provider spawn and close scenarios
-- [x] Update `tests/server/routes/runRoutes.test.ts` — Pi provider validation (valid piModel, cross-provider rejection)
-- [x] Update `tests/web/runner/statuses.test.ts` or add `tests/web/runner/agentProviders.test.ts` if provider list tests exist
+- [ ] Add a Claude command builder path for streaming JSON output using the documented `claude -p --output-format stream-json --verbose` style flags.
+- [ ] Preserve model selection behavior for Claude.
+- [ ] Keep a clearly named print-mode builder only if tests or fallback behavior still require it.
+- [ ] Update Claude command tests to cover streaming JSON arguments and existing Windows package-bin resolution.
 
-### Phase 5: Final verification
+### Phase 5: Claude Streaming JSON Parser
 
-- [x] Run `npm run typecheck`, `npm test`, `npm run lint`, `npm run build` — all pass
+- [ ] Create `src/server/runner/claudeJsonEvents.ts` with an incremental JSONL parser that tolerates chunk boundaries and ignores invalid/empty lines.
+- [ ] Parse Claude session/system lifecycle events into normalized run events where useful.
+- [ ] Parse Claude assistant text/final result events into a single final assistant message without duplicating streamed deltas.
+- [ ] Parse Claude tool/command start events into normalized command/tool start rows with useful labels.
+- [ ] Parse Claude tool/command result events into success/failure rows, including stderr/error text when available.
+- [ ] Parse Claude file edit indicators into changed-file or patch-applied rows only when file paths are available.
+- [ ] Extract model, stop reason, and token usage metadata when emitted.
+- [ ] Add parser tests using representative JSONL objects for text, tool use, tool result, failure, and metadata.
+
+### Phase 6: Wire Claude Runner
+
+- [ ] Update `claudeRunner` to spawn the streaming JSON command by default.
+- [ ] Feed Claude stdout to raw logs and the Claude JSON parser; emit parsed run events and metadata through existing hooks.
+- [ ] Keep stderr visible as raw/process logs and warnings/errors where appropriate.
+- [ ] Ensure `complete()` flushes parser remainder and returns the final assistant message captured from stream state.
+- [ ] Add run controller tests proving Claude emits live run events before process close.
+- [ ] Add fallback behavior for missing/unsupported streaming JSON only if a concrete runtime failure mode is observed or documented.
+
+### Phase 7: Pi JSON Command
+
+- [ ] Add a Pi command builder path for `pi --mode json <prompt>`.
+- [ ] Preserve optional `--model <id>` behavior for Pi.
+- [ ] Decide whether Pi should include `--approve` or `--no-approve`; default to existing trust behavior unless explicitly required.
+- [ ] Keep a clearly named print-mode builder only if tests or fallback behavior still require it.
+- [ ] Update Pi command tests to cover JSON mode arguments, optional model, and existing Windows package-bin resolution.
+
+### Phase 8: Pi JSON Parser
+
+- [ ] Create `src/server/runner/piJsonEvents.ts` with an incremental JSONL parser that tolerates chunk boundaries and ignores invalid/empty lines.
+- [ ] Parse Pi `session`, `agent_start`, `turn_start`, `turn_end`, and `agent_end` events into useful normalized lifecycle/final rows.
+- [ ] Parse Pi `message_update` text deltas without flooding the transcript with every tiny token.
+- [ ] Parse Pi `message_end` or `turn_end` assistant messages into one final assistant message.
+- [ ] Parse Pi `tool_execution_start`, `tool_execution_update`, and `tool_execution_end` into normalized command/tool rows.
+- [ ] Parse Pi tool result errors into warning/error rows with concise messages.
+- [ ] Parse Pi compaction and retry events into concise warning/agent rows.
+- [ ] Extract changed file paths from Pi edit/write/tool events when available.
+- [ ] Add parser tests for message deltas, final messages, tool execution, errors, compaction, retry, and changed-file extraction.
+
+### Phase 9: Wire Pi Runner
+
+- [ ] Update `piRunner` to spawn JSON mode by default.
+- [ ] Feed Pi stdout to raw logs and the Pi JSON parser; emit parsed run events and metadata through existing hooks.
+- [ ] Keep stderr visible as raw/process logs and warnings/errors where appropriate.
+- [ ] Ensure `complete()` flushes parser remainder and returns the final assistant message captured from stream state.
+- [ ] Add run controller tests proving Pi emits live run events before process close.
+- [ ] Add fallback behavior for missing/unsupported JSON mode only if a concrete runtime failure mode is observed or documented.
+
+### Phase 10: Transcript UX and Duplicate Control
+
+- [ ] Confirm structured JSONL stdout from Codex, Claude, and Pi is hidden from the visible transcript and retained in Raw Logs.
+- [ ] Confirm human-readable stderr remains visible in the transcript.
+- [ ] Confirm streamed assistant deltas do not create dozens of noisy rows; display either meaningful partial updates or a compact active assistant row.
+- [ ] Confirm final assistant output appears once.
+- [ ] Confirm run completion appears once.
+- [ ] Confirm the active running indicator remains visible during long quiet periods.
+- [ ] Add or update web tests for all duplicate-suppression and active-running cases.
+
+### Phase 11: End-to-End Behavior
+
+- [ ] Run a mocked Codex JSONL stream through the server and verify SSE emits raw logs, run events, run details, and transcript rows in expected order.
+- [ ] Run a mocked Claude JSONL stream through the server and verify SSE emits live activity before process close.
+- [ ] Run a mocked Pi JSONL stream through the server and verify SSE emits live activity before process close.
+- [ ] If local CLIs and credentials are available, manually run one small real Codex job and inspect the Agent Output panel.
+- [ ] If local Claude Code is installed and authenticated, manually run one small real Claude job and inspect the Agent Output panel.
+- [ ] If local Pi is installed and authenticated, manually run one small real Pi job and inspect the Agent Output panel.
+
+### Phase 12: Final Cleanup and Verification
+
+- [ ] Remove obsolete print-only assumptions from comments, names, and tests while preserving intentional fallback code.
+- [ ] Ensure provider-specific parser code is documented only where event-shape handling is non-obvious.
+- [ ] Run focused parser, runner, SSE, and transcript tests.
+- [ ] Run `npm run typecheck`.
+- [ ] Run `npm test`.
+- [ ] Run `npm run lint`.
+- [ ] Run `npm run build`.
+- [ ] Add `GOAL_COMPLETE` only after every required checkbox is complete and final verification passes.
 
 ## Verification
 
@@ -93,9 +188,9 @@ Expected commands:
 - `npm run lint`
 - `npm run build`
 
-Do not mark a checkbox complete if the changed path has active test failures, type errors, lint errors, build failures, runtime exceptions, or relevant console errors.
+Do not mark a checkbox complete if the changed path has active test failures, type errors, lint errors, build failures, runtime exceptions, broken SSE payloads, duplicate transcript rows, or relevant console errors.
 
-Run broader verification at phase boundaries or before `GOAL_COMPLETE`.
+Run broader verification at phase boundaries and before `GOAL_COMPLETE`.
 
 ## Blocked / Complete Policy
 
@@ -104,10 +199,11 @@ Run broader verification at phase boundaries or before `GOAL_COMPLETE`.
 - Add `GOAL_COMPLETE` only when every required checkbox is complete and final verification passes.
 - Do not add completion markers during ordinary intermediate runs.
 
-GOAL_COMPLETE
-
 ## Durable Notes
 
-- Pi print mode (`pi -p`) is the MVP; JSON mode is deferred.
-- Pi model is free-text (user's `~/.pi/agent/models.json` is the source of truth for available models).
-- Pi does not have a reasoning effort concept in this phase; that field is Codex-only.
+- Hidden chain-of-thought is out of scope; show only public provider stream events and explicit reasoning summaries if a provider emits them.
+- Codex currently supports `codex exec --json` and `--output-last-message`; keep this path working.
+- Claude Code streaming target is documented as `claude -p --output-format stream-json --verbose`; verify exact installed CLI behavior before wiring.
+- Pi installed package `@earendil-works/pi-coding-agent@0.79.3` documents `pi --mode json` JSONL events in `docs/json.md`; verify exact installed CLI behavior before wiring.
+- Pi JSON docs list events including `session`, `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, `turn_end`, and `agent_end`.
+- Prefer streaming JSON over PTY scraping. Use PTY only if documented JSON modes are unavailable or unusable after explicit user approval.
