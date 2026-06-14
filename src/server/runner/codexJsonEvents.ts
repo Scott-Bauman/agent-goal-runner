@@ -214,6 +214,12 @@ function toRunEvent(
   object: JsonObject,
   seenDiffs: Set<string>,
 ): RunEventPayload | null {
+  const codexExecEvent = createCodexExecEvent(object);
+
+  if (codexExecEvent) {
+    return codexExecEvent;
+  }
+
   const context = createRunEventParseContext(object);
 
   return (
@@ -226,6 +232,246 @@ function toRunEvent(
     createFailureEvent(context) ??
     createSkillLookupWarning(context)
   );
+}
+
+function createCodexExecEvent(object: JsonObject): RunEventPayload | null {
+  const normalizedType = normalizeText(getStringField(object, "type"));
+
+  if (normalizedType === "thread_started") {
+    const threadId = getStringField(object, "thread_id");
+
+    return {
+      kind: "codex_session_started",
+      message: threadId
+        ? `Codex thread started: ${threadId}`
+        : "Codex thread started.",
+    };
+  }
+
+  if (normalizedType === "turn_started") {
+    return {
+      kind: "agent_session_started",
+      message: "Codex turn started.",
+    };
+  }
+
+  if (normalizedType === "turn_failed") {
+    const error = getObjectField(object, "error");
+    const message = error ? extractMessage(error) : extractMessage(object);
+
+    return {
+      kind: "error",
+      message: message || "Codex turn failed.",
+      stopReason: message || "Codex turn failed.",
+    };
+  }
+
+  if (normalizedType === "error") {
+    const message = extractMessage(object);
+
+    return {
+      kind: "error",
+      message: message || "Codex emitted an error.",
+      stopReason: message || "Codex emitted an error.",
+    };
+  }
+
+  if (
+    normalizedType !== "item_started" &&
+    normalizedType !== "item_completed"
+  ) {
+    return null;
+  }
+
+  const item = getObjectField(object, "item");
+
+  if (!item) {
+    return null;
+  }
+
+  return createCodexExecItemEvent(item, normalizedType);
+}
+
+function createCodexExecItemEvent(
+  item: JsonObject,
+  normalizedEventType: string,
+): RunEventPayload | null {
+  const itemType = normalizeText(getStringField(item, "type"));
+
+  if (itemType === "command_execution") {
+    return createCodexCommandExecutionEvent(item, normalizedEventType);
+  }
+
+  if (itemType === "file_change") {
+    return createCodexFileChangeEvent(item, normalizedEventType);
+  }
+
+  if (itemType === "mcp_tool_call") {
+    return createCodexMcpToolCallEvent(item, normalizedEventType);
+  }
+
+  if (itemType === "web_search") {
+    return createCodexWebSearchEvent(item, normalizedEventType);
+  }
+
+  if (itemType === "agent_message" && normalizedEventType === "item_completed") {
+    const message = getStringField(item, "text");
+
+    return message
+      ? {
+          kind: "final_assistant_message",
+          message,
+        }
+      : null;
+  }
+
+  if (itemType === "error" && normalizedEventType === "item_completed") {
+    return {
+      kind: "warning",
+      message: extractMessage(item) || "Codex reported a warning.",
+    };
+  }
+
+  return null;
+}
+
+function createCodexCommandExecutionEvent(
+  item: JsonObject,
+  normalizedEventType: string,
+): RunEventPayload | null {
+  const command = getStringField(item, "command");
+  const exitCode = getNumberField(item, "exit_code", "exitCode");
+  const status = normalizeText(getStringField(item, "status"));
+
+  if (
+    normalizedEventType === "item_completed" &&
+    (status === "failed" || status === "declined" || isNonZeroExitCode(exitCode))
+  ) {
+    return {
+      command,
+      exitCode,
+      kind: "command_failed",
+      message: formatCommandMessage(command, "failed"),
+    };
+  }
+
+  if (normalizedEventType === "item_completed" || status === "completed") {
+    return {
+      command,
+      exitCode,
+      kind: "command_succeeded",
+      message: formatCommandMessage(command, "succeeded"),
+    };
+  }
+
+  if (normalizedEventType !== "item_started") {
+    return null;
+  }
+
+  return {
+    command,
+    kind: "command_started",
+    message: formatCommandMessage(command, "started"),
+  };
+}
+
+function createCodexFileChangeEvent(
+  item: JsonObject,
+  normalizedEventType: string,
+): RunEventPayload | null {
+  if (normalizedEventType !== "item_completed") {
+    return null;
+  }
+
+  const files = extractChangedFilesFromObject(item);
+  const status = normalizeText(getStringField(item, "status"));
+
+  if (status === "failed") {
+    return {
+      files,
+      kind: "error",
+      message: formatFilesMessage(files, "Patch failed."),
+      stopReason: "Patch failed.",
+    };
+  }
+
+  return {
+    files,
+    kind: "patch_applied",
+    message: formatFilesMessage(files, "Patch applied."),
+  };
+}
+
+function createCodexMcpToolCallEvent(
+  item: JsonObject,
+  normalizedEventType: string,
+): RunEventPayload | null {
+  const server = getStringField(item, "server");
+  const tool = getStringField(item, "tool");
+  const toolName = [server, tool].filter(Boolean).join(".");
+  const status = normalizeText(getStringField(item, "status"));
+
+  if (
+    normalizedEventType === "item_completed" &&
+    (status === "failed" || getObjectField(item, "error"))
+  ) {
+    const error = getObjectField(item, "error");
+    const message = error ? extractMessage(error) : "";
+
+    return {
+      kind: "tool_failed",
+      message: message || formatToolMessage(toolName, "failed"),
+      toolName: toolName || undefined,
+    };
+  }
+
+  if (normalizedEventType === "item_completed" || status === "completed") {
+    return {
+      kind: "tool_succeeded",
+      message: formatToolMessage(toolName, "succeeded"),
+      toolName: toolName || undefined,
+    };
+  }
+
+  if (normalizedEventType !== "item_started") {
+    return null;
+  }
+
+  return {
+    kind: "tool_started",
+    message: formatToolMessage(toolName, "started"),
+    toolName: toolName || undefined,
+  };
+}
+
+function createCodexWebSearchEvent(
+  item: JsonObject,
+  normalizedEventType: string,
+): RunEventPayload | null {
+  const query = getStringField(item, "query");
+  const toolName = "web_search";
+
+  if (normalizedEventType === "item_completed") {
+    return {
+      kind: "tool_succeeded",
+      message: query
+        ? `Tool succeeded: web_search (${query})`
+        : "Tool succeeded: web_search",
+      toolName,
+    };
+  }
+
+  if (normalizedEventType !== "item_started") {
+    return null;
+  }
+
+  return {
+    kind: "tool_started",
+    message: query
+      ? `Tool started: web_search (${query})`
+      : "Tool started: web_search",
+    toolName,
+  };
 }
 
 function createRunEventParseContext(object: JsonObject): RunEventParseContext {
@@ -437,6 +683,9 @@ function extractMetadata(object: JsonObject): ParsedCodexJsonEvent["metadata"] {
     getNumberField(object, "total_tokens", "token_count", "tokenCount") ??
     (usage
       ? getNumberField(usage, "total_tokens", "token_count", "tokenCount")
+      : undefined) ??
+    (usage
+      ? getCodexExecUsageTokenCount(usage)
       : undefined);
   const stopReason = getStringField(object, "stop_reason", "stopReason");
 
@@ -491,6 +740,19 @@ function extractChangedFilesFromObject(object: JsonObject): string[] {
 
   collectPathFields(files, object);
   collectPathArrayFields(files, object);
+  collectChangeArrayFields(files, object);
+
+  for (const key of ["item", "data", "payload"]) {
+    const nestedObject = getObjectField(object, key);
+
+    if (!nestedObject) {
+      continue;
+    }
+
+    for (const filePath of extractChangedFilesFromObject(nestedObject)) {
+      files.add(filePath);
+    }
+  }
 
   const message = extractMessage(object);
 
@@ -515,6 +777,20 @@ function collectPathArrayFields(files: Set<string>, object: JsonObject): void {
       for (const item of value) {
         addPath(files, item);
       }
+    }
+  }
+}
+
+function collectChangeArrayFields(files: Set<string>, object: JsonObject): void {
+  const changes = object["changes"];
+
+  if (!Array.isArray(changes)) {
+    return;
+  }
+
+  for (const change of changes) {
+    if (isJsonObject(change)) {
+      addPath(files, change["path"]);
     }
   }
 }
@@ -594,8 +870,23 @@ function formatCommandMessage(command: string | undefined, state: string): strin
   return command ? `Command ${state}: ${command}` : `Command ${state}.`;
 }
 
+function formatToolMessage(toolName: string, state: string): string {
+  return toolName ? `Tool ${state}: ${toolName}` : `Tool ${state}.`;
+}
+
 function formatFilesMessage(files: string[], fallback: string): string {
   return files.length > 0 ? `${fallback} ${files.join(", ")}` : fallback;
+}
+
+function getCodexExecUsageTokenCount(usage: JsonObject): number | undefined {
+  const inputTokens = getNumberField(usage, "input_tokens", "inputTokens");
+  const outputTokens = getNumberField(usage, "output_tokens", "outputTokens");
+
+  if (typeof inputTokens !== "number" && typeof outputTokens !== "number") {
+    return undefined;
+  }
+
+  return (inputTokens ?? 0) + (outputTokens ?? 0);
 }
 
 function looksLikePath(value: string): boolean {

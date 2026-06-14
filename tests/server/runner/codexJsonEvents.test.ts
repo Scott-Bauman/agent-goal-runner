@@ -71,6 +71,212 @@ describe("Codex JSON event parsing", () => {
     });
   });
 
+  it("parses current Codex exec thread item events", () => {
+    const parser = new CodexJsonEventParser();
+    const parsed = parser.push(
+      [
+        JSON.stringify({
+          type: "thread.started",
+          thread_id: "thread-1",
+        }),
+        JSON.stringify({
+          type: "turn.started",
+        }),
+        JSON.stringify({
+          type: "item.started",
+          item: {
+            id: "item-1",
+            type: "command_execution",
+            command: "npm test",
+            aggregated_output: "",
+            exit_code: null,
+            status: "in_progress",
+          },
+        }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item-1",
+            type: "command_execution",
+            command: "npm test",
+            aggregated_output: "pass",
+            exit_code: 0,
+            status: "completed",
+          },
+        }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item-2",
+            type: "file_change",
+            changes: [
+              {
+                kind: "update",
+                path: "src/server/runner/codexJsonEvents.ts",
+              },
+            ],
+            status: "completed",
+          },
+        }),
+        JSON.stringify({
+          type: "item.started",
+          item: {
+            id: "item-3",
+            type: "mcp_tool_call",
+            server: "filesystem",
+            tool: "read_file",
+            arguments: {
+              path: "goal.md",
+            },
+            status: "in_progress",
+          },
+        }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item-3",
+            type: "mcp_tool_call",
+            server: "filesystem",
+            tool: "read_file",
+            error: {
+              message: "file unavailable",
+            },
+            status: "failed",
+          },
+        }),
+        JSON.stringify({
+          type: "item.started",
+          item: {
+            id: "item-4",
+            type: "web_search",
+            query: "codex json events",
+            action: "search",
+          },
+        }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item-4",
+            type: "web_search",
+            query: "codex json events",
+            action: "search",
+          },
+        }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item-5",
+            type: "agent_message",
+            text: "Done.",
+          },
+        }),
+        JSON.stringify({
+          type: "turn.completed",
+          usage: {
+            input_tokens: 100,
+            cached_input_tokens: 25,
+            output_tokens: 50,
+            reasoning_output_tokens: 10,
+          },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    expect(parsed.events).toEqual([
+      expect.objectContaining({
+        kind: "codex_session_started",
+        message: "Codex thread started: thread-1",
+      }),
+      expect.objectContaining({
+        kind: "agent_session_started",
+        message: "Codex turn started.",
+      }),
+      expect.objectContaining({
+        command: "npm test",
+        kind: "command_started",
+      }),
+      expect.objectContaining({
+        command: "npm test",
+        exitCode: 0,
+        kind: "command_succeeded",
+      }),
+      expect.objectContaining({
+        files: ["src/server/runner/codexJsonEvents.ts"],
+        kind: "patch_applied",
+      }),
+      expect.objectContaining({
+        kind: "tool_started",
+        toolName: "filesystem.read_file",
+      }),
+      expect.objectContaining({
+        kind: "tool_failed",
+        message: "file unavailable",
+        toolName: "filesystem.read_file",
+      }),
+      expect.objectContaining({
+        kind: "tool_started",
+        message: "Tool started: web_search (codex json events)",
+        toolName: "web_search",
+      }),
+      expect.objectContaining({
+        kind: "tool_succeeded",
+        message: "Tool succeeded: web_search (codex json events)",
+        toolName: "web_search",
+      }),
+      expect.objectContaining({
+        kind: "final_assistant_message",
+        message: "Done.",
+      }),
+    ]);
+    expect(parsed.metadata).toMatchObject({
+      changedFiles: ["src/server/runner/codexJsonEvents.ts"],
+      tokenCount: 150,
+    });
+  });
+
+  it("parses current Codex exec warning and failure events", () => {
+    const parser = new CodexJsonEventParser();
+    const parsed = parser.push(
+      [
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item-1",
+            type: "error",
+            message: "model rerouted: gpt-a -> gpt-b",
+          },
+        }),
+        JSON.stringify({
+          type: "turn.failed",
+          error: {
+            message: "context window exceeded",
+          },
+        }),
+        JSON.stringify({
+          type: "error",
+          message: "stream disconnected",
+        }),
+      ].join("\n") + "\n",
+    );
+
+    expect(parsed.events).toEqual([
+      {
+        kind: "warning",
+        message: "model rerouted: gpt-a -> gpt-b",
+      },
+      {
+        kind: "error",
+        message: "context window exceeded",
+        stopReason: "context window exceeded",
+      },
+      {
+        kind: "error",
+        message: "stream disconnected",
+        stopReason: "stream disconnected",
+      },
+    ]);
+  });
+
   it("downgrades failed skill path lookups to warnings", () => {
     const parser = new CodexJsonEventParser();
     const parsed = parser.push(

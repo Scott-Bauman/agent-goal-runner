@@ -96,10 +96,10 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 3: Codex Parser Polish
 
-- [ ] Review `CodexJsonEventParser` against current Codex JSONL samples and identify any public activity currently ignored that should appear in the transcript.
-- [ ] Extend Codex parsing only for concrete observed fields or documented event shapes.
-- [ ] Preserve filtering of raw structured Codex JSONL from the visible transcript while keeping it in Raw Logs.
-- [ ] Add focused Codex parser tests for any newly supported event shapes.
+- [x] Review `CodexJsonEventParser` against current Codex JSONL samples and identify any public activity currently ignored that should appear in the transcript.
+- [x] Extend Codex parsing only for concrete observed fields or documented event shapes.
+- [x] Preserve filtering of raw structured Codex JSONL from the visible transcript while keeping it in Raw Logs.
+- [x] Add focused Codex parser tests for any newly supported event shapes.
 
 ### Phase 4: Claude Streaming JSON Command
 
