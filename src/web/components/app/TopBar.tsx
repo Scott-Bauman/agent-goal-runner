@@ -317,24 +317,26 @@ export function TopBar({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b border-border bg-background/95 shadow-sm shadow-black/[0.03] backdrop-blur dark:bg-background/90 dark:shadow-black/30">
-      <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4">
-        <div className="flex min-w-0 items-center gap-2 justify-self-start">
-          <h1 className="truncate text-base font-semibold leading-6 text-foreground">
+    <header className="top-bar sticky top-0 z-30 flex shrink-0 border-b border-border bg-background/95 shadow-sm shadow-black/[0.03] backdrop-blur dark:bg-background/90 dark:shadow-black/30">
+      <div className="top-bar__layout grid min-w-0 flex-1 items-center gap-x-4 gap-y-2 px-4">
+        <div className="top-bar__brand-group min-w-0 justify-self-start">
+          <h1 className="top-bar__title truncate text-base font-semibold leading-6 text-foreground">
             Agent Goal Runner
           </h1>
-          <SseConnectionBadge connectionStatus={connectionStatus} />
-          <ThemeToggleButton
-            onToggle={() => {
-              setTheme((currentTheme) => getNextThemeMode(currentTheme));
-            }}
-            theme={theme}
-          />
+          <div className="top-bar__brand-controls min-w-0">
+            <SseConnectionBadge connectionStatus={connectionStatus} />
+            <ThemeToggleButton
+              onToggle={() => {
+                setTheme((currentTheme) => getNextThemeMode(currentTheme));
+              }}
+              theme={theme}
+            />
+          </div>
         </div>
 
-        <div className="flex min-w-0 items-center justify-center gap-3 justify-self-center">
+        <div className="top-bar__repo-group min-w-0 justify-self-center">
           <span
-            className="max-w-[18rem] truncate text-base font-semibold leading-6 text-foreground"
+            className="top-bar__repo-label max-w-[18rem] truncate text-base font-semibold leading-6 text-foreground"
             title={selectedRepositoryLabel}
           >
             {selectedRepositoryLabel}
@@ -362,7 +364,7 @@ export function TopBar({
         </div>
 
         <div
-          className="flex min-w-0 shrink-0 items-center justify-end gap-2 justify-self-end"
+          className="top-bar__actions flex min-w-0 shrink-0 items-center justify-end gap-2 justify-self-end"
           id={actionSlotId}
         />
       </div>
@@ -466,7 +468,7 @@ function BranchSelector({
   );
 
   return (
-    <div className="relative flex min-w-0 flex-col items-start gap-1">
+    <div className="top-bar__branch-selector relative flex min-w-0 flex-col items-start gap-1">
       <div className="flex items-center gap-2">
         <Combobox<string>
           items={branchState.branches}

@@ -92,7 +92,7 @@ export function OperationsWorkspace({
   return (
     <>
       <Sidebar
-        className="top-16 h-[calc(100svh-4rem)]"
+        className="top-[var(--top-bar-height)] h-[calc(100svh-var(--top-bar-height))]"
         collapsible="icon"
       >
         <SidebarHeader className="h-14 justify-center border-b">
