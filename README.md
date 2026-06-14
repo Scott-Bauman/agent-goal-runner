@@ -1,8 +1,8 @@
 # agent-goal-runner
 
-Run long agent coding tasks as a controlled series of fresh, goal-driven local CLI passes. This runs with your current codex or claude subscription.
+Run long agent coding tasks as a controlled series of fresh, goal-driven local CLI passes. This runs with your current codex or claude subscription, or with local models through the Pi harness.
 
-`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. It starts a localhost server, lets you select a local Git repository, shows the current goal file, and runs repeatable Codex or Claude CLI passes with live logs, progress, summaries, optional verification commands, and optional Git commits.
+`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. It starts a localhost server, lets you select a local Git repository, shows the current goal file, and runs repeatable Codex, Claude, or Pi CLI passes with live logs, progress, summaries, optional verification commands, and optional Git commits.
 
 ![Agent Goal Runner UI](docs/assets/image.png)
 
@@ -11,7 +11,7 @@ The app is local-first. It does not host your repository, proxy agent requests t
 ## What It Does
 
 - Select a local Git repository and inspect or create its `goal.md`.
-- Run Codex or Claude CLI passes from that repository with a consistent prompt and run count.
+- Run Codex, Claude, or Pi CLI passes from that repository with a consistent prompt and run count.
 - Stream logs, run status, progress, and final summaries into a local UI.
 - Re-read `goal.md` between passes and stop on completion, blocked state, errors, or user stop.
 - Run optional verification commands after successful passes.
@@ -26,8 +26,9 @@ The app is local-first. It does not host your repository, proxy agent requests t
 - Git available on `PATH`
 - Codex CLI installed and authenticated for Codex runs
 - Claude CLI installed and authenticated only if you use the Claude provider
+- Pi harness installed and available on `PATH` only if you use the Pi provider for local-model runs
 
-Codex CLI authentication is handled by the Codex CLI itself. Sign in with Codex from a terminal before using Codex runs in this app. `agent-goal-runner` does not store OpenAI credentials or perform Codex authentication.
+Codex CLI authentication is handled by the Codex CLI itself. Sign in with Codex from a terminal before using Codex runs in this app. Claude and Pi setup are also handled by their local CLIs. For Pi runs, leave the Pi model empty to use the harness default or enter a local model name to pass as `--model`. `agent-goal-runner` does not store provider credentials or perform provider authentication.
 
 ## Run With npx
 

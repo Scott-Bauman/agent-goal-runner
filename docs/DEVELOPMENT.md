@@ -9,6 +9,7 @@ This guide preserves the development-focused details for `agent-goal-runner`. Th
 - Git for repository validation, branch operations, and auto-commit
 - Codex CLI installed and authenticated for Codex runs
 - Claude CLI installed and authenticated only when using the Claude provider
+- Pi harness installed and available on `PATH` only when using the Pi provider for local-model runs
 
 ## Local Setup
 
@@ -134,7 +135,7 @@ Confirm `package.json` repository, bugs, and homepage metadata still point to th
 
 ## Run Loop Behavior
 
-Agent runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100. The request can select the Codex or Claude provider, model options, optional verification commands, optional auto-commit, and optional review settings.
+Agent runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100. The request can select the Codex, Claude, or Pi provider, provider-specific model options, optional verification commands, optional auto-commit, and optional review settings.
 
 The run loop:
 
@@ -150,7 +151,7 @@ Optional verification commands are parsed as a single executable plus arguments.
 
 Auto-commit is opt-in per run. When enabled, the backend runs `git add -A`, checks `git status --porcelain`, skips commits when there are no changes, creates a generated commit message when changes exist, streams Git output over SSE, and stops the run loop on Git failure.
 
-Review runs are optional and require auto-commit to be enabled. Review configuration uses the same provider-specific model validation as normal agent runs.
+Review runs are optional and require auto-commit to be enabled. Review configuration uses the same provider-specific model validation as normal agent runs. Pi review runs accept the same free-text local model value as Pi agent runs.
 
 ## Run Loop API
 
@@ -205,4 +206,4 @@ Browser automation is intentionally not part of normal verification for this pro
 - Branch operations are blocked while a run is active.
 - Auto-commit operates on the selected repository, not this app repository unless this app repository is selected.
 - Verification commands run in the selected repository and must be expressible without shell operators.
-- Codex and Claude runs depend on locally installed and authenticated CLI tools.
+- Codex, Claude, and Pi runs depend on locally installed CLI tools. Codex and Claude also depend on their local authentication, while Pi local-model availability is handled by the Pi harness.

@@ -39,15 +39,17 @@ The folder picker is opened by the backend process on the host machine. If it fa
 
 When the selected repository has no `goal.md`, the app returns `GOAL_MISSING` and the frontend offers to create a default file. Existing `goal.md` files are not overwritten by the create action.
 
-## Codex Or Claude Fails To Start
+## Codex, Claude, Or Pi Fails To Start
 
 Codex runs require the Codex CLI to be installed, authenticated, and available on `PATH`.
 
 Claude runs require the Claude CLI to be installed, authenticated, and available on `PATH`.
 
+Pi runs require the Pi harness to be installed and available on `PATH`. Local model availability and any model aliases are handled by the harness.
+
 If a run fails immediately with a start or spawn error, confirm the relevant CLI works from a terminal in the selected repository.
 
-For Codex, authenticate with the Codex CLI itself before starting a run. This app reuses the local CLI session and does not perform provider login.
+For Codex, authenticate with the Codex CLI itself before starting a run. This app reuses the local CLI session and does not perform provider login. For Pi, leave the model field empty to use the harness default or enter the local model name exactly as the harness expects it.
 
 ## `goal-runner-framework` Skill Is Missing
 
