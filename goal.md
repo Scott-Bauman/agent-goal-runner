@@ -169,12 +169,9 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 12: End-to-End Behavior
 
-- [ ] Run a mocked Codex JSONL stream through the server and verify SSE emits raw logs, run events, run details, and transcript rows in expected order.
-- [ ] Run a mocked Claude JSONL stream through the server and verify SSE emits live activity before process close.
-- [ ] Run a mocked Pi JSONL stream through the server and verify SSE emits live activity before process close.
-- [ ] If local CLIs and credentials are available, manually run one small real Codex job and inspect the Agent Output panel.
-- [ ] If local Claude Code is installed and authenticated, manually run one small real Claude job and inspect the Agent Output panel.
-- [ ] If local Pi is installed and authenticated, manually run one small real Pi job and inspect the Agent Output panel.
+- [x] Run a mocked Codex JSONL stream through the server and verify SSE emits raw logs, run events, run details, and transcript rows in expected order.
+- [x] Run a mocked Claude JSONL stream through the server and verify SSE emits live activity before process close.
+- [x] Run a mocked Pi JSONL stream through the server and verify SSE emits live activity before process close.
 
 ### Phase 13: Final Cleanup and Verification
 

@@ -5,8 +5,19 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getClaudeStreamJsonSpawnCommand,
   getCodexExecSpawnCommand,
-  getPiPrintSpawnCommand,
+  getPiJsonSpawnCommand,
 } from "../../../src/server/index";
+import {
+  appendLogEntriesToTranscript,
+  appendRawLogEntries,
+  appendRunEventsToTranscript,
+  type LogEntry,
+  type LogsEvent,
+  type RunEventsEvent,
+  type RunProgressEvent,
+  type RunSummaryDetails,
+  type RuntimeTranscriptEntry,
+} from "../../../src/web/events/runtimeStream";
 import { createTestServer, listenOnRandomPort, trackTestServer } from "../helpers/fastify";
 import { createMockRunProcess } from "../helpers/process";
 import { browseRepository } from "../helpers/repositoryBrowse";
@@ -20,6 +31,122 @@ import {
 import { useServerTestLifecycle } from "../helpers/lifecycle";
 
 useServerTestLifecycle();
+
+type NamedSsePayload = {
+  event: string;
+  payload: unknown;
+};
+
+function parseNamedSsePayloads(text: string): NamedSsePayload[] {
+  return text
+    .trim()
+    .split("\n\n")
+    .filter((block) => block.trim().length > 0)
+    .map((block) => {
+      const eventLine = block.split("\n").find((line) => line.startsWith("event: "));
+      const dataLine = block.split("\n").find((line) => line.startsWith("data: "));
+
+      if (!eventLine || !dataLine) {
+        throw new Error(`Malformed SSE block: ${block}`);
+      }
+
+      return {
+        event: eventLine.slice("event: ".length),
+        payload: JSON.parse(dataLine.slice("data: ".length)) as unknown,
+      };
+    });
+}
+
+async function readUntilNamedSsePayloads(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  isComplete: (payloads: NamedSsePayload[]) => boolean,
+): Promise<NamedSsePayload[]> {
+  let text = "";
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    text += await readSseChunk(reader);
+
+    const payloads = parseNamedSsePayloads(text);
+
+    if (isComplete(payloads)) {
+      return payloads;
+    }
+  }
+
+  throw new Error("SSE stream did not send the expected payload sequence.");
+}
+
+function getNamedPayloads(
+  payloads: NamedSsePayload[],
+  eventName: string,
+): unknown[] {
+  return payloads
+    .filter((payload) => payload.event === eventName)
+    .map((payload) => payload.payload);
+}
+
+function getRunEventEntries(payloads: NamedSsePayload[]): RunEventsEvent["entries"] {
+  return getNamedPayloads(payloads, "runEvents").flatMap(
+    (payload) => (payload as RunEventsEvent).entries,
+  );
+}
+
+function getLastRunDetails(payloads: NamedSsePayload[]) {
+  return getNamedPayloads(payloads, "runDetails").at(-1);
+}
+
+function expectSseEventsInOrder(
+  payloads: NamedSsePayload[],
+  expectedEvents: string[],
+): void {
+  let expectedIndex = 0;
+
+  for (const payload of payloads) {
+    if (payload.event === expectedEvents[expectedIndex]) {
+      expectedIndex += 1;
+    }
+  }
+
+  expect(expectedIndex).toBe(expectedEvents.length);
+}
+
+function createTranscriptFromSsePayloads(
+  payloads: NamedSsePayload[],
+): {
+  rawLogs: LogEntry[];
+  transcript: RuntimeTranscriptEntry[];
+} {
+  let progress: RunProgressEvent = {
+    currentRun: 1,
+    totalRuns: 1,
+  };
+  let rawLogs: LogEntry[] = [];
+  let transcript: RuntimeTranscriptEntry[] = [];
+
+  for (const namedPayload of payloads) {
+    if (namedPayload.event === "progress") {
+      progress = namedPayload.payload as RunProgressEvent;
+    }
+
+    if (namedPayload.event === "logs") {
+      const entries = (namedPayload.payload as LogsEvent).entries;
+      rawLogs = appendRawLogEntries(rawLogs, entries);
+      transcript = appendLogEntriesToTranscript(transcript, entries, progress, 100);
+    }
+
+    if (namedPayload.event === "runEvents") {
+      transcript = appendRunEventsToTranscript(
+        transcript,
+        (namedPayload.payload as RunEventsEvent).entries,
+      );
+    }
+  }
+
+  return {
+    rawLogs,
+    transcript,
+  };
+}
 
 describe("run start endpoint", () => {
   it("requires a selected repository", async () => {
@@ -761,7 +888,7 @@ describe("run start endpoint", () => {
     expect(runProcess.stdin.writableEnded).toBe(true);
   });
 
-  it("spawns pi print in the selected repository with model", async () => {
+  it("spawns pi JSON mode in the selected repository with model", async () => {
     const repositoryPath = await createRepositoryPath();
     const runProcess = createMockRunProcess();
     const spawnProcess = vi.fn(() => runProcess);
@@ -782,7 +909,7 @@ describe("run start endpoint", () => {
         piModel: "  local-llama  ",
       },
     });
-    const expectedPiCommand = getPiPrintSpawnCommand(
+    const expectedPiCommand = getPiJsonSpawnCommand(
       "Use goal.md as the source of truth.",
       {
         model: "local-llama",
@@ -1080,6 +1207,433 @@ describe("run start endpoint", () => {
           },
         ],
       },
+    ]);
+  });
+
+  it("runs a mocked Codex JSONL stream through SSE in raw log, run event, detail, and transcript order", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Goal\n\n- [ ] Next\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess();
+    const app = await createTestServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    trackTestServer(app);
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await browseRepository(app, repositoryPath);
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    const codexJsonl = [
+      JSON.stringify({
+        type: "turn.started",
+      }),
+      JSON.stringify({
+        type: "item.started",
+        item: {
+          type: "command_execution",
+          command: "npm test",
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "npm test",
+          exit_code: 0,
+          status: "completed",
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "file_change",
+          status: "completed",
+          changes: [
+            {
+              path: "src/web/App.tsx",
+            },
+          ],
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "agent_message",
+          text: "Codex final answer",
+        },
+        usage: {
+          input_tokens: 2,
+          output_tokens: 3,
+        },
+        stop_reason: "end_turn",
+      }),
+    ].join("\n") + "\n";
+
+    runProcess.stdout.write(codexJsonl);
+    const livePayloads = await readUntilNamedSsePayloads(reader, (payloads) => {
+      const runEvents = getRunEventEntries(payloads);
+      const runDetails = getLastRunDetails(payloads) as RunSummaryDetails | undefined;
+
+      return (
+        runEvents.some(
+          (event) =>
+            event.kind === "final_assistant_message" &&
+            event.message === "Codex final answer",
+        ) &&
+        runDetails?.lastAssistantMessage === "Codex final answer" &&
+        runDetails?.changedFiles.includes("src/web/App.tsx") === true &&
+        runDetails?.tokenCount === 5 &&
+        runDetails?.stopReason === "end_turn"
+      );
+    });
+
+    expectSseEventsInOrder(livePayloads, ["logs", "runEvents", "runDetails"]);
+    expect((getNamedPayloads(livePayloads, "logs")[0] as LogsEvent)).toEqual({
+      entries: [
+        {
+          id: 1,
+          stream: "stdout",
+          message: codexJsonl,
+        },
+      ],
+    });
+    expect(getRunEventEntries(livePayloads).map((event) => event.kind)).toEqual([
+      "run_started",
+      "agent_session_started",
+      "command_started",
+      "command_succeeded",
+      "patch_applied",
+      "final_assistant_message",
+    ]);
+
+    runProcess.emit("close", 0, null);
+    const completePayloads = await readUntilNamedSsePayloads(reader, (payloads) =>
+      getRunEventEntries(payloads).some(
+        (event) =>
+          event.kind === "run_completed" &&
+          event.message ===
+            `Completed Codex run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+      ),
+    );
+    await reader.cancel();
+
+    const { rawLogs, transcript } = createTranscriptFromSsePayloads([
+      ...livePayloads,
+      ...completePayloads,
+    ]);
+
+    expect(rawLogs).toEqual([
+      {
+        id: 1,
+        stream: "stdout",
+        message: codexJsonl,
+      },
+    ]);
+    expect(transcript.map((entry) => entry.message)).toEqual([
+      "Started Codex run 1 of 1.",
+      "Codex turn started.",
+      "Command started: npm test",
+      "Command succeeded: npm test",
+      "Patch applied. src/web/App.tsx",
+      "Codex final answer",
+      `Completed Codex run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+    ]);
+  });
+
+  it("runs a mocked Claude JSONL stream through SSE with live activity before process close", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Goal\n\n- [ ] Next\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess();
+    const app = await createTestServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    trackTestServer(app);
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await browseRepository(app, repositoryPath);
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "claude",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        claudeModel: "sonnet",
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    const claudeJsonl = [
+      JSON.stringify({
+        type: "system",
+        subtype: "init",
+        session_id: "claude-session",
+        model: "claude-sonnet-4-5",
+      }),
+      JSON.stringify({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: {
+              command: "npm test",
+            },
+          },
+        },
+      }),
+      JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Claude final answer",
+        usage: {
+          input_tokens: 4,
+          output_tokens: 6,
+        },
+      }),
+    ].join("\n") + "\n";
+
+    runProcess.stdout.write(claudeJsonl);
+    const livePayloads = await readUntilNamedSsePayloads(reader, (payloads) => {
+      const runEvents = getRunEventEntries(payloads);
+      const runDetails = getLastRunDetails(payloads) as RunSummaryDetails | undefined;
+
+      return (
+        runEvents.some(
+          (event) =>
+            event.kind === "command_started" && event.command === "npm test",
+        ) &&
+        runEvents.some(
+          (event) =>
+            event.kind === "final_assistant_message" &&
+            event.message === "Claude final answer",
+        ) &&
+        !runEvents.some((event) => event.kind === "run_completed") &&
+        runDetails?.lastAssistantMessage === "Claude final answer" &&
+        runDetails?.model === "claude-sonnet-4-5" &&
+        runDetails?.tokenCount === 10
+      );
+    });
+
+    expectSseEventsInOrder(livePayloads, ["logs", "runEvents", "runDetails"]);
+    expect(getRunEventEntries(livePayloads)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent_session_started",
+          message: "Claude session started: claude-session",
+        }),
+        expect.objectContaining({
+          command: "npm test",
+          kind: "command_started",
+        }),
+        expect.objectContaining({
+          kind: "final_assistant_message",
+          message: "Claude final answer",
+        }),
+      ]),
+    );
+
+    runProcess.emit("close", 0, null);
+    const completePayloads = await readUntilNamedSsePayloads(reader, (payloads) =>
+      getRunEventEntries(payloads).some((event) => event.kind === "run_completed"),
+    );
+    await reader.cancel();
+
+    const { rawLogs, transcript } = createTranscriptFromSsePayloads([
+      ...livePayloads,
+      ...completePayloads,
+    ]);
+
+    expect(rawLogs[0]).toMatchObject({
+      stream: "stdout",
+      message: claudeJsonl,
+    });
+    expect(transcript.map((entry) => entry.message)).toEqual([
+      "Started Claude run 1 of 1.",
+      "Claude session started: claude-session",
+      "Command started: npm test",
+      "Claude final answer",
+      `Completed Claude run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
+    ]);
+  });
+
+  it("runs a mocked Pi JSONL stream through SSE with live activity before process close", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const goalMarkdown = "# Goal\n\n- [ ] Next\n";
+    await writeFile(path.join(repositoryPath, "goal.md"), goalMarkdown);
+    const runProcess = createMockRunProcess();
+    const app = await createTestServer({
+      spawnProcess: vi.fn(() => runProcess),
+    });
+    trackTestServer(app);
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+
+    await browseRepository(app, repositoryPath);
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        provider: "pi",
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        piModel: "local-llama",
+      },
+    });
+    await readUntilSsePayloads(reader, "summary");
+
+    const piJsonl = [
+      JSON.stringify({
+        type: "session",
+        id: "pi-session",
+        model: "local-llama-v2",
+      }),
+      JSON.stringify({
+        type: "tool_execution_start",
+        toolCallId: "tool-1",
+        toolName: "write",
+        args: {
+          path: "src/web/App.tsx",
+        },
+      }),
+      JSON.stringify({
+        type: "tool_execution_end",
+        toolCallId: "tool-1",
+        toolName: "write",
+        result: {
+          path: "src/web/App.tsx",
+          message: "Wrote src/web/App.tsx",
+        },
+        isError: false,
+      }),
+      JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: "Pi final answer",
+          usage: {
+            input_tokens: 3,
+            output_tokens: 4,
+          },
+        },
+        stopReason: "end_turn",
+      }),
+    ].join("\n") + "\n";
+
+    runProcess.stdout.write(piJsonl);
+    const livePayloads = await readUntilNamedSsePayloads(reader, (payloads) => {
+      const runEvents = getRunEventEntries(payloads);
+      const runDetails = getLastRunDetails(payloads) as RunSummaryDetails | undefined;
+
+      return (
+        runEvents.some(
+          (event) =>
+            event.kind === "tool_started" && event.toolName === "write",
+        ) &&
+        runEvents.some(
+          (event) =>
+            event.kind === "final_assistant_message" &&
+            event.message === "Pi final answer",
+        ) &&
+        !runEvents.some((event) => event.kind === "run_completed") &&
+        runDetails?.lastAssistantMessage === "Pi final answer" &&
+        runDetails?.changedFiles.includes("src/web/App.tsx") === true &&
+        runDetails?.model === "local-llama-v2" &&
+        runDetails?.tokenCount === 7
+      );
+    });
+
+    expectSseEventsInOrder(livePayloads, ["logs", "runEvents", "runDetails"]);
+    expect(getRunEventEntries(livePayloads)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent_session_started",
+          message: "Pi session started: pi-session",
+        }),
+        expect.objectContaining({
+          kind: "tool_started",
+          toolName: "write",
+        }),
+        expect.objectContaining({
+          files: ["src/web/App.tsx"],
+          kind: "patch_applied",
+        }),
+        expect.objectContaining({
+          kind: "final_assistant_message",
+          message: "Pi final answer",
+        }),
+      ]),
+    );
+
+    runProcess.emit("close", 0, null);
+    const completePayloads = await readUntilNamedSsePayloads(reader, (payloads) =>
+      getRunEventEntries(payloads).some((event) => event.kind === "run_completed"),
+    );
+    await reader.cancel();
+
+    const { rawLogs, transcript } = createTranscriptFromSsePayloads([
+      ...livePayloads,
+      ...completePayloads,
+    ]);
+
+    expect(rawLogs[0]).toMatchObject({
+      stream: "stdout",
+      message: piJsonl,
+    });
+    expect(transcript.map((entry) => entry.message)).toEqual([
+      "Started Pi run 1 of 1.",
+      "Pi session started: pi-session",
+      "Tool started: write (src/web/App.tsx)",
+      "Tool succeeded: write (src/web/App.tsx)",
+      "Patch applied. src/web/App.tsx",
+      "Pi final answer",
+      `Completed Pi run 1 of 1 and refreshed goal.md (${goalMarkdown.length} characters).`,
     ]);
   });
 
