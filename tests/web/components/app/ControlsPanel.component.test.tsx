@@ -128,6 +128,16 @@ describe("ControlsPanel", () => {
     expect(screen.getAllByText("Verification").length).toBeGreaterThan(0);
   });
 
+  it("shows non-interactive provider guidance", () => {
+    renderControls();
+
+    expect(
+      screen.getByText(
+        /provider runs are non-interactive\. configure approvals, trust, sandboxing, and credentials/i,
+      ),
+    ).toBeTruthy();
+  });
+
   it("selects a repository through the browse endpoint", async () => {
     const user = userEvent.setup();
     mockFetchRoutes({

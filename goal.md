@@ -155,7 +155,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 10: Non-Interactive Provider Guidance
 
-- [ ] Add a compact notice near the provider selector explaining that provider runs are non-interactive and users must configure approvals, trust, sandboxing, and credentials before starting the loop.
+- [x] Add a compact notice near the provider selector explaining that provider runs are non-interactive and users must configure approvals, trust, sandboxing, and credentials before starting the loop.
 
 ### Phase 11: Transcript UX and Duplicate Control
 

@@ -683,13 +683,30 @@ function ProviderSetupSection({
       info={PROVIDER_SECTION.info}
       title={PROVIDER_SECTION.title}
     >
-      <SelectionCombobox
-        id="agent-provider"
-        items={PROVIDER_OPTIONS}
-        label="Provider"
-        onValueChange={onProviderChange}
-        value={provider}
-      />
+      <div className="grid gap-2">
+        <SelectionCombobox
+          id="agent-provider"
+          items={PROVIDER_OPTIONS}
+          label="Provider"
+          onValueChange={onProviderChange}
+          value={provider}
+        />
+        <div
+          className="flex items-start gap-2 rounded-md border border-border bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground"
+          role="status"
+        >
+          <Info
+            aria-hidden="true"
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            strokeWidth={2}
+          />
+          <span>
+            Provider runs are non-interactive. Configure approvals, trust,
+            sandboxing, and credentials in the selected CLI before starting the
+            loop.
+          </span>
+        </div>
+      </div>
     </SetupArea>
   );
 }
