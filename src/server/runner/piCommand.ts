@@ -7,6 +7,10 @@ export type PiPrintOptions = {
   model: string | null;
 };
 
+export type PiJsonOptions = {
+  model: string | null;
+};
+
 export function getPiPrintSpawnCommand(
   prompt: string,
   options: PiPrintOptions = {
@@ -18,6 +22,23 @@ export function getPiPrintSpawnCommand(
   if (options.model) {
     args.push("--model", options.model);
   }
+
+  return resolvePiCommand(args);
+}
+
+export function getPiJsonSpawnCommand(
+  prompt: string,
+  options: PiJsonOptions = {
+    model: null,
+  },
+): SpawnCommand {
+  const args = ["--mode", "json"];
+
+  if (options.model) {
+    args.push("--model", options.model);
+  }
+
+  args.push(prompt);
 
   return resolvePiCommand(args);
 }

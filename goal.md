@@ -129,11 +129,11 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 7: Pi JSON Command
 
-- [ ] Add a Pi command builder path for `pi --mode json <prompt>`.
-- [ ] Preserve optional `--model <id>` behavior for Pi.
-- [ ] Preserve Pi's current project trust behavior; do not pass `--approve` or `--no-approve` by default.
-- [ ] Keep a clearly named print-mode builder only if tests or fallback behavior still require it.
-- [ ] Update Pi command tests to cover JSON mode arguments, optional model, and existing Windows package-bin resolution.
+- [x] Add a Pi command builder path for `pi --mode json <prompt>`.
+- [x] Preserve optional `--model <id>` behavior for Pi.
+- [x] Preserve Pi's current project trust behavior; do not pass `--approve` or `--no-approve` by default.
+- [x] Keep a clearly named print-mode builder only if tests or fallback behavior still require it.
+- [x] Update Pi command tests to cover JSON mode arguments, optional model, and existing Windows package-bin resolution.
 
 ### Phase 8: Pi JSON Parser
 

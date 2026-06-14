@@ -8,6 +8,9 @@ export {
   getClaudeStreamJsonSpawnCommand,
 } from "./runner/claudeCommand.js";
 export { getCodexExecSpawnCommand } from "./runner/codexCommand.js";
-export { getPiPrintSpawnCommand } from "./runner/piCommand.js";
+export {
+  getPiJsonSpawnCommand,
+  getPiPrintSpawnCommand,
+} from "./runner/piCommand.js";
 export { RUNNER_STATUSES } from "./runner/statuses.js";
 export type { RunnerStatus } from "./runner/statuses.js";
