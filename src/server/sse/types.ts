@@ -9,10 +9,14 @@ export type LogEntry = {
 
 export type RunEventKind =
   | "run_started"
+  | "agent_session_started"
   | "codex_session_started"
   | "command_started"
   | "command_succeeded"
   | "command_failed"
+  | "tool_started"
+  | "tool_succeeded"
+  | "tool_failed"
   | "file_changed"
   | "patch_applied"
   | "warning"
@@ -27,6 +31,7 @@ export type RunEventPayload = {
   kind: RunEventKind;
   message: string;
   stopReason?: string;
+  toolName?: string;
 };
 
 export type RunEvent = RunEventPayload & {

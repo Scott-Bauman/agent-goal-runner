@@ -27,10 +27,14 @@ export type LogsEvent = {
 
 export type RunEventKind =
   | "run_started"
+  | "agent_session_started"
   | "codex_session_started"
   | "command_started"
   | "command_succeeded"
   | "command_failed"
+  | "tool_started"
+  | "tool_succeeded"
+  | "tool_failed"
   | "file_changed"
   | "patch_applied"
   | "warning"
@@ -48,6 +52,7 @@ export type RunEventEntry = {
   receivedAt: number;
   runNumber: number;
   stopReason?: string;
+  toolName?: string;
   totalRuns: number | null;
 };
 
@@ -62,6 +67,7 @@ export type TranscriptEventKind =
   | "edit"
   | "error"
   | "git"
+  | "tool"
   | "verify"
   | "warn";
 
@@ -140,6 +146,7 @@ export type RuntimeTranscriptRunEventEntry = RuntimeTranscriptEntryBase & {
   files: string[];
   message: string;
   sourceEventId: number;
+  toolName?: string;
   type: "run-event";
 };
 
@@ -369,6 +376,7 @@ export function appendRunEventsToTranscript(
       receivedAt: entry.receivedAt,
       runIndex: entry.runNumber,
       sourceEventId: entry.id,
+      toolName: entry.toolName,
       totalRuns: entry.totalRuns,
       type: "run-event",
     });
@@ -525,11 +533,18 @@ function transcriptKindForRunEvent(kind: RunEventKind): TranscriptEventKind {
     case "command_failed":
     case "error":
       return "error";
+    case "tool_started":
+      return "tool";
+    case "tool_succeeded":
+      return "done";
+    case "tool_failed":
+      return "error";
     case "file_changed":
     case "patch_applied":
       return "edit";
     case "warning":
       return "warn";
+    case "agent_session_started":
     case "codex_session_started":
     case "final_assistant_message":
     case "run_started":

@@ -89,10 +89,10 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 2: Normalize Public Activity Events
 
-- [ ] Audit current `RunEventKind` values and list which existing kinds can represent command/tool starts, command/tool completions, file changes, warnings, errors, final assistant messages, and run completion.
-- [ ] Add only the minimal new `RunEventKind` values needed for provider-agnostic live activity that cannot be represented today.
-- [ ] Update `RunEventPayload`, SSE serialization, run details aggregation, and transcript kind mapping for any new event kinds.
-- [ ] Add tests proving old event kinds and any new event kinds update changed files, warning/error counts, stop reason, and last assistant message correctly.
+- [x] Audit current `RunEventKind` values and list which existing kinds can represent command/tool starts, command/tool completions, file changes, warnings, errors, final assistant messages, and run completion.
+- [x] Add only the minimal new `RunEventKind` values needed for provider-agnostic live activity that cannot be represented today.
+- [x] Update `RunEventPayload`, SSE serialization, run details aggregation, and transcript kind mapping for any new event kinds.
+- [x] Add tests proving old event kinds and any new event kinds update changed files, warning/error counts, stop reason, and last assistant message correctly.
 
 ### Phase 3: Codex Parser Polish
 
@@ -242,6 +242,8 @@ Run broader verification at phase boundaries and before `GOAL_COMPLETE`.
 - Pi JSON docs list events including `session`, `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, `turn_end`, and `agent_end`.
 - Pi project trust behavior should be preserved by default; do not pass `--approve` or `--no-approve` automatically.
 - Phase 1 fixture notes and available sample JSONL shapes live at `tests/server/runner/fixtures/provider-stream-contracts.md`.
+- Phase 2 audit: existing `command_started`, `command_succeeded`, `command_failed`, `file_changed`, `patch_applied`, `warning`, `error`, `final_assistant_message`, and `run_completed` cover shell command lifecycle, file/patch changes, warning/error counts, final assistant text, stop reason, and completion.
+- Phase 2 added provider-agnostic `agent_session_started`, `tool_started`, `tool_succeeded`, and `tool_failed`; `toolName` labels provider tools while `files`, `stopReason`, and message handling reuse the existing SSE/transcript pipeline.
 - Pi install/download/web approvals need explicit user controls: Approve, Deny, Always approve for this run, and Always deny for this run when supported by the provider.
 - Run setup should also allow choosing Ask every time, Always approve for this run, or Always deny for this run before the run starts; default is Ask every time.
 - Verify whether Pi JSON mode is bidirectional enough for approvals. Use Pi RPC only if JSON mode cannot submit approval decisions during an active run.

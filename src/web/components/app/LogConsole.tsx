@@ -61,6 +61,10 @@ const eventStyle: Record<
     className: "border-cyan-900/70 text-cyan-200",
     label: "[git]",
   },
+  tool: {
+    className: "border-violet-900/70 text-violet-200",
+    label: "[tool]",
+  },
   verify: {
     className: "border-amber-900/70 text-amber-200",
     label: "[verify]",
@@ -187,12 +191,18 @@ function LogHeader({ entry, log }: { entry: RuntimeTranscriptEntry; log: Display
 
 function formatRunEventLabel(entry: RuntimeTranscriptRunEventEntry): string {
   switch (entry.eventKind) {
+    case "agent_session_started":
+      return "agent session";
     case "codex_session_started":
       return "codex session";
     case "command_failed":
     case "command_started":
     case "command_succeeded":
       return entry.command ?? entry.eventKind.replaceAll("_", " ");
+    case "tool_failed":
+    case "tool_started":
+    case "tool_succeeded":
+      return entry.toolName ?? entry.eventKind.replaceAll("_", " ");
     case "file_changed":
     case "patch_applied":
       return entry.files.length > 0

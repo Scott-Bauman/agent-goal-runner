@@ -225,6 +225,7 @@ describe("SSE hub", () => {
       kind: "command_failed",
       message: "m".repeat(MAX_SSE_MESSAGE_BYTES + 100),
       stopReason: "s".repeat(MAX_SSE_MESSAGE_BYTES + 100),
+      toolName: "t".repeat(MAX_SSE_MESSAGE_BYTES + 100),
     });
 
     expect(streamState.runEvents).toHaveLength(MAX_RETAINED_RUN_EVENTS);
@@ -237,6 +238,9 @@ describe("SSE hub", () => {
       MAX_SSE_MESSAGE_BYTES,
     );
     expect(Buffer.byteLength(event.stopReason ?? "", "utf8")).toBeLessThanOrEqual(
+      MAX_SSE_MESSAGE_BYTES,
+    );
+    expect(Buffer.byteLength(event.toolName ?? "", "utf8")).toBeLessThanOrEqual(
       MAX_SSE_MESSAGE_BYTES,
     );
     expect(event.message).toContain("...[truncated]");
@@ -260,14 +264,32 @@ describe("SSE hub", () => {
       stopReason: "verification_failed",
     });
     hub.appendRunEvent(streamState, {
+      files: ["src/web/App.tsx"],
+      kind: "file_changed",
+      message: "Updated src/web/App.tsx.",
+    });
+    hub.appendRunEvent(streamState, {
+      files: ["src/server/runner/piJsonEvents.ts", "src/web/App.tsx"],
+      kind: "tool_succeeded",
+      message: "Edit tool completed.",
+      toolName: "Edit",
+    });
+    hub.appendRunEvent(streamState, {
+      kind: "tool_failed",
+      message: "Bash tool failed.",
+      stopReason: "tool_error",
+      toolName: "Bash",
+    });
+    hub.appendRunEvent(streamState, {
       kind: "final_assistant_message",
       message: "Here is the summary.",
     });
 
     expect(streamState.runLoop.details).toMatchObject({
+      changedFiles: ["src/server/runner/piJsonEvents.ts", "src/web/App.tsx"],
       warningCount: 1,
-      errorCount: 2,
-      stopReason: "verification_failed",
+      errorCount: 3,
+      stopReason: "tool_error",
       lastAssistantMessage: "Here is the summary.",
     });
   });

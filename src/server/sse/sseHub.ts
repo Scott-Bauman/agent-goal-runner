@@ -188,6 +188,10 @@ export class SseHub {
         payload.stopReason === undefined
           ? undefined
           : truncateMessage(payload.stopReason),
+      toolName:
+        payload.toolName === undefined
+          ? undefined
+          : truncateMessage(payload.toolName),
       id: this.nextRunEventId,
       receivedAt: Date.now(),
       runNumber: streamState.runLoop.progress.currentRun,
@@ -241,7 +245,9 @@ function updateRunDetailsFromEvent(
     ...details,
     changedFiles: Array.from(changedFiles),
     errorCount:
-      event.kind === "error" || event.kind === "command_failed"
+      event.kind === "error" ||
+      event.kind === "command_failed" ||
+      event.kind === "tool_failed"
         ? details.errorCount + 1
         : details.errorCount,
     lastAssistantMessage:
