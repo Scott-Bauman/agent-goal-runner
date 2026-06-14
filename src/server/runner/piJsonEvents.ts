@@ -261,6 +261,7 @@ export class PiJsonEventParser {
     const toolId = getStringField(object, "toolCallId", "tool_call_id", "id");
     const toolName = getStringField(object, "toolName", "tool_name", "name") ?? "";
     const args = getObjectField(object, "args") ?? {};
+    // Pi can send partial tool results as either objects or raw strings.
     const partialResult = getJsonObjectFromField(
       object,
       "partialResult",

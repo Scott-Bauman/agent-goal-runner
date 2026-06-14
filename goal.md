@@ -175,14 +175,14 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 13: Final Cleanup and Verification
 
-- [ ] Remove obsolete print-only assumptions from comments, names, and tests while preserving intentional fallback code.
-- [ ] Ensure provider-specific parser code is documented only where event-shape handling is non-obvious.
-- [ ] Run focused parser, runner, SSE, and transcript tests.
-- [ ] Run `npm run typecheck`.
-- [ ] Run `npm test`.
-- [ ] Run `npm run lint`.
-- [ ] Run `npm run build`.
-- [ ] Add `GOAL_COMPLETE` only after every required checkbox is complete and final verification passes.
+- [x] Remove obsolete print-only assumptions from comments, names, and tests while preserving intentional fallback code.
+- [x] Ensure provider-specific parser code is documented only where event-shape handling is non-obvious.
+- [x] Run focused parser, runner, SSE, and transcript tests.
+- [x] Run `npm run typecheck`.
+- [x] Run `npm test`.
+- [x] Run `npm run lint`.
+- [x] Run `npm run build`.
+- [x] Add `GOAL_COMPLETE` only after every required checkbox is complete and final verification passes.
 
 ## Verification
 
@@ -205,6 +205,8 @@ Run broader verification at phase boundaries and before `GOAL_COMPLETE`.
 - Do not persist `GOAL_BLOCKED` in this file unless the user explicitly asks.
 - Add `GOAL_COMPLETE` only when every required checkbox is complete and final verification passes.
 - Do not add completion markers during ordinary intermediate runs.
+
+GOAL_COMPLETE
 
 ## Durable Notes
 

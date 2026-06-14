@@ -197,6 +197,7 @@ export class ClaudeJsonEventParser {
   private createStreamEventEvents(event: JsonObject): RunEventPayload[] {
     const eventType = normalizeText(getStringField(event, "type"));
 
+    // Claude wraps Anthropic API stream events; only persist text for the final row.
     if (eventType === "content_block_start") {
       const contentBlock = getObjectField(event, "content_block", "contentBlock");
 

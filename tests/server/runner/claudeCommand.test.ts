@@ -10,14 +10,14 @@ import {
 } from "../../../src/server/runner/claudeCommand";
 
 describe("Claude command resolution", () => {
-  it("builds a claude print command for the provided prompt", () => {
+  it("builds a claude print fallback command for the provided prompt", () => {
     expect(getClaudePrintSpawnCommand("Use goal.md.")).toEqual({
       command: "claude",
       args: ["-p", "Use goal.md."],
     });
   });
 
-  it("adds the selected model after the prompt", () => {
+  it("adds the selected model to the print fallback command", () => {
     expect(
       getClaudePrintSpawnCommand("continue", {
         model: "sonnet",
@@ -62,7 +62,7 @@ describe("Claude command resolution", () => {
     });
   });
 
-  it("uses the npm package entrypoint on Windows when available", () => {
+  it("uses the npm package entrypoint for print fallback on Windows when available", () => {
     const originalPath = process.env.PATH;
     const originalPlatform = process.platform;
     const tempPathEntry = mkdtempSync(path.join(tmpdir(), "claude-command-"));
