@@ -103,10 +103,10 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 4: Claude Streaming JSON Command
 
-- [ ] Add a Claude command builder path for streaming JSON output using the documented `claude -p --output-format stream-json --verbose` style flags.
-- [ ] Preserve model selection behavior for Claude.
-- [ ] Keep a clearly named print-mode builder only if tests or fallback behavior still require it.
-- [ ] Update Claude command tests to cover streaming JSON arguments and existing Windows package-bin resolution.
+- [x] Add a Claude command builder path for streaming JSON output using the documented `claude -p --output-format stream-json --verbose` style flags.
+- [x] Preserve model selection behavior for Claude.
+- [x] Keep a clearly named print-mode builder only if tests or fallback behavior still require it.
+- [x] Update Claude command tests to cover streaming JSON arguments and existing Windows package-bin resolution.
 
 ### Phase 5: Claude Streaming JSON Parser
 

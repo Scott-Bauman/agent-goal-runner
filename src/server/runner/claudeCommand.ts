@@ -8,6 +8,10 @@ export type ClaudePrintOptions = {
   model: ClaudeModel | null;
 };
 
+export type ClaudeStreamJsonOptions = {
+  model: ClaudeModel | null;
+};
+
 export function getClaudePrintSpawnCommand(
   prompt: string,
   options: ClaudePrintOptions = {
@@ -15,6 +19,28 @@ export function getClaudePrintSpawnCommand(
   },
 ): SpawnCommand {
   const args = ["-p", prompt];
+
+  if (options.model) {
+    args.push("--model", options.model);
+  }
+
+  return resolveClaudeCommand(args);
+}
+
+export function getClaudeStreamJsonSpawnCommand(
+  prompt: string,
+  options: ClaudeStreamJsonOptions = {
+    model: null,
+  },
+): SpawnCommand {
+  const args = [
+    "-p",
+    prompt,
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--include-partial-messages",
+  ];
 
   if (options.model) {
     args.push("--model", options.model);
