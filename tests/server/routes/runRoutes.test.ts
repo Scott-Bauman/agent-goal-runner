@@ -1528,42 +1528,76 @@ describe("run start endpoint", () => {
     });
     await readUntilSsePayloads(reader, "summary");
 
+    const piSessionEvent = JSON.stringify({
+      type: "session",
+      id: "pi-session",
+      model: "local-llama-v2",
+    });
+    const firstPiMessageUpdateEvent = JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: "Pi",
+      },
+      message: {
+        role: "assistant",
+        content: "Pi",
+      },
+    });
+    const secondPiMessageUpdateEvent = JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: " final answer",
+      },
+      message: {
+        role: "assistant",
+        content: "Pi final answer",
+      },
+    });
+    const piToolStartEvent = JSON.stringify({
+      type: "tool_execution_start",
+      toolCallId: "tool-1",
+      toolName: "write",
+      args: {
+        path: "src/web/App.tsx",
+      },
+    });
+    const piToolEndEvent = JSON.stringify({
+      type: "tool_execution_end",
+      toolCallId: "tool-1",
+      toolName: "write",
+      result: {
+        path: "src/web/App.tsx",
+        message: "Wrote src/web/App.tsx",
+      },
+      isError: false,
+    });
+    const piMessageEndEvent = JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: "Pi final answer",
+        usage: {
+          input_tokens: 3,
+          output_tokens: 4,
+        },
+      },
+      stopReason: "end_turn",
+    });
+    const piRawJsonl = [
+      piSessionEvent,
+      piToolStartEvent,
+      piToolEndEvent,
+      piMessageEndEvent,
+    ].join("\n") + "\n";
     const piJsonl = [
-      JSON.stringify({
-        type: "session",
-        id: "pi-session",
-        model: "local-llama-v2",
-      }),
-      JSON.stringify({
-        type: "tool_execution_start",
-        toolCallId: "tool-1",
-        toolName: "write",
-        args: {
-          path: "src/web/App.tsx",
-        },
-      }),
-      JSON.stringify({
-        type: "tool_execution_end",
-        toolCallId: "tool-1",
-        toolName: "write",
-        result: {
-          path: "src/web/App.tsx",
-          message: "Wrote src/web/App.tsx",
-        },
-        isError: false,
-      }),
-      JSON.stringify({
-        type: "message_end",
-        message: {
-          role: "assistant",
-          content: "Pi final answer",
-          usage: {
-            input_tokens: 3,
-            output_tokens: 4,
-          },
-        },
-        stopReason: "end_turn",
-      }),
+      piSessionEvent,
+      firstPiMessageUpdateEvent,
+      secondPiMessageUpdateEvent,
+      piToolStartEvent,
+      piToolEndEvent,
+      piMessageEndEvent,
     ].join("\n") + "\n";
 
     runProcess.stdout.write(piJsonl);
@@ -1624,7 +1658,7 @@ describe("run start endpoint", () => {
 
     expect(rawLogs[0]).toMatchObject({
       stream: "stdout",
-      message: piJsonl,
+      message: piRawJsonl,
     });
     expect(transcript.map((entry) => entry.message)).toEqual([
       "Started Pi run 1 of 1.",

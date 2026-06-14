@@ -47,6 +47,11 @@ type AgentSpawnCommand = {
   command: string;
 };
 
+type RawStdoutChunkFilter = {
+  flush: () => string | null;
+  push: (chunk: Buffer | string) => string | null;
+};
+
 export type StartedAgentRun = {
   childProcess: ChildProcessWithoutNullStreams;
   commandDisplay: string;
@@ -154,6 +159,7 @@ const piRunner: AgentRunner = {
       hooks,
       parseChunk: (chunk) => parser.push(chunk),
       provider: "pi",
+      rawStdoutFilter: createPiRawStdoutFilter(),
       repositoryPath,
       spawnProcess,
     });
@@ -168,6 +174,7 @@ function startJsonAgentRun(options: {
   hooks: AgentRunHooks;
   parseChunk: (chunk: Buffer | string) => ParsedAgentJsonEvent;
   provider: AgentProvider;
+  rawStdoutFilter?: RawStdoutChunkFilter;
   repositoryPath: string;
   spawnProcess: ProcessSpawner;
 }): StartedAgentRun {
@@ -179,6 +186,7 @@ function startJsonAgentRun(options: {
     hooks,
     parseChunk,
     provider,
+    rawStdoutFilter,
     repositoryPath,
     spawnProcess,
   } = options;
@@ -188,7 +196,16 @@ function startJsonAgentRun(options: {
   });
 
   childProcess.stdout.on("data", (chunk: Buffer | string) => {
-    hooks.onStdout(chunk);
+    if (rawStdoutFilter) {
+      const rawStdoutChunk = rawStdoutFilter.push(chunk);
+
+      if (rawStdoutChunk && rawStdoutChunk.length > 0) {
+        hooks.onStdout(rawStdoutChunk);
+      }
+    } else {
+      hooks.onStdout(chunk);
+    }
+
     emitParsedAgentJsonEvent(parseChunk(chunk), hooks);
   });
   childProcess.stderr.on("data", hooks.onStderr);
@@ -198,6 +215,12 @@ function startJsonAgentRun(options: {
     childProcess,
     commandDisplay,
     complete() {
+      const rawStdoutChunk = rawStdoutFilter?.flush();
+
+      if (rawStdoutChunk && rawStdoutChunk.length > 0) {
+        hooks.onStdout(rawStdoutChunk);
+      }
+
       emitParsedAgentJsonEvent(flushParser(), hooks);
 
       return {
@@ -206,6 +229,60 @@ function startJsonAgentRun(options: {
     },
     provider,
   };
+}
+
+export function createPiRawStdoutFilter(): RawStdoutChunkFilter {
+  let buffer = "";
+
+  return {
+    flush() {
+      if (buffer.length === 0) {
+        return null;
+      }
+
+      const line = buffer;
+      buffer = "";
+
+      return shouldOmitPiRawStdoutLine(line) ? null : line;
+    },
+    push(chunk: Buffer | string) {
+      buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? "";
+
+      const retainedLines = lines.filter(
+        (line) => !shouldOmitPiRawStdoutLine(line),
+      );
+
+      if (retainedLines.length === 0) {
+        return null;
+      }
+
+      return `${retainedLines.join("\n")}\n`;
+    },
+  };
+}
+
+function shouldOmitPiRawStdoutLine(line: string): boolean {
+  const trimmedLine = line.trim();
+
+  if (trimmedLine.length === 0) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmedLine) as unknown;
+
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "type" in parsed &&
+      parsed.type === "message_update"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function emitParsedAgentJsonEvent(

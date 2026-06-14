@@ -323,6 +323,17 @@ describe("run controller orchestration", () => {
         command: "npm test",
       },
     });
+    const messageUpdateEvent = JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: "Pi final answer",
+      },
+      message: {
+        role: "assistant",
+        content: "Pi final answer",
+      },
+    });
     const messageEndEvent = JSON.stringify({
       type: "message_end",
       message: {
@@ -338,15 +349,24 @@ describe("run controller orchestration", () => {
 
     runProcess.stdout.write(`${sessionEvent}\n`);
     runProcess.stdout.write(`${toolStartEvent}\n`);
+    runProcess.stdout.write(`${messageUpdateEvent}\n`);
     runProcess.stdout.write(`${messageEndEvent}\n`);
 
     expect(runtimeState.stream.logs).toEqual(
-      expect.arrayContaining([
+      [
         expect.objectContaining({
           stream: "stdout",
           message: `${sessionEvent}\n`,
         }),
-      ]),
+        expect.objectContaining({
+          stream: "stdout",
+          message: `${toolStartEvent}\n`,
+        }),
+        expect.objectContaining({
+          stream: "stdout",
+          message: `${messageEndEvent}\n`,
+        }),
+      ],
     );
     expect(runtimeState.stream.runEvents).toEqual(
       expect.arrayContaining([
