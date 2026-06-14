@@ -137,15 +137,15 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 8: Pi JSON Parser
 
-- [ ] Create `src/server/runner/piJsonEvents.ts` with an incremental JSONL parser that tolerates chunk boundaries and ignores invalid/empty lines.
-- [ ] Parse Pi `session`, `agent_start`, `turn_start`, `turn_end`, and `agent_end` events into useful normalized lifecycle/final rows.
-- [ ] Parse Pi `message_update` text deltas without flooding the transcript with every tiny token.
-- [ ] Parse Pi `message_end` or `turn_end` assistant messages into one final assistant message.
-- [ ] Parse Pi `tool_execution_start`, `tool_execution_update`, and `tool_execution_end` into normalized command/tool rows.
-- [ ] Parse Pi tool result errors into warning/error rows with concise messages.
-- [ ] Parse Pi compaction and retry events into concise warning/agent rows.
-- [ ] Extract changed file paths from Pi edit/write/tool events when available.
-- [ ] Add parser tests for message deltas, final messages, tool execution, errors, compaction, retry, and changed-file extraction.
+- [x] Create `src/server/runner/piJsonEvents.ts` with an incremental JSONL parser that tolerates chunk boundaries and ignores invalid/empty lines.
+- [x] Parse Pi `session`, `agent_start`, `turn_start`, `turn_end`, and `agent_end` events into useful normalized lifecycle/final rows.
+- [x] Parse Pi `message_update` text deltas without flooding the transcript with every tiny token.
+- [x] Parse Pi `message_end` or `turn_end` assistant messages into one final assistant message.
+- [x] Parse Pi `tool_execution_start`, `tool_execution_update`, and `tool_execution_end` into normalized command/tool rows.
+- [x] Parse Pi tool result errors into warning/error rows with concise messages.
+- [x] Parse Pi compaction and retry events into concise warning/agent rows.
+- [x] Extract changed file paths from Pi edit/write/tool events when available.
+- [x] Add parser tests for message deltas, final messages, tool execution, errors, compaction, retry, and changed-file extraction.
 
 ### Phase 9: Wire Pi Runner
 
