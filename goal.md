@@ -158,7 +158,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 10: Provider Approval Requests
 
-- [ ] Research Pi JSON/RPC event shapes for approval requests, especially install/download/web access prompts.
+- [x] Research Pi JSON/RPC event shapes for approval requests, especially install/download/web access prompts.
 - [ ] Prove whether `pi --mode json` can receive approval decisions while a run is active; if it cannot, document the limitation in Durable Notes before adding any RPC fallback.
 - [ ] If Pi JSON mode cannot receive approval decisions, add the smallest Pi RPC adapter needed for prompt submission, event streaming, and approval responses.
 - [ ] Add shared request/response contract for a provider approval policy with allowed values `ask`, `alwaysApprove`, and `alwaysDeny`.
@@ -246,5 +246,10 @@ Run broader verification at phase boundaries and before `GOAL_COMPLETE`.
 - Pi install/download/web approvals need explicit user controls: Approve, Deny, Always approve for this run, and Always deny for this run when supported by the provider.
 - Run setup should also allow choosing Ask every time, Always approve for this run, or Always deny for this run before the run starts; default is Ask every time.
 - Verify whether Pi JSON mode is bidirectional enough for approvals. Use Pi RPC only if JSON mode cannot submit approval decisions during an active run.
+- Phase 10 research against installed Pi `@earendil-works/pi-coding-agent@0.79.3`: `docs/json.md` lists no approval-specific JSON event type; JSON mode emits session/agent/message/tool/queue/compaction/retry events only.
+- Phase 10 research: Pi install/download/web access is not represented by native approval events in JSON mode. Package installs are normal package-manager commands guarded by project trust, and runtime command/web/package policy must come from ordinary tool events or user/global/CLI extensions.
+- Phase 10 research: Pi extension docs state JSON mode has `ctx.hasUI: false` and UI methods are no-ops, while RPC mode has `ctx.hasUI: true` and supports dialogs/notifications through an extension UI sub-protocol.
+- Phase 10 research: Pi RPC approval-like prompts use `extension_ui_request` with `method: "select"` or `"confirm"` and an `id`; clients answer on stdin with `extension_ui_response` using matching `id` plus `value`, `confirmed`, or `cancelled`.
+- Phase 10 research: Pi project trust is separate from runtime approvals. Non-interactive modes (`-p`, `--mode json`, `--mode rpc`) do not show the built-in trust prompt; without a saved decision they follow `defaultProjectTrust`, and `--approve`/`--no-approve` remain explicit one-run overrides that this app should not add automatically.
 - MVP assistant text behavior is hybrid: live activity rows plus one final assistant message, not token-by-token transcript rows.
 - Prefer streaming JSON over PTY scraping. Use PTY only if documented JSON modes are unavailable or unusable after explicit user approval.
