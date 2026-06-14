@@ -366,7 +366,7 @@ describe("ControlsPanel", () => {
       autoCommit: false,
       provider: "codex",
       model: "gpt-5.4",
-      prompt: "Use goal.md as the source of truth.\n\nComplete the next valid unchecked item.",
+      prompt: "Use goal.md as the source of truth.\n\nComplete the next valid unchecked step. Stop after completing one step.",
       reasoningEffort: "high",
       claudeModel: null,
       piModel: null,
