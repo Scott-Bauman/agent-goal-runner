@@ -109,7 +109,7 @@ type SkillInstallFormState = {
 const DEFAULT_REPEAT_PROMPT = [
   "Use goal.md as the source of truth.",
   "",
-  "Complete the next valid unchecked item.",
+  "Complete the next valid unchecked step. Stop after completing one step.",
 ].join("\n");
 const DEFAULT_REVIEW_INTERVAL_COMMITS = 3;
 const DEFAULT_REVIEW_PROMPT = createDefaultReviewPrompt(

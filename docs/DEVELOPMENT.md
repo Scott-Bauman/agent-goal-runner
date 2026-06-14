@@ -159,7 +159,7 @@ After selecting a repository with `POST /api/repository/browse`, start a control
 ```sh
 curl -X POST http://127.0.0.1:4317/api/run/start \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked item.\",\"runCount\":1,\"verificationCommands\":[\"npm test\"],\"autoCommit\":false}"
+  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked step. Stop after completing one step.\",\"runCount\":1,\"verificationCommands\":[\"npm test\"],\"autoCommit\":false}"
 ```
 
 Request a stop for the active run with:
