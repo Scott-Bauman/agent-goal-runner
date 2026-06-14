@@ -82,10 +82,10 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 
 ### Phase 1: Confirm Provider Stream Contracts
 
-- [ ] Capture the installed Codex CLI version and `codex exec --help` options relevant to `--json` and `--output-last-message`.
-- [ ] Capture Claude Code streaming options from official docs or installed `claude --help`; record the exact flags needed for JSON streaming in Durable Notes.
-- [ ] Capture Pi JSON mode options from installed docs or `pi --help`; record the exact flags needed for JSON streaming in Durable Notes.
-- [ ] Add small parser fixture notes or sample JSONL snippets for Codex, Claude, and Pi under tests if real samples are available without credentials.
+- [x] Capture the installed Codex CLI version and `codex exec --help` options relevant to `--json` and `--output-last-message`.
+- [x] Capture Claude Code streaming options from official docs or installed `claude --help`; record the exact flags needed for JSON streaming in Durable Notes.
+- [x] Capture Pi JSON mode options from installed docs or `pi --help`; record the exact flags needed for JSON streaming in Durable Notes.
+- [x] Add small parser fixture notes or sample JSONL snippets for Codex, Claude, and Pi under tests if real samples are available without credentials.
 
 ### Phase 2: Normalize Public Activity Events
 
@@ -233,10 +233,15 @@ Run broader verification at phase boundaries and before `GOAL_COMPLETE`.
 
 - Hidden chain-of-thought is out of scope; show only public provider stream events and explicit reasoning summaries if a provider emits them.
 - Codex currently supports `codex exec --json` and `--output-last-message`; keep this path working.
-- Claude Code streaming target is documented as `claude -p --output-format stream-json --verbose`; verify exact installed CLI behavior before wiring.
-- Pi installed package `@earendil-works/pi-coding-agent@0.79.3` documents `pi --mode json` JSONL events in `docs/json.md`; verify exact installed CLI behavior before wiring.
+- Phase 1 captured Codex CLI `codex-cli 0.139.0`; `codex exec --version` reports `codex-cli-exec 0.139.0`.
+- Phase 1 captured `codex exec --help`: `--json` prints JSONL events to stdout and `--output-last-message <FILE>` writes the last agent message.
+- Claude Code was not installed on PATH during Phase 1. Official docs document `claude -p "<prompt>" --output-format stream-json --verbose --include-partial-messages` for streaming JSONL token/tool events.
+- Claude Code docs list stream output message types including `system/init`, `system/api_retry`, `stream_event`, final assistant/result messages, and raw API events such as `message_start`, `content_block_start`, `content_block_delta`, `content_block_stop`, `message_delta`, and `message_stop`.
+- Pi installed package `@earendil-works/pi-coding-agent@0.79.3` documents `pi --mode json` JSONL events in `docs/json.md`; Phase 1 captured installed `pi --version` as `0.79.3`.
+- Phase 1 captured `pi --help`: `--mode <mode>` supports `text`, `json`, or `rpc`; `--model <pattern>` is available; `--approve` and `--no-approve` are explicit trust flags and should remain omitted by default.
 - Pi JSON docs list events including `session`, `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, `turn_end`, and `agent_end`.
 - Pi project trust behavior should be preserved by default; do not pass `--approve` or `--no-approve` automatically.
+- Phase 1 fixture notes and available sample JSONL shapes live at `tests/server/runner/fixtures/provider-stream-contracts.md`.
 - Pi install/download/web approvals need explicit user controls: Approve, Deny, Always approve for this run, and Always deny for this run when supported by the provider.
 - Run setup should also allow choosing Ask every time, Always approve for this run, or Always deny for this run before the run starts; default is Ask every time.
 - Verify whether Pi JSON mode is bidirectional enough for approvals. Use Pi RPC only if JSON mode cannot submit approval decisions during an active run.
