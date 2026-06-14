@@ -1,4 +1,4 @@
-import { Terminal } from "lucide-react";
+import { Trash2, Terminal } from "lucide-react";
 
 import {
   Card,
@@ -13,8 +13,12 @@ import {
   type RuntimeStreamState,
 } from "@/web/events/runtimeStream";
 import { LogConsole } from "@/web/components/app/LogConsole";
-import type { RunnerStatus } from "@/web/runner/statuses";
+import {
+  isActiveRunnerStatus,
+  type RunnerStatus,
+} from "@/web/runner/statuses";
 import { RunnerStatusBadge } from "@/web/components/app/RunnerStatusBadge";
+import { Button } from "@/web/components/ui/button";
 
 function formatNullable(value: string | number | null): string {
   return value === null ? "Unknown" : String(value);
@@ -77,13 +81,16 @@ function RunSummary({ details }: { details: RunSummaryDetails }) {
 }
 
 export function LogsSummaryPanel({
+  onClearOutput,
   runnerStatus,
   runtimeStream,
 }: {
+  onClearOutput: () => void;
   runnerStatus: RunnerStatus;
   runtimeStream: RuntimeStreamState;
 }) {
   const progressLabel = formatProgress(runtimeStream.progress);
+  const canClearOutput = !isActiveRunnerStatus(runnerStatus);
 
   return (
     <Card
@@ -105,9 +112,23 @@ export function LogsSummaryPanel({
             Agent Output
           </CardTitle>
         </div>
-        <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
-          {progressLabel}
-        </CardDescription>
+        <div className="flex min-w-0 items-center gap-2">
+          <CardDescription className="hidden min-w-0 max-w-[55%] truncate text-right text-xs font-medium sm:block sm:max-w-none">
+            {progressLabel}
+          </CardDescription>
+          {canClearOutput ? (
+            <Button
+              aria-label="Clear Output"
+              onClick={onClearOutput}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+              Clear Output
+            </Button>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
         <RunSummary details={runtimeStream.runDetails} />

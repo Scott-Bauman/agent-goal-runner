@@ -42,6 +42,13 @@ export function App() {
   );
   const selectedRepositoryPathRef = useRef<string | null>(null);
 
+  function handleClearOutput(): void {
+    setRuntimeStream((currentStream) => ({
+      ...INITIAL_RUNTIME_STREAM_STATE,
+      connectionStatus: currentStream.connectionStatus,
+    }));
+  }
+
   useEffect(() => {
     selectedRepositoryPathRef.current =
       repositorySelection.status === "ready"
@@ -252,6 +259,7 @@ export function App() {
         <OperationsWorkspace
           commandActionsTargetId={RUN_COMMAND_ACTIONS_ID}
           goalRefreshToken={goalRefreshToken}
+          onClearOutput={handleClearOutput}
           onRepositorySelected={(repositoryPath) => {
             setRepositorySelection({
               status: "ready",

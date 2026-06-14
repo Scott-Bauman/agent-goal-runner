@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { LogConsole } from "../../../../src/web/components/app/LogConsole";
 import { LogsSummaryPanel } from "../../../../src/web/components/app/LogsSummaryPanel";
@@ -70,6 +70,7 @@ describe("LogsSummaryPanel", () => {
 
     render(
       <LogsSummaryPanel
+        onClearOutput={() => undefined}
         runnerStatus="running"
         runtimeStream={runtimeStream}
       />,
@@ -83,6 +84,33 @@ describe("LogsSummaryPanel", () => {
     expect(screen.getByText("[command]")).toBeTruthy();
     expect(screen.getByText("txt")).toBeTruthy();
     expect(screen.getByText("passed")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Clear Output" })).toBeNull();
+  });
+
+  it("lets the user clear output only when the runner is inactive", () => {
+    const onClearOutput = vi.fn();
+    const runtimeStream = createRuntimeStreamState();
+    const { rerender } = render(
+      <LogsSummaryPanel
+        onClearOutput={onClearOutput}
+        runnerStatus="complete"
+        runtimeStream={runtimeStream}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear Output" }));
+
+    expect(onClearOutput).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <LogsSummaryPanel
+        onClearOutput={onClearOutput}
+        runnerStatus="running"
+        runtimeStream={runtimeStream}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Clear Output" })).toBeNull();
   });
 });
 

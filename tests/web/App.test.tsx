@@ -50,6 +50,9 @@ vi.mock("../../src/web/components/app/OperationsWorkspace", () => ({
         >
           Set running
         </button>
+        <button onClick={props.onClearOutput} type="button">
+          Clear Output
+        </button>
       </main>
     );
   },
@@ -305,6 +308,79 @@ describe("App", () => {
     await waitFor(() => {
       expect(latestWorkspaceProps().goalRefreshToken).toBe(2);
     });
+  });
+
+  it("clears output state while preserving the stream connection state", async () => {
+    await renderApp();
+    const eventSource = MockEventSource.instances[0];
+
+    eventSource.emit("status", {
+      selectedRepositoryPath: "C:\\repos\\streamed",
+      status: "complete",
+    });
+    eventSource.emit("logs", {
+      entries: [{ id: 1, message: "npm test passed", stream: "stdout" }],
+    });
+    eventSource.emit("progress", {
+      currentRun: 1,
+      totalRuns: 2,
+    });
+    eventSource.emit("summary", {
+      message: "Goal complete",
+      status: "complete",
+    });
+    eventSource.emit("runDetails", {
+      changedFiles: ["src/web/App.tsx"],
+      currentRun: 1,
+      errorCount: 0,
+      lastAssistantMessage: "Done",
+      model: "gpt-5",
+      reasoningEffort: "high",
+      skillPreflight: {
+        checked: true,
+        found: ["skill"],
+        locations: [],
+        missing: [],
+      },
+      status: "complete",
+      stopReason: null,
+      tokenCount: 42,
+      totalRuns: 2,
+      warningCount: 1,
+    });
+
+    await waitFor(() => {
+      expect(latestWorkspaceProps().runtimeStream.rawLogs).toHaveLength(1);
+      expect(latestWorkspaceProps().runtimeStream.latestSummary).toEqual({
+        message: "Goal complete",
+        status: "complete",
+      });
+    });
+
+    screen.getByRole("button", { name: "Clear Output" }).click();
+
+    await waitFor(() => {
+      expect(latestWorkspaceProps().runtimeStream).toMatchObject({
+        connectionStatus: "open",
+        latestSummary: null,
+        logs: [],
+        progress: {
+          currentRun: 0,
+          totalRuns: null,
+        },
+        rawLogs: [],
+        runDetails: {
+          changedFiles: [],
+          currentRun: 0,
+          lastAssistantMessage: null,
+          model: null,
+          reasoningEffort: null,
+          status: "idle",
+          totalRuns: null,
+        },
+      });
+    });
+    expect(latestWorkspaceProps().runnerStatus).toBe("complete");
   });
 
   it("ignores malformed SSE data and invalid event payloads", async () => {

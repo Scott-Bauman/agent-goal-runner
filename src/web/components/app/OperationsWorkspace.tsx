@@ -67,6 +67,7 @@ function CollapsedSetupNav() {
 export function OperationsWorkspace({
   commandActionsTargetId,
   goalRefreshToken,
+  onClearOutput,
   onRepositorySelected,
   onRunnerStatusChange,
   repositorySelection,
@@ -75,6 +76,7 @@ export function OperationsWorkspace({
 }: {
   commandActionsTargetId: string;
   goalRefreshToken: number;
+  onClearOutput: () => void;
   onRepositorySelected: (repositoryPath: string) => void;
   onRunnerStatusChange: (status: RunnerStatus) => void;
   repositorySelection: RepositorySelectionState;
@@ -139,6 +141,7 @@ export function OperationsWorkspace({
           </div>
           <div className="min-h-0 min-w-0 overflow-hidden">
             <LogsSummaryPanel
+              onClearOutput={onClearOutput}
               runnerStatus={runnerStatus}
               runtimeStream={runtimeStream}
             />

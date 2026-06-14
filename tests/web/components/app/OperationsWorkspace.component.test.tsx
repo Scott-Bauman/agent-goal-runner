@@ -16,6 +16,7 @@ describe("OperationsWorkspace", () => {
       <OperationsWorkspace
         commandActionsTargetId="run-actions"
         goalRefreshToken={0}
+        onClearOutput={vi.fn()}
         onRepositorySelected={vi.fn()}
         onRunnerStatusChange={vi.fn()}
         repositorySelection={{

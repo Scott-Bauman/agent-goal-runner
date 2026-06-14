@@ -80,7 +80,6 @@ Gather only what is needed to write or repair `goal.md`:
 * target runtime,
 * in-scope work,
 * out-of-scope work,
-* approval requirements,
 * dependency restrictions,
 * behavior-preservation requirements,
 * verification commands,
@@ -205,12 +204,6 @@ Default version:
 
 Add project-specific execution rules only when required.
 
-For dependency installs:
-
-```md
-- Before running install/download commands, request approval and state what will be installed.
-```
-
 For behavior-sensitive work:
 
 ```md
@@ -313,14 +306,14 @@ Do not repeat this policy elsewhere.
 
 ### Durable Notes
 
-Use this only for decisions, approvals, blockers, or constraints that future Agent runs must know.
+Use this only for decisions, blockers, or constraints that future Agent runs must know.
 
 Template:
 
 ```md
 ## Durable Notes
 
-- [Decision, approval, blocker, or constraint that materially affects future runs.]
+- [Decision, blocker, or constraint that materially affects future runs.]
 ```
 
 Rules:
@@ -381,12 +374,12 @@ Default examples:
 ```md
 ## Safety Rules
 
-- Do not request, store, or expose credentials unless explicitly required and approved.
+- Do not store or expose credentials unless explicitly required.
 - Do not run commands outside the selected working directory.
 - Validate user-provided paths and request bodies before use.
 - Avoid shell-concatenated command strings where argument arrays are practical.
-- Do not add telemetry unless explicitly approved.
-- Keep logs local unless the user explicitly approves otherwise.
+- Do not add telemetry unless explicitly required.
+- Keep logs local unless explicitly required otherwise.
 ```
 
 Keep this section project-specific. Do not include irrelevant safety rules.
