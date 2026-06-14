@@ -159,18 +159,18 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 ### Phase 10: Provider Approval Requests
 
 - [x] Research Pi JSON/RPC event shapes for approval requests, especially install/download/web access prompts.
-- [ ] Prove whether `pi --mode json` can receive approval decisions while a run is active; if it cannot, document the limitation in Durable Notes before adding any RPC fallback.
-- [ ] If Pi JSON mode cannot receive approval decisions, add the smallest Pi RPC adapter needed for prompt submission, event streaming, and approval responses.
-- [ ] Add shared request/response contract for a provider approval policy with allowed values `ask`, `alwaysApprove`, and `alwaysDeny`.
+- [ ] Document that `pi --mode json` cannot receive active approval decisions through a documented protocol, and keep JSON mode as the default Pi streaming path.
+- [ ] Add the smallest Pi RPC adapter needed for prompt submission, event streaming, and `extension_ui_request` / `extension_ui_response` approval responses.
+- [ ] Add shared request/response contract for a provider approval policy with allowed values `ask`, `alwaysApprove`, and `alwaysDeny` for provider or extension approval prompts.
 - [ ] Add Run setup UI control for the provider approval policy, defaulting to Ask every time.
 - [ ] Send the selected provider approval policy in run start requests and preserve it in active run state.
-- [ ] Add normalized server state for a pending provider approval request with provider, run id, message, requested action, and available choices.
+- [ ] Add normalized server state for a pending provider or extension approval request with provider, run id, RPC request id, method, message, requested action, and available choices.
 - [ ] Broadcast pending approval state over SSE and include it in initial SSE snapshots for reconnects.
-- [ ] Add backend route(s) to approve, deny, always approve for this run, and always deny for this run when the active provider supports those actions.
+- [ ] Add backend route(s) to approve, deny, always approve for this run, and always deny for this run when the active provider or extension prompt supports those actions.
 - [ ] Apply the pre-run policy before surfacing a pending request: ask shows UI, always approve submits approval, and always deny submits denial.
 - [ ] Ensure approval choices are scoped to the active run and cleared on run completion, failure, stop, or provider process exit.
 - [ ] Add UI controls in Agent Output for pending approvals without blocking log streaming.
-- [ ] Add tests for approval policy request validation, SSE snapshots, approval route validation, run-scoped always approve/deny behavior, pre-run policy behavior, and cleanup after process close.
+- [ ] Add tests for Pi RPC approval request parsing, approval policy request validation, SSE snapshots, approval route validation, run-scoped always approve/deny behavior, pre-run policy behavior, and cleanup after process close.
 - [ ] Add tests proving review runs either use the same approval handling or explicitly reject unsupported provider approval prompts with a clear error.
 
 ### Phase 11: Transcript UX and Duplicate Control
@@ -188,7 +188,7 @@ MVP: Codex continues using `codex exec --json`; Claude Code uses documented stre
 - [ ] Run a mocked Codex JSONL stream through the server and verify SSE emits raw logs, run events, run details, and transcript rows in expected order.
 - [ ] Run a mocked Claude JSONL stream through the server and verify SSE emits live activity before process close.
 - [ ] Run a mocked Pi JSONL stream through the server and verify SSE emits live activity before process close.
-- [ ] Run a mocked Pi approval request through the server and verify the UI can approve and deny it.
+- [ ] Run a mocked Pi RPC approval request through the server and verify the UI can approve and deny it.
 - [ ] Run a mocked pre-run always approve policy through the server and verify the approval UI is skipped.
 - [ ] Run a mocked pre-run always deny policy through the server and verify the approval UI is skipped.
 - [ ] If local CLIs and credentials are available, manually run one small real Codex job and inspect the Agent Output panel.
