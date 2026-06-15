@@ -135,7 +135,7 @@ Confirm `package.json` repository, bugs, and homepage metadata still point to th
 
 ## Run Loop Behavior
 
-Agent runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100. The request can select the Codex, Claude, or Pi provider, provider-specific model options, optional verification commands, optional auto-commit, and optional review settings.
+Agent runs start through `POST /api/run/start` with a non-empty `prompt` and a `runCount` from 1 through 100. The request can select the Codex, Claude, or Pi provider, provider-specific model options, optional verification commands, optional verification-failure repair policy, optional auto-commit, and optional review settings.
 
 The run loop:
 
@@ -147,7 +147,7 @@ The run loop:
 - Stops when the agent exits non-zero, the requested run count is reached, refreshed `goal.md` contains `GOAL_COMPLETE` or `GOAL_BLOCKED`, `goal.md` becomes unavailable, or the user requests stop.
 - Terminates the active process when possible after `POST /api/run/stop`.
 
-Optional verification commands are parsed as a single executable plus arguments. Shell operators and shell wrappers are rejected. Verification runs after successful agent passes and stops the loop on failure.
+Optional verification commands are parsed as a single executable plus arguments. Shell operators and shell wrappers are rejected. Verification runs after successful agent passes. Verification failures stop the loop by default, or can launch up to 10 repair agent attempts before rerunning verification and continuing.
 
 Auto-commit is opt-in per run. When enabled, the backend runs `git add -A`, checks `git status --porcelain`, skips commits when there are no changes, creates a generated commit message when changes exist, streams Git output over SSE, and stops the run loop on Git failure.
 
@@ -160,7 +160,7 @@ After selecting a repository with `POST /api/repository/browse`, start a control
 ```sh
 curl -X POST http://127.0.0.1:4317/api/run/start \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked step. Stop after completing one step.\",\"runCount\":1,\"verificationCommands\":[\"npm test\"],\"autoCommit\":false}"
+  -d "{\"prompt\":\"Use goal.md as the source of truth. Complete the next valid unchecked step. Stop after completing one step.\",\"runCount\":1,\"verificationCommands\":[\"npm test\"],\"verificationFailure\":{\"action\":\"repair\",\"maxRepairAttempts\":1},\"autoCommit\":false}"
 ```
 
 Request a stop for the active run with:
@@ -205,5 +205,5 @@ Browser automation is intentionally not part of normal verification for this pro
 - Selected repository state is in memory and is not persisted across server restarts.
 - Branch operations are blocked while a run is active.
 - Auto-commit operates on the selected repository, not this app repository unless this app repository is selected.
-- Verification commands run in the selected repository and must be expressible without shell operators.
+- Verification commands run in the selected repository and must be expressible without shell operators. Verification failure handling can either stop the run or ask the configured agent provider to attempt a bounded repair.
 - Codex, Claude, and Pi runs depend on locally installed CLI tools. Codex and Claude also depend on their local authentication, while Pi local-model availability is handled by the Pi harness.

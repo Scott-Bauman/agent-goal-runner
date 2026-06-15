@@ -2,7 +2,7 @@
 
 Run long agent coding tasks as a controlled series of fresh, goal-driven local CLI passes. This runs with your current codex or claude subscription, or with local models through the Pi harness.
 
-`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. It starts a localhost server, lets you select a local Git repository, shows the current goal file, and runs repeatable Codex, Claude, or Pi CLI passes with live logs, progress, summaries, optional verification commands, and optional Git commits.
+`agent-goal-runner` is a local browser app for developers who use `goal.md` to steer agent work. It starts a localhost server, lets you select a local Git repository, shows the current goal file, and runs repeatable Codex, Claude, or Pi CLI passes with live logs, progress, summaries, optional verification commands, optional repair attempts after verification failures, and optional Git commits.
 
 ![Agent Goal Runner UI](docs/assets/image.png)
 
@@ -14,7 +14,7 @@ The app is local-first. It does not host your repository, proxy agent requests t
 - Run Codex, Claude, or Pi CLI passes from that repository with a consistent prompt and run count.
 - Stream logs, run status, progress, and final summaries into a local UI.
 - Re-read `goal.md` between passes and stop on completion, blocked state, errors, or user stop.
-- Run optional verification commands after successful passes.
+- Run optional verification commands after successful passes, with a choice to stop or launch limited repair attempts when verification fails.
 - Optionally commit successful changes with generated commit messages.
 - Install the bundled `goal-runner-framework` skill globally or into the selected repository.
 - Manage local branches for the selected repository.
@@ -91,7 +91,7 @@ npm pack --dry-run
 
 ## Bundled Goal Skill
 
-The package includes a bundled `goal-runner-framework` skill. The skill helps Codex create and maintain `goal.md` files in the structure expected by this app.
+The package includes a bundled `goal-runner-framework` skill. The skill helps Agents create and maintain `goal.md` files in the structure expected by this app.
 
 You can install it from the UI after selecting a repository, or from a source checkout:
 

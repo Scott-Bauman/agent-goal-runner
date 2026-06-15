@@ -11,7 +11,10 @@ import {
   CODEX_MODELS,
   CODEX_REASONING_EFFORTS,
 } from "../runner/codexOptions.js";
-import { DEFAULT_REVIEW_RUN_OPTIONS } from "../runner/runController.js";
+import {
+  DEFAULT_REVIEW_RUN_OPTIONS,
+  DEFAULT_VERIFICATION_FAILURE_OPTIONS,
+} from "../runner/runController.js";
 import { parseVerificationCommand } from "../runner/verificationCommand.js";
 import type { ParsedVerificationCommand } from "../runner/verificationCommand.js";
 import type { ServerRuntimeContext } from "../shared/runtime.js";
@@ -60,6 +63,29 @@ const reviewSchema = z
   .default({
     enabled: false,
   });
+
+const verificationFailureSchema = z
+  .discriminatedUnion("action", [
+    z
+      .object({
+        action: z.literal("stop"),
+      })
+      .strict(),
+    z
+      .object({
+        action: z.literal("repair"),
+        maxRepairAttempts: z
+          .number({
+            invalid_type_error: "Repair attempts must be a number.",
+            required_error: "Repair attempts are required.",
+          })
+          .int("Repair attempts must be a whole number.")
+          .min(1, "Repair attempts must be at least 1.")
+          .max(10, "Repair attempts must be at most 10."),
+      })
+      .strict(),
+  ])
+  .default(DEFAULT_VERIFICATION_FAILURE_OPTIONS);
 
 const runStartSchema = z
   .object({
@@ -111,6 +137,7 @@ const runStartSchema = z
     claudeModel: z.enum(CLAUDE_MODELS).nullable().default(null),
     piModel: piModelSchema,
     review: reviewSchema,
+    verificationFailure: verificationFailureSchema,
   })
   .strict()
   .superRefine((requestBody, context) => {
@@ -248,6 +275,7 @@ export function registerRunRoutes(
       claudeModel,
       piModel,
       review: parsedReview,
+      verificationFailure,
     } = parsedBody.data;
     const review = parsedReview.enabled ? parsedReview : DEFAULT_REVIEW_RUN_OPTIONS;
     const verificationCommandsToRun: ParsedVerificationCommand[] = [];
@@ -283,6 +311,7 @@ export function registerRunRoutes(
       claudeModel,
       piModel,
       review,
+      verificationFailure,
     });
 
     return reply.code(202).send({
@@ -298,6 +327,7 @@ export function registerRunRoutes(
       claudeModel,
       piModel,
       review,
+      verificationFailure,
     });
   });
 

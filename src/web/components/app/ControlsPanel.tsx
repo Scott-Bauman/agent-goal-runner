@@ -115,7 +115,10 @@ const DEFAULT_REVIEW_INTERVAL_COMMITS = 3;
 const DEFAULT_REVIEW_PROMPT = createDefaultReviewPrompt(
   DEFAULT_REVIEW_INTERVAL_COMMITS,
 );
+const DEFAULT_REPAIR_ATTEMPTS = "1";
+const MAX_REPAIR_ATTEMPTS = 10;
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
+type VerificationFailureAction = "stop" | "repair";
 
 const PROVIDER_OPTIONS: AgentProvider[] = [...AGENT_PROVIDERS];
 const MODEL_OPTIONS: ModelSelection[] = [CLI_DEFAULT_OPTION, ...CODEX_MODELS];
@@ -271,9 +274,14 @@ function isCountInAllowedRange(value: number): boolean {
   return Number.isInteger(value) && value >= 1 && value <= 100;
 }
 
+function isRepairAttemptsInAllowedRange(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= MAX_REPAIR_ATTEMPTS;
+}
+
 function canSubmitRun({
   hasRepositoryPath,
   isPromptValid,
+  isRepairAttemptsValid,
   isReviewIntervalValid,
   isReviewPromptValid,
   isRunActive,
@@ -283,6 +291,7 @@ function canSubmitRun({
 }: {
   hasRepositoryPath: boolean;
   isPromptValid: boolean;
+  isRepairAttemptsValid: boolean;
   isRepositorySubmitting: boolean;
   isReviewIntervalValid: boolean;
   isReviewPromptValid: boolean;
@@ -294,6 +303,7 @@ function canSubmitRun({
     hasRepositoryPath &&
     isPromptValid &&
     isRunCountValid &&
+    isRepairAttemptsValid &&
     isReviewIntervalValid &&
     isReviewPromptValid &&
     !isRunActive &&
@@ -833,10 +843,20 @@ function RunCountSetupSection({
 
 function VerificationSetupSection({
   commands,
+  failureAction,
+  isRepairAttemptsValid,
+  repairAttempts,
+  setFailureAction,
   setCommands,
+  setRepairAttempts,
 }: {
   commands: string[];
+  failureAction: VerificationFailureAction;
+  isRepairAttemptsValid: boolean;
+  repairAttempts: string;
+  setFailureAction: StateSetter<VerificationFailureAction>;
   setCommands: StateSetter<string[]>;
+  setRepairAttempts: StateSetter<string>;
 }) {
   return (
     <SetupArea
@@ -872,6 +892,58 @@ function VerificationSetupSection({
             strokeWidth={2}
           />
         </Button>
+        <div className="grid gap-3 pt-1">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-foreground">
+              Failure behavior
+            </span>
+            <div className="grid grid-cols-2 rounded-md border border-input bg-muted p-1">
+              <button
+                aria-pressed={failureAction === "stop"}
+                className="h-8 rounded-sm px-2 text-xs font-medium text-muted-foreground transition-colors aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+                onClick={() => {
+                  setFailureAction("stop");
+                }}
+                type="button"
+              >
+                Stop run
+              </button>
+              <button
+                aria-pressed={failureAction === "repair"}
+                className="h-8 rounded-sm px-2 text-xs font-medium text-muted-foreground transition-colors aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+                onClick={() => {
+                  setFailureAction("repair");
+                }}
+                type="button"
+              >
+                Repair with agent
+              </button>
+            </div>
+          </div>
+          {failureAction === "repair" ? (
+            <div className="flex flex-col gap-2">
+              <label
+                className="text-xs font-medium text-foreground"
+                htmlFor="verification-repair-attempts"
+              >
+                Repair attempts
+              </label>
+              <Input
+                aria-invalid={!isRepairAttemptsValid}
+                id="verification-repair-attempts"
+                inputMode="numeric"
+                max={MAX_REPAIR_ATTEMPTS}
+                min={1}
+                onChange={(event) => {
+                  setRepairAttempts(event.target.value);
+                }}
+                step={1}
+                type="number"
+                value={repairAttempts}
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
     </SetupArea>
   );
@@ -1297,6 +1369,9 @@ export function ControlsPanel({
   const [repeatPrompt, setRepeatPrompt] = useState(DEFAULT_REPEAT_PROMPT);
   const [runCount, setRunCount] = useState("1");
   const [verificationCommands, setVerificationCommands] = useState([""]);
+  const [verificationFailureAction, setVerificationFailureAction] =
+    useState<VerificationFailureAction>("stop");
+  const [repairAttempts, setRepairAttempts] = useState(DEFAULT_REPAIR_ATTEMPTS);
   const [autoCommit, setAutoCommit] = useState(false);
   const [reviewEnabled, setReviewEnabled] = useState(false);
   const [reviewProvider, setReviewProvider] = useState<AgentProvider>(
@@ -1352,6 +1427,10 @@ export function ControlsPanel({
     : undefined;
   const parsedRunCount = Number(runCount);
   const isRunCountValid = isCountInAllowedRange(parsedRunCount);
+  const parsedRepairAttempts = Number(repairAttempts);
+  const isRepairAttemptsValid =
+    verificationFailureAction === "stop" ||
+    isRepairAttemptsInAllowedRange(parsedRepairAttempts);
   const parsedReviewIntervalCommits = Number(reviewIntervalCommits);
   const isReviewIntervalValid =
     !reviewEnabled || isCountInAllowedRange(parsedReviewIntervalCommits);
@@ -1363,6 +1442,7 @@ export function ControlsPanel({
   const canStartRun = canSubmitRun({
     hasRepositoryPath: selectedRepositoryPath !== null,
     isPromptValid,
+    isRepairAttemptsValid,
     isRepositorySubmitting,
     isReviewIntervalValid,
     isReviewPromptValid,
@@ -1603,7 +1683,7 @@ export function ControlsPanel({
       return;
     }
 
-    if (!isPromptValid || !isRunCountValid || isRunActive) {
+    if (!isPromptValid || !isRunCountValid || !isRepairAttemptsValid || isRunActive) {
       return;
     }
 
@@ -1646,6 +1726,15 @@ export function ControlsPanel({
           verificationCommands: verificationCommands
             .map((command) => command.trim())
             .filter((command) => command.length > 0),
+          verificationFailure:
+            verificationFailureAction === "repair"
+              ? {
+                  action: "repair",
+                  maxRepairAttempts: parsedRepairAttempts,
+                }
+              : {
+                  action: "stop",
+                },
         }),
         headers: {
           "Content-Type": "application/json",
@@ -1823,7 +1912,12 @@ export function ControlsPanel({
         />
         <VerificationSetupSection
           commands={verificationCommands}
+          failureAction={verificationFailureAction}
+          isRepairAttemptsValid={isRepairAttemptsValid}
+          repairAttempts={repairAttempts}
+          setFailureAction={setVerificationFailureAction}
           setCommands={setVerificationCommands}
+          setRepairAttempts={setRepairAttempts}
         />
         <CommitSetupSection
           autoCommit={autoCommit}

@@ -117,7 +117,7 @@ describe("ControlsPanel", () => {
       "disabled",
       true,
     );
-    expect(screen.getByRole("button", { name: /stop/i })).toHaveProperty(
+    expect(screen.getByRole("button", { name: /^stop$/i })).toHaveProperty(
       "disabled",
       true,
     );
@@ -375,7 +375,71 @@ describe("ControlsPanel", () => {
       },
       runCount: 1,
       verificationCommands: ["npm test"],
+      verificationFailure: {
+        action: "stop",
+      },
     });
+  });
+
+  it("starts a run with verification repair settings", async () => {
+    const user = userEvent.setup();
+    mockFetchRoutes({
+      "/api/skills/goal-runner-framework": defaultSkillStatus,
+      "/api/run/start": {
+        model: "gpt-5.4",
+        reasoningEffort: "high",
+        review: {
+          enabled: false,
+          intervalCommits: 0,
+          model: null,
+          prompt: "",
+          reasoningEffort: null,
+        },
+        status: "running",
+        verificationFailure: {
+          action: "repair",
+          maxRepairAttempts: 3,
+        },
+      },
+    });
+    const props = renderControls();
+
+    await user.click(screen.getByRole("button", { name: /repair with agent/i }));
+    await user.clear(screen.getByLabelText("Repair attempts"));
+    await user.type(screen.getByLabelText("Repair attempts"), "3");
+    await user.click(screen.getByRole("button", { name: /^start$/i }));
+
+    await waitFor(() => {
+      expect(props.onRunnerStatusChange).toHaveBeenCalledWith("running");
+    });
+
+    const [, requestInit] = fetchMock.mock.calls.find(
+      ([url]) => url === "/api/run/start",
+    ) as [string, RequestInit];
+
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      verificationFailure: {
+        action: "repair",
+        maxRepairAttempts: 3,
+      },
+    });
+  });
+
+  it("disables start when repair attempts are out of range", async () => {
+    const user = userEvent.setup();
+    renderControls();
+
+    await user.click(screen.getByRole("button", { name: /repair with agent/i }));
+    await user.clear(screen.getByLabelText("Repair attempts"));
+    await user.type(screen.getByLabelText("Repair attempts"), "11");
+
+    expect(screen.getByLabelText("Repair attempts").getAttribute("aria-invalid")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /^start$/i })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 
   it("forces auto-commit and includes review settings when review is enabled", async () => {

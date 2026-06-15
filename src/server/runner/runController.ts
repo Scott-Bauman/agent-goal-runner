@@ -31,7 +31,7 @@ import {
 import type { CodexModel, CodexReasoningEffort } from "./codexOptions.js";
 import type { ParsedVerificationCommand } from "./verificationCommand.js";
 
-type ActiveRunProcessKind = "agent" | "review" | "verification" | "git";
+type ActiveRunProcessKind = "agent" | "review" | "repair" | "verification" | "git";
 
 type SkillPreflightPathOptions = {
   appRootPath?: string;
@@ -58,6 +58,36 @@ type ReviewContinuationResult = {
   normalCommitsSinceReview: number;
 };
 
+export type VerificationFailureOptions =
+  | {
+      action: "stop";
+    }
+  | {
+      action: "repair";
+      maxRepairAttempts: number;
+    };
+
+type VerificationCommandFailure = {
+  command: string;
+  exitCode: number | null;
+  message: string;
+  phaseShortLabel: string;
+  stderr: string;
+  stdout: string;
+};
+
+type VerificationCommandResult =
+  | {
+      status: "succeeded";
+    }
+  | {
+      failure: VerificationCommandFailure;
+      status: "failed";
+    }
+  | {
+      status: "halted";
+    };
+
 export type ReviewRunOptions = {
   enabled: boolean;
   provider: AgentProvider;
@@ -78,6 +108,10 @@ export const DEFAULT_REVIEW_RUN_OPTIONS: ReviewRunOptions = {
   reasoningEffort: null,
   claudeModel: null,
   piModel: null,
+};
+
+export const DEFAULT_VERIFICATION_FAILURE_OPTIONS: VerificationFailureOptions = {
+  action: "stop",
 };
 
 export function createReviewPromptPrefix(intervalCommits: number): string {
@@ -103,6 +137,7 @@ export type StartRunOptions = {
   prompt: string;
   runCount: number;
   verificationCommandsToRun: ParsedVerificationCommand[];
+  verificationFailure?: VerificationFailureOptions;
   autoCommit: boolean;
   model: CodexModel | null;
   reasoningEffort: CodexReasoningEffort | null;
@@ -149,6 +184,8 @@ export class RunController {
     const activeProcessLabel =
       this.activeRunProcessKind === "verification"
         ? "verification process"
+        : this.activeRunProcessKind === "repair"
+          ? "repair process"
         : this.activeRunProcessKind === "git"
           ? "git process"
           : this.activeRunProcessKind === "review"
@@ -303,6 +340,25 @@ export class RunController {
     };
   }
 
+  private createRepairAgentRunSettings(
+    options: StartRunOptions,
+    runNumber: number,
+    phase: AutoCommitPhase,
+  ): AgentRunSettings {
+    if (phase === "review") {
+      return this.createReviewAgentRunSettings(options.review, runNumber);
+    }
+
+    return this.createAgentRunSettings(options, runNumber);
+  }
+
+  private getRepairProvider(
+    options: StartRunOptions,
+    phase: AutoCommitPhase,
+  ): AgentProvider {
+    return phase === "review" ? options.review.provider : options.provider;
+  }
+
   private getAgentRunDetails(options: StartRunOptions): {
     model: string | null;
     reasoningEffort: string | null;
@@ -349,6 +405,18 @@ export class RunController {
       model: review.model,
       reasoningEffort: review.reasoningEffort,
     };
+  }
+
+  private getRepairRunDetails(
+    options: StartRunOptions,
+    phase: AutoCommitPhase,
+  ): {
+    model: string | null;
+    reasoningEffort: string | null;
+  } {
+    return phase === "review"
+      ? this.getReviewRunDetails(options.review)
+      : this.getAgentRunDetails(options);
   }
 
   private formatAgentSpawnError(
@@ -399,6 +467,38 @@ export class RunController {
     }
 
     return `Failed to start review after ${runLabel} ${runNumber}; ensure the Codex CLI is installed and available on PATH.`;
+  }
+
+  private formatRepairSpawnError(
+    options: StartRunOptions,
+    runNumber: number,
+    phase: AutoCommitPhase,
+    error: unknown,
+  ): string {
+    const provider = this.getRepairProvider(options, phase);
+    const runLabel = getAgentRunLabel(options.provider);
+    const phaseLabel =
+      phase === "review"
+        ? `review for ${runLabel} ${runNumber}`
+        : `${runLabel} ${runNumber}`;
+
+    if (provider === "claude" && isNodeErrorCode(error, "ENOENT")) {
+      return "Claude Code is not installed or is not available on PATH.";
+    }
+
+    if (provider === "pi" && isNodeErrorCode(error, "ENOENT")) {
+      return "Pi is not installed or is not available on PATH.";
+    }
+
+    if (provider === "claude") {
+      return `Failed to start repair after ${phaseLabel}; ensure Claude Code is installed and available on PATH.`;
+    }
+
+    if (provider === "pi") {
+      return `Failed to start repair after ${phaseLabel}; ensure Pi is installed and available on PATH.`;
+    }
+
+    return `Failed to start repair after ${phaseLabel}; ensure the Codex CLI is installed and available on PATH.`;
   }
 
   private appendFinalAssistantMessage(finalMessage: string | null): void {
@@ -661,7 +761,7 @@ export class RunController {
       return Promise.resolve(true);
     }
 
-    return this.runVerificationCommands(options, runNumber);
+    return this.runVerificationCommandsWithPolicy(options, runNumber);
   }
 
   private runAutoCommitAfterAgentIfEnabled(
@@ -808,7 +908,7 @@ export class RunController {
     }
 
     if (options.verificationCommandsToRun.length > 0) {
-      const verificationSucceeded = await this.runVerificationCommands(
+      const verificationSucceeded = await this.runVerificationCommandsWithPolicy(
         options,
         runNumber,
         "review",
@@ -944,6 +1044,189 @@ export class RunController {
       this.updateRunDetails({
         status: "running",
         ...this.getReviewRunDetails(options.review),
+        tokenCount: null,
+        lastAssistantMessage: null,
+        skillPreflight,
+      });
+      this.publishRunStatus();
+      this.appendRunEvent("run_started", startMessage);
+
+      if (skillPreflight.missing.length > 0) {
+        this.appendRunEvent(
+          "warning",
+          formatMissingSkillPreflightWarning(skillPreflight),
+        );
+      }
+    });
+  }
+
+  private createVerificationRepairPrompt(
+    failure: VerificationCommandFailure,
+    attemptNumber: number,
+    maxAttempts: number,
+  ): string {
+    const exitCodeLabel =
+      failure.exitCode === null ? "no exit code" : String(failure.exitCode);
+
+    return preferSkillReferenceSyntax(
+      [
+        "A configured verification command failed before the run loop could continue.",
+        "",
+        "Fix the bug or broken test setup that caused this verification failure.",
+        "Stay narrowly focused on the verification failure. Do not mark unrelated goal.md checkboxes complete, and do not add GOAL_COMPLETE unless the original goal is already fully complete and final verification passes.",
+        "",
+        "Context:",
+        `- Phase: ${failure.phaseShortLabel}`,
+        `- Repair attempt: ${attemptNumber} of ${maxAttempts}`,
+        `- Failed command: ${failure.command}`,
+        `- Exit code: ${exitCodeLabel}`,
+        "",
+        "Verification stdout:",
+        formatPromptLogBlock(failure.stdout),
+        "",
+        "Verification stderr:",
+        formatPromptLogBlock(failure.stderr),
+      ].join("\n"),
+    );
+  }
+
+  private runVerificationRepairAgent(
+    options: StartRunOptions,
+    runNumber: number,
+    phase: AutoCommitPhase,
+    failure: VerificationCommandFailure,
+    attemptNumber: number,
+    maxAttempts: number,
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const provider = this.getRepairProvider(options, phase);
+      const repairPrompt = this.createVerificationRepairPrompt(
+        failure,
+        attemptNumber,
+        maxAttempts,
+      );
+      const skillPreflight = createSkillPreflightStatus(
+        options.repositoryPath,
+        repairPrompt,
+        existsSync,
+        this.skillPreflightPathOptions,
+      );
+      const runner = getAgentRunner(provider);
+      const startedRun = runner.startRun({
+        hooks: {
+          onMetadata: (metadata) => {
+            this.updateRunDetails(metadata);
+          },
+          onRunEvent: (event) => {
+            this.sseHub.appendRunEvent(this.runtimeState.stream, event);
+          },
+          onStderr: (chunk) => {
+            this.appendProcessLog("stderr", chunk);
+          },
+          onStdout: (chunk) => {
+            this.appendProcessLog("stdout", chunk);
+          },
+        },
+        prompt: repairPrompt,
+        repositoryPath: options.repositoryPath,
+        settings: this.createRepairAgentRunSettings(options, runNumber, phase),
+        spawnProcess: this.spawnProcess,
+      });
+      const childProcess = startedRun.childProcess;
+      const runLabel = getAgentRunLabel(options.provider);
+      const phaseLabel =
+        phase === "review"
+          ? `review for ${runLabel} ${runNumber} of ${options.runCount}`
+          : `${runLabel} ${runNumber} of ${options.runCount}`;
+      const phaseShortLabel =
+        phase === "review"
+          ? `review for ${runLabel} ${runNumber}`
+          : `${runLabel} ${runNumber}`;
+      const startMessage =
+        `Started repair attempt ${attemptNumber} of ${maxAttempts} ` +
+        `after verification failed for ${phaseLabel}.`;
+
+      childProcess.on("error", (error) => {
+        this.handleProcessSpawnError(
+          childProcess,
+          this.formatRepairSpawnError(options, runNumber, phase, error),
+        );
+        resolve(false);
+      });
+      childProcess.on("close", (code) => {
+        if (this.activeRunProcess !== childProcess) {
+          resolve(false);
+          return;
+        }
+
+        this.activeRunProcess = null;
+        this.activeRunProcessKind = null;
+        this.activeRunAgentProvider = null;
+        this.appendFinalAssistantMessage(
+          startedRun.complete().finalAssistantMessage,
+        );
+
+        if (this.runtimeState.stream.runLoop.stopRequested) {
+          const message =
+            `Stopped during repair attempt ${attemptNumber} after verification for ${phaseLabel} ` +
+            `because stop was requested; no additional ${runLabel}s will start.`;
+          this.runtimeState.stream.runLoop = {
+            ...this.runtimeState.stream.runLoop,
+            status: "stopped",
+            stopRequested: false,
+            activeProcessId: null,
+            latestSummary: {
+              status: "stopped",
+              message,
+            },
+          };
+          this.updateRunDetails({
+            status: "stopped",
+            stopReason: message,
+          });
+          this.appendRunEvent("run_completed", message, {
+            stopReason: message,
+          });
+          this.publishRunStatus();
+          resolve(false);
+          return;
+        }
+
+        if (code === 0) {
+          this.appendRunEvent(
+            "command_succeeded",
+            `Repair attempt ${attemptNumber} after verification for ${phaseShortLabel} succeeded.`,
+            {
+              command: startedRun.commandDisplay,
+              exitCode: 0,
+            },
+          );
+          resolve(true);
+          return;
+        }
+
+        this.failRun(
+          code === null
+            ? `Repair attempt ${attemptNumber} after verification for ${phaseShortLabel} exited without an exit code.`
+            : `Repair attempt ${attemptNumber} after verification for ${phaseShortLabel} exited with code ${code}.`,
+        );
+        resolve(false);
+      });
+
+      this.activeRunProcess = childProcess;
+      this.activeRunProcessKind = "repair";
+      this.activeRunAgentProvider = provider;
+      this.runtimeState.stream.runLoop = {
+        ...this.runtimeState.stream.runLoop,
+        activeProcessId: childProcess.pid ?? null,
+        latestSummary: {
+          status: "running",
+          message: startMessage,
+        },
+      };
+      this.updateRunDetails({
+        status: "running",
+        ...this.getRepairRunDetails(options, phase),
         tokenCount: null,
         lastAssistantMessage: null,
         skillPreflight,
@@ -1301,16 +1584,74 @@ export class RunController {
     });
   }
 
-  private async runVerificationCommands(
+  private async runVerificationCommandsWithPolicy(
     options: StartRunOptions,
     runNumber: number,
     phase: AutoCommitPhase = "agent",
   ): Promise<boolean> {
+    const verificationFailure =
+      options.verificationFailure ?? DEFAULT_VERIFICATION_FAILURE_OPTIONS;
+    let repairAttempt = 0;
+
+    while (true) {
+      const verificationResult = await this.runVerificationCommands(
+        options,
+        runNumber,
+        phase,
+      );
+
+      if (verificationResult.status === "succeeded") {
+        return true;
+      }
+
+      if (verificationResult.status === "halted") {
+        return false;
+      }
+
+      if (verificationFailure.action === "stop") {
+        this.failRun(verificationResult.failure.message);
+        return false;
+      }
+
+      if (repairAttempt >= verificationFailure.maxRepairAttempts) {
+        const attemptLabel =
+          verificationFailure.maxRepairAttempts === 1
+            ? "1 repair attempt"
+            : `${verificationFailure.maxRepairAttempts} repair attempts`;
+
+        this.failRun(
+          `Verification still failed after ${attemptLabel}; ${verificationResult.failure.message}`,
+        );
+        return false;
+      }
+
+      repairAttempt += 1;
+
+      const repairSucceeded = await this.runVerificationRepairAgent(
+        options,
+        runNumber,
+        phase,
+        verificationResult.failure,
+        repairAttempt,
+        verificationFailure.maxRepairAttempts,
+      );
+
+      if (!repairSucceeded) {
+        return false;
+      }
+    }
+  }
+
+  private async runVerificationCommands(
+    options: StartRunOptions,
+    runNumber: number,
+    phase: AutoCommitPhase = "agent",
+  ): Promise<VerificationCommandResult> {
     for (const [
       commandIndex,
       verificationCommand,
     ] of options.verificationCommandsToRun.entries()) {
-      const commandSucceeded = await this.runVerificationCommand(
+      const commandResult = await this.runVerificationCommand(
         options,
         runNumber,
         verificationCommand,
@@ -1318,12 +1659,14 @@ export class RunController {
         phase,
       );
 
-      if (!commandSucceeded) {
-        return false;
+      if (commandResult.status !== "succeeded") {
+        return commandResult;
       }
     }
 
-    return true;
+    return {
+      status: "succeeded",
+    };
   }
 
   private runVerificationCommand(
@@ -1332,8 +1675,10 @@ export class RunController {
     verificationCommandToRun: ParsedVerificationCommand,
     commandIndex: number,
     phase: AutoCommitPhase,
-  ): Promise<boolean> {
+  ): Promise<VerificationCommandResult> {
     return new Promise((resolve) => {
+      let stdout = "";
+      let stderr = "";
       const commandNumber = commandIndex + 1;
       const commandTotal = options.verificationCommandsToRun.length;
       const commandLabel =
@@ -1381,9 +1726,11 @@ export class RunController {
       );
 
       verificationProcess.stdout.on("data", (chunk: Buffer | string) => {
+        stdout += chunk.toString();
         this.appendProcessLog("stdout", chunk);
       });
       verificationProcess.stderr.on("data", (chunk: Buffer | string) => {
+        stderr += chunk.toString();
         this.appendProcessLog("stderr", chunk);
       });
       verificationProcess.on("error", () => {
@@ -1391,11 +1738,15 @@ export class RunController {
           verificationProcess,
           `Failed to start ${commandLabel} after ${runLabel} ${runNumber}; ensure the verification executable is installed and available on PATH.`,
         );
-        resolve(false);
+        resolve({
+          status: "halted",
+        });
       });
       verificationProcess.on("close", (code) => {
         if (this.activeRunProcess !== verificationProcess) {
-          resolve(false);
+          resolve({
+            status: "halted",
+          });
           return;
         }
 
@@ -1414,7 +1765,9 @@ export class RunController {
             },
           };
           this.publishRunStatus();
-          resolve(false);
+          resolve({
+            status: "halted",
+          });
           return;
         }
 
@@ -1430,7 +1783,9 @@ export class RunController {
               exitCode: 0,
             },
           );
-          resolve(true);
+          resolve({
+            status: "succeeded",
+          });
           return;
         }
 
@@ -1445,8 +1800,20 @@ export class RunController {
           ].join(" "),
           exitCode: code ?? undefined,
         });
-        this.failRun(message);
-        resolve(false);
+        resolve({
+          failure: {
+            command: [
+              verificationCommandToRun.executable,
+              ...verificationCommandToRun.args,
+            ].join(" "),
+            exitCode: code,
+            message,
+            phaseShortLabel,
+            stderr,
+            stdout,
+          },
+          status: "failed",
+        });
       });
     });
   }
@@ -1454,6 +1821,22 @@ export class RunController {
 
 function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function formatPromptLogBlock(value: string): string {
+  const trimmedValue = value.trimEnd();
+
+  if (trimmedValue.length === 0) {
+    return "(no output)";
+  }
+
+  const maximumLength = 12_000;
+
+  if (trimmedValue.length <= maximumLength) {
+    return trimmedValue;
+  }
+
+  return `${trimmedValue.slice(-maximumLength)}\n...[earlier output truncated]`;
 }
 
 function formatMissingSkillPreflightWarning(

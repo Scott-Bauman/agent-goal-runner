@@ -95,7 +95,7 @@ Avoid command strings that rely on shell features such as pipes, `&&`, `||`, red
 
 ## Verification Fails During A Run
 
-Verification runs after a successful agent pass. If verification exits non-zero, the run loop stops and streams stdout and stderr to the logs panel. Run the same command manually in the selected repository to reproduce the failure.
+Verification runs after a successful agent pass. By default, if verification exits non-zero, the run loop stops and streams stdout and stderr to the logs panel. If the run was configured to repair verification failures, the app starts a limited repair agent attempt, includes the failed command output in the repair prompt, and reruns verification before continuing. Run the same command manually in the selected repository to reproduce a failure that still does not repair cleanly.
 
 ## Auto-Commit Fails
 

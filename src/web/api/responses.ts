@@ -76,6 +76,14 @@ export type RunStartResponse = {
     claudeModel: ClaudeModel | null;
     piModel: PiModelSelection | null;
   };
+  verificationFailure:
+    | {
+        action: "stop";
+      }
+    | {
+        action: "repair";
+        maxRepairAttempts: number;
+      };
 };
 
 export type RunStopResponse = {

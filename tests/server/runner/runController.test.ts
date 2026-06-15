@@ -751,4 +751,146 @@ describe("run controller orchestration", () => {
       },
     });
   });
+
+  it("repairs verification failures after review with the review provider settings", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Goal\n\n- [ ] Next\n");
+    const parsedVerification = parseVerificationCommand("npm test");
+
+    if (!parsedVerification.success || !parsedVerification.parsed) {
+      throw new Error("Expected verification command to parse.");
+    }
+
+    const runProcess = createMockRunProcess(101);
+    const normalVerificationProcess = createMockRunProcess(102);
+    const gitAddProcess = createMockRunProcess(103);
+    const gitStatusProcess = createMockRunProcess(104);
+    const gitCommitProcess = createMockRunProcess(105);
+    const reviewProcess = createMockRunProcess(106);
+    const failedReviewVerificationProcess = createMockRunProcess(107);
+    const repairProcess = createMockRunProcess(108);
+    const repairedReviewVerificationProcess = createMockRunProcess(109);
+    const reviewGitAddProcess = createMockRunProcess(110);
+    const reviewGitStatusProcess = createMockRunProcess(111);
+    const reviewGitCommitProcess = createMockRunProcess(112);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(normalVerificationProcess)
+      .mockReturnValueOnce(gitAddProcess)
+      .mockReturnValueOnce(gitStatusProcess)
+      .mockReturnValueOnce(gitCommitProcess)
+      .mockReturnValueOnce(reviewProcess)
+      .mockReturnValueOnce(failedReviewVerificationProcess)
+      .mockReturnValueOnce(repairProcess)
+      .mockReturnValueOnce(repairedReviewVerificationProcess)
+      .mockReturnValueOnce(reviewGitAddProcess)
+      .mockReturnValueOnce(reviewGitStatusProcess)
+      .mockReturnValueOnce(reviewGitCommitProcess);
+    const runtimeState: RuntimeState = {
+      selectedRepositoryPath: repositoryPath,
+      stream: createInitialStreamState(),
+    };
+    const controller = new RunController(runtimeState, new SseHub(), spawnProcess);
+
+    controller.start({
+      repositoryPath,
+      provider: "codex",
+      prompt: "Use goal.md as the source of truth.",
+      runCount: 1,
+      verificationCommandsToRun: [parsedVerification.parsed],
+      verificationFailure: {
+        action: "repair",
+        maxRepairAttempts: 1,
+      },
+      autoCommit: true,
+      model: null,
+      reasoningEffort: null,
+      claudeModel: null,
+      piModel: null,
+      review: {
+        enabled: true,
+        provider: "claude",
+        intervalCommits: 1,
+        prompt: "Review recent commits.",
+        model: null,
+        reasoningEffort: null,
+        claudeModel: "sonnet",
+        piModel: null,
+      },
+    });
+
+    runProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+    });
+    normalVerificationProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(3);
+    });
+    gitAddProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(4);
+    });
+    gitStatusProcess.stdout.write(" M goal.md\n");
+    gitStatusProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(5);
+    });
+    gitCommitProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(6);
+    });
+    reviewProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(7);
+    });
+
+    failedReviewVerificationProcess.stderr.write("review verification failed\n");
+    failedReviewVerificationProcess.emit("close", 1, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(8);
+    });
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      8,
+      "claude",
+      expect.arrayContaining([
+        "-p",
+        expect.stringContaining("Phase: review for Codex run 1"),
+        "--model",
+        "sonnet",
+      ]),
+      {
+        cwd: repositoryPath,
+        windowsHide: true,
+      },
+    );
+
+    repairProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(9);
+    });
+    expect(spawnProcess).toHaveBeenNthCalledWith(9, "npm", ["test"], {
+      cwd: repositoryPath,
+      windowsHide: true,
+    });
+    repairedReviewVerificationProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(10);
+    });
+    reviewGitAddProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(11);
+    });
+    reviewGitStatusProcess.stdout.write(" M goal.md\n");
+    reviewGitStatusProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(12);
+    });
+    reviewGitCommitProcess.emit("close", 0, null);
+
+    await vi.waitFor(() => {
+      expect(runtimeState.stream.runLoop.status).toBe("complete");
+    });
+  });
 });

@@ -216,6 +216,56 @@ describe("run start endpoint", () => {
       "Verification command must be a string.",
     ],
     [
+      "invalid verification failure action",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationFailure: {
+          action: "retry",
+        },
+      },
+      "verificationFailure.action",
+      "Invalid discriminator value. Expected 'stop' | 'repair'",
+    ],
+    [
+      "missing repair attempts",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationFailure: {
+          action: "repair",
+        },
+      },
+      "verificationFailure.maxRepairAttempts",
+      "Repair attempts are required.",
+    ],
+    [
+      "fractional repair attempts",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationFailure: {
+          action: "repair",
+          maxRepairAttempts: 1.5,
+        },
+      },
+      "verificationFailure.maxRepairAttempts",
+      "Repair attempts must be a whole number.",
+    ],
+    [
+      "repair attempts above maximum",
+      {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationFailure: {
+          action: "repair",
+          maxRepairAttempts: 11,
+        },
+      },
+      "verificationFailure.maxRepairAttempts",
+      "Repair attempts must be at most 10.",
+    ],
+    [
       "non-boolean auto-commit toggle",
       {
         prompt: "Use goal.md as the source of truth.",
@@ -485,6 +535,9 @@ describe("run start endpoint", () => {
       prompt: "Use goal.md as the source of truth.",
       runCount: 2,
       verificationCommands: [],
+      verificationFailure: {
+        action: "stop",
+      },
       autoCommit: false,
       model: null,
       reasoningEffort: null,
@@ -798,6 +851,38 @@ describe("run start endpoint", () => {
         prompt: "",
         model: null,
         reasoningEffort: null,
+      },
+      verificationFailure: {
+        action: "stop",
+      },
+    });
+  });
+
+  it("accepts a repair verification failure policy", async () => {
+    const repositoryPath = await createRepositoryPath();
+    const app = await createTestServer();
+
+    await browseRepository(app, repositoryPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommands: ["npm test"],
+        verificationFailure: {
+          action: "repair",
+          maxRepairAttempts: 2,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      verificationFailure: {
+        action: "repair",
+        maxRepairAttempts: 2,
       },
     });
   });
@@ -2392,6 +2477,167 @@ describe("run start endpoint", () => {
     });
 
     expect(spawnProcess).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs a repair agent and reruns verification before continuing", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    const runProcess = createMockRunProcess(321);
+    const failedVerificationProcess = createMockRunProcess(654);
+    const repairProcess = createMockRunProcess(777);
+    const repairedVerificationProcess = createMockRunProcess(876);
+    const nextRunProcess = createMockRunProcess(987);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(failedVerificationProcess)
+      .mockReturnValueOnce(repairProcess)
+      .mockReturnValueOnce(repairedVerificationProcess)
+      .mockReturnValueOnce(nextRunProcess);
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+
+    await browseRepository(app, repositoryPath);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 2,
+        verificationCommands: ["npm test"],
+        verificationFailure: {
+          action: "repair",
+          maxRepairAttempts: 1,
+        },
+      },
+    });
+
+    runProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+    });
+
+    failedVerificationProcess.stdout.write("expected true to equal false\n");
+    failedVerificationProcess.stderr.write("test failed\n");
+    failedVerificationProcess.emit("close", 1, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(3);
+    });
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      3,
+      expect.any(String),
+      expect.arrayContaining([
+        expect.stringContaining("A configured verification command failed"),
+        expect.stringContaining("Failed command: npm test"),
+        expect.stringContaining("expected true to equal false"),
+        expect.stringContaining("test failed"),
+      ]),
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+
+    repairProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(4);
+    });
+    expect(spawnProcess).toHaveBeenNthCalledWith(4, "npm", ["test"], {
+      cwd: path.normalize(repositoryPath),
+      windowsHide: true,
+    });
+
+    repairedVerificationProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(5);
+    });
+    expect(spawnProcess).toHaveBeenNthCalledWith(
+      5,
+      expect.any(String),
+      expect.arrayContaining([
+        "exec",
+        "--json",
+        "--output-last-message",
+        "Use goal.md as the source of truth.",
+      ]),
+      {
+        cwd: path.normalize(repositoryPath),
+        windowsHide: true,
+      },
+    );
+  });
+
+  it("fails the run when repair attempts are exhausted", async () => {
+    const repositoryPath = await createRepositoryPath();
+    await writeFile(path.join(repositoryPath, "goal.md"), "# Selected Goal\n");
+    const runProcess = createMockRunProcess(321);
+    const firstVerificationProcess = createMockRunProcess(654);
+    const repairProcess = createMockRunProcess(777);
+    const secondVerificationProcess = createMockRunProcess(876);
+    const spawnProcess = vi
+      .fn()
+      .mockReturnValueOnce(runProcess)
+      .mockReturnValueOnce(firstVerificationProcess)
+      .mockReturnValueOnce(repairProcess)
+      .mockReturnValueOnce(secondVerificationProcess);
+    const app = await createTestServer({
+      spawnProcess,
+    });
+    trackTestServer(app);
+    const origin = await listenOnRandomPort(app);
+
+    const response = await globalThis.fetch(`${origin}/api/events`);
+    const reader = response.body?.getReader();
+
+    if (!reader) {
+      throw new Error("Missing SSE response body.");
+    }
+
+    await readSseChunk(reader);
+    await browseRepository(app, repositoryPath);
+    await readSseChunk(reader);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/run/start",
+      payload: {
+        prompt: "Use goal.md as the source of truth.",
+        runCount: 1,
+        verificationCommands: ["npm test"],
+        verificationFailure: {
+          action: "repair",
+          maxRepairAttempts: 1,
+        },
+      },
+    });
+
+    runProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+    });
+    firstVerificationProcess.emit("close", 1, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(3);
+    });
+    repairProcess.emit("close", 0, null);
+    await vi.waitFor(() => {
+      expect(spawnProcess).toHaveBeenCalledTimes(4);
+    });
+    secondVerificationProcess.emit("close", 1, null);
+    await reader.cancel();
+
+    await vi.waitFor(async () => {
+      expect(parseSsePayloads(await readSseSnapshot(origin), "summary")).toEqual([
+        {
+          status: "failed",
+          message:
+            "Verification still failed after 1 repair attempt; Verification after Codex run 1 exited with code 1.",
+        },
+      ]);
+    });
   });
 
   it("does not run verification after a failed Codex run", async () => {
